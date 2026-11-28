@@ -426,11 +426,9 @@ private theorem processAttestation_eq_recordPaymentWeight {gloas : .glamsterdam 
       BuilderFrame state raised ∧
         recordPaymentWeight raised gloas data current before updated attesters = .ok after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  unfold Consensus.processAttestation processAttestationAltair at computed
-  simp only [altair, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok]
-    at computed
-  obtain ⟨_, -, _, -, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, recorded⟩ := computed
+  rw [processAttestation_of_altair altair, processAttestationAltair_eq_ok_iff] at computed
+  obtain ⟨-, _, _, _, _, _, _, _, raised, -, -, -, -, -, -, -, raisedOk, recorded⟩ := computed
+  rw [dite_eq_left gloas] at recorded
   exact ⟨raised, _, _, _, _, _,
     builderFrame_setEpochParticipation.trans (builderFrame_increaseBalance raisedOk), recorded⟩
 
@@ -446,11 +444,10 @@ theorem BuilderDebtCovered.processAttestation (positive : preset.PaymentQuorumPo
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     BuilderDebtCovered after gloas := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  unfold Consensus.processAttestation processAttestationAltair at computed
-  simp only [altair, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok]
-    at computed
-  obtain ⟨_, -, _, slotEpoch, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, recorded⟩ := computed
+  rw [processAttestation_of_altair altair, processAttestationAltair_eq_ok_iff] at computed
+  obtain ⟨⟨-, slotEpoch, -⟩, _, _, _, _, _, _, _, raised, -, -, -, -, -, -, -, raisedOk,
+    recorded⟩ := computed
+  rw [dite_eq_left gloas] at recorded
   have frame : BuilderFrame state raised :=
     builderFrame_setEpochParticipation.trans (builderFrame_increaseBalance raisedOk)
   have epochs : getCurrentEpoch raised = getCurrentEpoch state := by

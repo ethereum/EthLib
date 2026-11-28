@@ -792,6 +792,40 @@ theorem newPayloadStep_of_known_invalid {checked : CheckedBlock version} {hash :
   subst hInvalid
   simp [newPayloadStep, hCheck, hHash, hb]
 
+/-- A payload valid on the chain of the valid head, its parent, is valid on the node.
+
+The payload is one that passes the checks, with the hash of its block.
+
+The node does not know the payload as invalid.
+
+The answer has the hash of the payload as the latest valid hash. -/
+theorem newPayloadStep_valid_of_newPayloadOnChain {checked : CheckedBlock version}
+    {hash : Hash32} {post : Execution.State.State}
+    {added : Option (RecentBlock × Execution.State.State)}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash)
+    (hParent : node.validState checked.block.header.parentHash = some post)
+    (hHead : checked.block.header.parentHash = node.forkchoice.headBlockHash)
+    (hKnown : ∀ b, node.blocks.lookup hash = some b → b.validity ≠ .invalid)
+    (hOn : newPayloadOnChain node.transition (node.totalDifficulty checked.block.header.parentHash)
+      (node.chainAt checked.block.header.parentHash post) version params =
+        .ok (⟨.valid, checked.block.header.hash.toOption⟩, none, added)) :
+    (node.newPayloadStep version params).1 = .ok (⟨.valid, some hash⟩, none) := by
+  -- A payload that the node does not know as valid or invalid runs on the head, its parent.
+  have run (hNew : ∀ b, node.blocks.lookup hash = some b → b.validity.isAccepted = true) :
+      (node.newPayloadStep version params).1 = .ok (⟨.valid, some hash⟩, none) := by
+    rw [newPayloadStep_of_head hCheck hHash hNew hParent hHead, hOn]
+    simp [hHash, Except.toOption, Functor.map, Except.map]
+  cases hb : node.blocks.lookup hash with
+  | none => exact run (by simp [hb])
+  | some b =>
+    obtain ⟨blk, pow, v⟩ := b
+    cases v with
+    -- A payload that the node knows as valid is valid again, with its own hash.
+    | valid => rw [newPayloadStep_of_known_valid hCheck hHash hb rfl]
+    | invalid => exact absurd rfl (hKnown _ hb)
+    | accepted => exact run fun b e => by cases e.symm.trans hb; rfl
+
 /-- The answer by the parent records only the payload, so it keeps every other known block. -/
 theorem onParent_lookup {hash other : Hash32} {block : (fork : Fork) × Block fork Transaction}
     {b : KnownBlock}

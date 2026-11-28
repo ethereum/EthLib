@@ -2,8 +2,10 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Gas.CallGas
 public import EthLib.Execution.Proofs.Evm.Gas.Memory
+public import EthLib.Execution.Proofs.Evm.Gas.MemoryBound
 public import EthLib.Execution.Proofs.Evm.Gas.Prices
 public import EthLib.Execution.Proofs.Evm.Gas.StateGas
+public import EthLib.Execution.Proofs.Evm.Gas.StateGasRun
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Gas`

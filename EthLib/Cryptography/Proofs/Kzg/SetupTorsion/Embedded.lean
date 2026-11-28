@@ -17,6 +17,7 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Monomial13
 public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Monomial14
 public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Monomial15
 public import EthLib.Cryptography.Proofs.Kzg.Fk20Proofs
+public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Check
 
 /-!
 # Proofs: the monomial points of the embedded setup have order dividing `r`

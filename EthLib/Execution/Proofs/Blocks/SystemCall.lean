@@ -326,18 +326,51 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState
         rw [this]
         exact hSub.cons_cons _
 
+/-- The contracts that a block calls at its start are the beacon roots and history storage ones.
+
+Each comes from its own fork. -/
+theorem systemContracts_start :
+    (systemContracts fork).filter (·.kind = .start) =
+      [BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT].filter (·.since ≤ fork) := by
+  cases fork <;> rfl
+
+/-- Before Pectra, a block calls no request contract. -/
+theorem requestContracts_of_lt_pectra (h : fork < .pectra) : requestContracts fork = [] := by
+  cases fork <;> first | rfl | exact absurd h (by decide)
+
+/-- From Pectra, a block reads withdrawals, then consolidations, then from Glamsterdam builders. -/
+theorem requestContracts_of_pectra (h : .pectra ≤ fork) :
+    requestContracts fork =
+      (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) ::
+        (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) ::
+          if .glamsterdam ≤ fork then
+            [(BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_DEPOSIT_CONTRACT_ADDRESS),
+              (BUILDER_EXIT_REQUEST_TYPE, BUILDER_EXIT_CONTRACT_ADDRESS)]
+          else [] := by
+  cases fork <;> first | rfl | exact absurd h (by decide)
+
 /-- Before Pectra, a block reads no request and its body is unchanged. -/
 theorem readRequests_of_lt_pectra {body : BodyState} (h : fork < .pectra) :
     readRequests env body = .ok (body, []) := by
-  unfold readRequests
-  split
-  · exact absurd ‹_› (Nat.not_le_of_lt h)
-  · rfl
+  rw [readRequests, requestContracts_of_lt_pectra h]
+  rfl
 
-/-- From Pectra, a block calls each of its request contracts in turn, from no request. -/
-theorem readRequests_of_pectra {body : BodyState} (h : .pectra ≤ fork) :
-    readRequests env body = (requestContracts fork).foldlM (readRequest env) (body, []) := by
-  simp only [readRequests, h, ↓reduceIte]
+/-- A block calls each of its request contracts in turn, from no request. -/
+theorem readRequests_of_pectra {body : BodyState} (_h : .pectra ≤ fork) :
+    readRequests env body = (requestContracts fork).foldlM (readRequest env) (body, []) := rfl
+
+/-- Empty code at a request contract rejects the requests of a block. -/
+theorem readRequests_of_empty_after {body : BodyState} {pre post : List (UInt8 × Address)}
+    {contract : UInt8 × Address} {mid : BodyState × List ByteArray}
+    -- The block calls the contracts `pre`, then the contract, then the contracts `post`.
+    (hsplit : requestContracts fork = pre ++ contract :: post)
+    -- The calls to the contracts before it succeed, since an earlier failure takes precedence.
+    (hpre : pre.foldlM (readRequest env) (body, []) = .ok mid)
+    -- The contract has no code in the block after those calls.
+    (hcode : codeAt mid.1.block contract.2 = .ok .empty) :
+    readRequests env body = .error (.systemContractEmpty contract.2) := by
+  rw [readRequests, hsplit, List.foldlM_append, hpre]
+  simp [List.foldlM_cons, readRequest_of_empty hcode, bind, Except.bind]
 
 /-- The requests of a block have data, and come in the order of their types, each at most once.
 
@@ -360,19 +393,17 @@ theorem readRequests_requests {body : BodyState} {result : BodyState × List Byt
     cases h
     simp
 
-/-- Up to BPO5, a block reads the withdrawal and consolidation requests only. -/
-theorem requestContracts_types_of_lt_glamsterdam (h : fork < .glamsterdam) :
+/-- From Pectra up to BPO5, a block reads the withdrawal and consolidation requests only. -/
+theorem requestContracts_types_of_lt_glamsterdam (hpectra : .pectra ≤ fork)
+    (h : fork < .glamsterdam) :
     (requestContracts fork).map Prod.fst =
       [WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE] := by
-  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
-  simp only [requestContracts, hpre, ↓reduceIte]
-  rfl
+  cases fork <;> first | rfl | exact absurd h (by decide) | exact absurd hpectra (by decide)
 
 /-- From Glamsterdam, a block reads the request types 1 to 4, in ascending order. -/
 theorem requestContracts_types_of_glamsterdam (h : .glamsterdam ≤ fork) :
     (requestContracts fork).map Prod.fst = [1, 2, 3, 4] := by
-  simp only [requestContracts, h, ↓reduceIte]
-  rfl
+  cases fork <;> first | rfl | exact absurd h (by decide)
 
 /-- The requests of a block, after its transactions and withdrawals. -/
 theorem blockRequests_eq_ok {depositContract : Address} {body : BodyState} {logs : List Log}

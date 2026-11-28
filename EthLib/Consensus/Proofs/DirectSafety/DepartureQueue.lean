@@ -883,7 +883,7 @@ private theorem effectiveBalances_coverage {fork : Fork} {s t : BeaconState pres
     (ok : processEffectiveBalanceUpdates s = .ok t) :
     DepartureCoverage (config := config) s t [] := by
   -- The coverage composes only along a registry lifecycle, so the pass carries both.
-  refine (processEffectiveBalanceUpdates_invariant
+  refine (processEffectiveBalanceUpdates_induction
     (fun t => DepartureCoverage (config := config) s t [] ∧ RegistryLifecycle s t)
     (fun a index b before stepped => ?_) ⟨DepartureCoverage.of_data rfl, .refl s⟩ ok).1
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at stepped
@@ -1809,9 +1809,8 @@ private theorem epoch_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
         called.call.rate.toNat ≤ exitCap) ∧
       PartialsAppended electra s t calls := by
   obtain ⟨rewarded, registered, entriesOk, slot, same, cut⟩ := epoch_registry_cut electra early ok
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at entriesOk
-  obtain ⟨activation, computed, entries⟩ := entriesOk
-  simp only [liftArith, mapError_ok_iff] at computed
+  obtain ⟨activation, computed, entries⟩ :=
+    processRegistryUpdates_ok_of_electra electra early entriesOk
   have exactEpoch := (computeActivationExitEpoch_ok_iff.mp computed).2
   have later : (getCurrentEpoch rewarded).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
       activation.toNat := by omega
@@ -1930,18 +1929,21 @@ private theorem activeCount_le_size {fork : Fork} (s : BeaconState preset fork) 
 
 /-- The validator-count churn is bounded by the churn of any bound on the active count. -/
 theorem validatorChurnLimit_le_of_active {fork : Fork} (s : BeaconState preset fork)
+    {limit : UInt64} (limitOk : getValidatorChurnLimit config s = .ok limit)
     (bound : Nat) (counted : activeCount s ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
+    limit.toNat ≤ cohortCap config bound := by
   have converted : (getActiveValidatorIndices s (getCurrentEpoch s)).length.toUInt64.toNat ≤
       bound := (Nat.mod_le _ _).trans counted
-  simp only [getValidatorChurnLimit, Uint64.toNat_max, UInt64.toNat_div, cohortCap]
+  obtain ⟨-, rfl⟩ := getValidatorChurnLimit_ok_iff.mp limitOk
+  simp only [Uint64.toNat_max, UInt64.toNat_div, cohortCap]
   exact max_le_max_left _ (Nat.div_le_div_right converted)
 
 /-- The validator-count churn is bounded by the registry size, not just active entries. -/
 theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
+    {limit : UInt64} (limitOk : getValidatorChurnLimit config s = .ok limit)
     (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound :=
-  validatorChurnLimit_le_of_active s bound ((activeCount_le_size s).trans bounded)
+    limit.toNat ≤ cohortCap config bound :=
+  validatorChurnLimit_le_of_active s limitOk bound ((activeCount_le_size s).trans bounded)
 
 /-- A finite pre-Electra exit is assigned only while its count cohort has room. -/
 private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState preset fork}
@@ -1955,8 +1957,9 @@ private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState prese
   simp only [exitQueue, notElectra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
     Except.ok.injEq, Prod.mk.injEq] at ok
   obtain ⟨placed, scheduled, rfl, rfl⟩ := ok
-  exact ⟨rfl, (exitQueueEpoch_churn scheduled finite).trans_le
-    (max_le_max_left _ (validatorChurnLimit_le_of_active s bound counted))⟩
+  obtain ⟨limit, limitOk⟩ := getValidatorChurnLimit_of_exitQueueEpoch scheduled
+  exact ⟨rfl, (exitQueueEpoch_churn scheduled limitOk finite).trans_le
+    (max_le_max_left _ (validatorChurnLimit_le_of_active s limitOk bound counted))⟩
 
 /-- Voluntary exits retain concrete charge coverage across their entire operation fold. -/
 private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
@@ -2697,13 +2700,11 @@ private theorem epoch_consolidationFrame {fork : Fork} {s t : BeaconState preset
   have edge := EpochStage.action_cases.mp computed
   cases k
   case registry =>
-    simp only [EpochStage.Edge, processRegistryUpdates, electra, ↓reduceIte,
-      bind_ok_iff] at edge
-    obtain ⟨_, _, entries⟩ := edge
-    refine foldlM_ok_invariant
+    simp only [EpochStage.Edge] at edge
+    refine processRegistryUpdates_invariant_of_electra electra
       (fun t => (departureQueues electra t).2.2 = (departureQueues electra a).2.2)
-      ?_ rfl entries
-    intro c index d kept stepped
+      ?_ rfl edge
+    intro _ _ c index d kept stepped
     rcases registryEntry_departureQueues electra stepped with frame | ⟨_, initiated⟩
     · exact (congrArg (fun q => q.2.2) frame).trans kept
     · exact (initiateExit_consolidationFrame electra initiated).trans kept
@@ -3931,9 +3932,7 @@ private theorem CountedStep.registry {f : Fork} {s t : BeaconState preset f}
     (early : f < .pectra) (bound : Nat) (ok : processRegistryUpdates config s = .ok t) :
     CountedStep config bound s t := by
   refine ⟨activeStep_processRegistryUpdates early ok, fun counted => ?_⟩
-  have notElectra : ¬ .pectra ≤ f := Nat.not_le_of_lt early
-  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
+  obtain ⟨_, _, updated, _, activated⟩ := processRegistryUpdates_ok_of_lt_electra early ok
   exact ((CountedStep.fold (fun _ _ _ => CountedStep.registryEntry early bound) updated).2
     counted).trans (.fold (fun _ _ _ => CountCohortStep.activate bound) activated)
 
@@ -3976,7 +3975,7 @@ private theorem CountCohortStep.blsChange {f : Fork} {s t : BeaconState preset f
 private theorem CountCohortStep.effective {f : Fork} {s t : BeaconState preset f}
     (bound : Nat) (ok : processEffectiveBalanceUpdates s = .ok t) :
     CountCohortStep config bound s t := by
-  refine processEffectiveBalanceUpdates_invariant (CountCohortStep config bound s)
+  refine processEffectiveBalanceUpdates_induction (CountCohortStep config bound s)
     (fun _ _ _ previous computed => previous.trans ?_) (.refl s bound) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, found, _, _, _, _, set⟩ := computed
@@ -6532,10 +6531,7 @@ private theorem registry_updates_exit_rates
       ∀ called ∈ calls, ∀ n, called.call.first.toNat ≤ n → called.call.earliest.toNat < n →
         n ≤ called.call.epoch.toNat → called.call.rate.toNat ≤
           exitEnvelope (n - (getCurrentEpoch x.state).toNat) := by
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨activation, computed, entries⟩ := ok
-  simp only [liftArith, mapError_ok_iff] at computed
+  obtain ⟨activation, computed, entries⟩ := processRegistryUpdates_ok_of_electra electra early ok
   have exactEpoch := (computeActivationExitEpoch_ok_iff.mp computed).2
   have later : (getCurrentEpoch s).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
       activation.toNat := by omega

@@ -82,8 +82,7 @@ theorem Handles.latestMessages_rank {config : Config} {checks : SignatureChecks}
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ⟨old, found, UInt64.le_refl _⟩
   | envelope _ accepted =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ⟨old, found, UInt64.le_refl _⟩
   | inclusionList _ accepted =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted

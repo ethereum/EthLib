@@ -263,11 +263,9 @@ private theorem same_queueForActivation {validator queued : Validator}
 They also keep the balances and both pending queues, at every fork. -/
 private theorem kept_processRegistryUpdates {config : Config}
     (computed : processRegistryUpdates config state = .ok after) : Kept state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    refine Kept.foldlM (fun _ _ _ ok => ?_) computed
+  by_cases electra : .pectra ≤ fork
+  · refine processRegistryUpdates_invariant_of_electra electra (Kept state)
+      (fun _ _ _ _ _ before ok => before.trans ?_) (Kept.refl state) computed
     simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, found, ok⟩ := ok
     split at ok
@@ -282,8 +280,8 @@ private theorem kept_processRegistryUpdates {config : Config}
     · exact kept_setValidatorAt (liftAccessor_ok.mp ok) found ⟨rfl, rfl, rfl, rfl⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ Kept.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, updatedOk, activated⟩ := computed
+  obtain ⟨_, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) computed
   refine (Kept.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
     (Kept.foldlM (fun _ _ _ ok => ?_) activated)
   · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok

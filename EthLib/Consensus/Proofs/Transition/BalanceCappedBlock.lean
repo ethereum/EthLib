@@ -300,11 +300,8 @@ private theorem rise_processAttestation {attestation : Attestation preset fork}
     intro earlier found
     obtain ⟨final, atFinal, value⟩ := balances index earlier found
     exact ⟨final, atFinal, UInt64.le_iff_toNat_le.mpr (by omega)⟩
-  · unfold processAttestation at computed
-    simp only [altair, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure,
-      Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+  · obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+      processAttestation_records (Nat.lt_of_not_le altair) computed
     have kept := recordPendingAttestation_ok recorded
     intro earlier found
     refine ⟨earlier, ?_, UInt64.le_refl _⟩

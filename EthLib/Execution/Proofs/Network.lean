@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Network.Blocks
 public import EthLib.Execution.Proofs.Network.Bodies
+public import EthLib.Execution.Proofs.Network.BodiesRandomOracle
 public import EthLib.Execution.Proofs.Network.Cells
 public import EthLib.Execution.Proofs.Network.Message
 public import EthLib.Execution.Proofs.Network.Pool

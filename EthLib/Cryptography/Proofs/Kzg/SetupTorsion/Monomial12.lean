@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Check
+public import EthLib.Cryptography.Kzg.TrustedSetupData
+public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Checker
 
 /-!
 # Proofs: monomial points 3072 to 3327 of the embedded setup

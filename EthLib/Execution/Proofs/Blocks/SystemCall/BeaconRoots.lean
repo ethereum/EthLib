@@ -232,7 +232,7 @@ private theorem get_returnG {idx : U256} (hfork : .shapella ≤ fork)
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (Nat.le_trans (by omega) (Nat.sub_le_sub_left (sloadPrice_le _) _))) (fun _ h => h) ?_
-  exact fun evm h => h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+  exact fun evm h => h.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
 
 /-- From byte 53, the code returns the root when the word `v` of the slot is the timestamp `t`.
 
@@ -298,7 +298,7 @@ private theorem get_lookupG (hfork : .shapella ≤ fork) (hgas : 5000 ≤ gas) :
     refine SpecG.consequence (get_compareG hfork (Nat.le_trans (by omega)
       (Nat.sub_le_sub_left (sloadPrice_le _) _))) (fun _ h => h) ?_
     intro evm hans
-    have hans := hans.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+    have hans := hans.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
     rw [mod_eq_timestampSlot, add_timestampSlot] at hans
     simp only [h, ite_false]
     exact hans
@@ -360,8 +360,10 @@ theorem specG_get (hfork : .shapella ≤ fork)
 
 /-- A call from an address other than the system address gets a root, as EIP-4788 describes.
 
-It holds from Shapella up to BPO5, the forks whose frames count gas as one number. -/
-theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter.
+
+From Glamsterdam, a run with no error carries to the state gas meter of the protocol. -/
+theorem spec_get (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     -- It assumes fewer than 2^256 bytes of input, which the size word of the EVM can hold.
     --
@@ -432,8 +434,10 @@ theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body : BodyStat
         let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
         (mid.join out.state).mapError EvmError.state
       else pure mid) := by
-  simp only [startSystemCalls, hfork, ↓reduceDIte,
+  simp only [startSystemCalls, BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, hfork,
+    ↓reduceDIte,
     systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_BEACON_ROOTS_ADDRESS,
     bind, Except.bind, BodyState.join_recordAccountRead, Except.mapError, pure, Except.pure]
+  rfl
 
 end EthLib.Execution.Blocks.BeaconRoots

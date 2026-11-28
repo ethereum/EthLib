@@ -63,7 +63,7 @@ theorem stepRules_parent :
     StepRules fork (fun a b : Evm fork Meter => b.state.parent = a.state.parent) where
   trans hab hbc := hbc.trans hab
   static h := h.parent
-  sstore _ _ _ _ _ _ h := TransactionState.parent_setStorage h
+  sstore _ _ _ _ _ h := TransactionState.parent_setStorage h
   tstore _ _ _ _ := rfl
   log _ hs _ _ _ := by rw [hs]
   selfdestruct _ _ h := parent_finishSelfdestruct h
@@ -195,6 +195,27 @@ theorem parent_processCreateMessage [LawfulGasMeter Meter] {message : Message fo
     ended.val.state.parent = state.parent :=
   (processMessage_parent message.gas).2 message state substate meter held rfl ended h
 
+/-- A call that ends with an error reads as the state it is sent from, at every fork.
+
+That holds for each account and each word of storage and transient storage.
+
+It has the code of that state at each code hash. -/
+theorem processMessage_reads_of_error [LawfulGasMeter Meter] {message : Message fork}
+    {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
+    (h : processMessage fork message state substate meter held = .ok ended)
+    (herr : ended.val.error.isSome = true) :
+    TransactionState.ReadsAs ended.val.state state := by
+  have hp := parent_processMessage h
+  obtain ⟨last, hl⟩ := exists_rollbackOnError_processMessage h
+  rw [hl] at herr hp ⊢
+  unfold rollbackOnError at herr hp ⊢
+  split at herr
+  · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
+    -- A rollback to a snapshot of the same block gives back the snapshot, code included.
+    exact TransactionState.readsAs_restoreTxState hp
+  · exact absurd herr ‹_›
+
 /-- A call that ends with an error reads as the state it is sent from, at every address.
 
 That holds for the account, every word of storage and every word of transient storage.
@@ -205,16 +226,8 @@ theorem processMessage_sameOutside_of_error [LawfulGasMeter Meter] {message : Me
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processMessage fork message state substate meter held = .ok ended)
     (herr : ended.val.error.isSome = true) :
-    TransactionState.SameOutside [] state ended.val.state := by
-  have hp := parent_processMessage h
-  obtain ⟨last, hl⟩ := exists_rollbackOnError_processMessage h
-  rw [hl] at herr hp ⊢
-  unfold rollbackOnError at herr hp ⊢
-  split at herr
-  · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
-    -- A rollback to a snapshot of the same block gives back the storage of the snapshot.
-    exact TransactionState.sameOutside_restoreTxState hp
-  · exact absurd herr ‹_›
+    TransactionState.SameOutside [] state ended.val.state :=
+  (processMessage_reads_of_error h herr).1
 
 /-- A call that ends with an error leaves every storage word as it was in the state it is sent from.
 

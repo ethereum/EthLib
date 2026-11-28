@@ -777,24 +777,33 @@ theorem syncSubnetsOfPubkey_nodup (committee : SyncCommittee preset) (pubkey : B
     (syncSubnetsOfPubkey committee pubkey).Nodup :=
   Base.nodup_eraseDups _
 
-/-- The subnets of a validator come from the committee of the next slot and the validator's key.
+/-- The subnets of a validator for a slot come from the committee that signs in that slot.
 
 They come once each, in strictly increasing order.
 
 A subnet is among them exactly when a seat of the key falls in its subcommittee. -/
 theorem computeSubnetsForSyncCommittee_ok {state : BeaconState preset fork}
-    {altair : .altair ≤ fork} {validatorIndex : ValidatorIndex} {subnets : List UInt64}
-    (h : computeSubnetsForSyncCommittee state altair validatorIndex = .ok subnets) :
-    ∃ committee validator, syncCommitteeAtNextSlot state altair = .ok committee ∧
+    {altair : .altair ≤ fork} {slot : Slot} {validatorIndex : ValidatorIndex}
+    {subnets : List UInt64}
+    (h : computeSubnetsForSyncCommittee state altair slot validatorIndex = .ok subnets) :
+    ∃ committee validator, syncCommitteeAtSlot state altair slot = some committee ∧
       getValidator state validatorIndex = .ok validator ∧
       subnets.Pairwise (· < ·) ∧
       ∀ subnet, subnet ∈ subnets ↔
         ∃ position, committee.pubkeys.toList[position]? = some validator.pubkey ∧
           (position / syncSubcommitteeSize preset).toUInt64 = subnet := by
   unfold computeSubnetsForSyncCommittee at h
-  obtain ⟨committee, committed, h⟩ := bind_ok_iff.mp h
+  obtain ⟨nextSlot, nextOk, h⟩ := bind_ok_iff.mp h
+  rw [mapError_ok_iff] at nextOk
+  cases seats : syncCommitteeOfPeriod state altair
+      (computeSyncCommitteePeriodAtSlot preset nextSlot) with
+  | none => simp [seats, throw, throwThe, MonadExceptOf.throw] at h
+  | some committee =>
+  simp only [seats] at h
+  have committed : syncCommitteeAtSlot state altair slot = some committee := by
+    simp [syncCommitteeAtSlot, nextOk, Except.toOption, seats]
   obtain ⟨validator, validated, h⟩ := bind_ok_iff.mp h
-  rw [mapError_ok_iff] at committed validated
+  rw [mapError_ok_iff] at validated
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
   refine ⟨committee, validator, committed, validated, ?_, fun subnet => ?_⟩
@@ -807,6 +816,22 @@ theorem computeSubnetsForSyncCommittee_ok {state : BeaconState preset fork}
       (syncSubnetsOfPubkey committee validator.pubkey)
     exact (sorted.and nodup).imp fun ⟨hle, hne⟩ => UInt64.lt_of_le_of_ne (by simpa using hle) hne
   · rw [(List.mergeSort_perm _ _).mem_iff, mem_syncSubnetsOfPubkey]
+
+/-- A validator of a state that holds the committee of a slot gets the subnets of its seats. -/
+theorem computeSubnetsForSyncCommittee_of_seat {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {slot : Slot} {validatorIndex : ValidatorIndex}
+    {committee : SyncCommittee preset} {validator : Validator}
+    (seats : syncCommitteeAtSlot state altair slot = some committee)
+    (found : getValidator state validatorIndex = .ok validator) :
+    computeSubnetsForSyncCommittee state altair slot validatorIndex =
+      .ok ((syncSubnetsOfPubkey committee validator.pubkey).mergeSort (· ≤ ·)) := by
+  unfold syncCommitteeAtSlot at seats
+  cases next : addChecked slot 1 with
+  | error => simp [next, Except.toOption] at seats
+  | ok nextSlot =>
+    simp only [next, Except.toOption, Option.bind_eq_bind, Option.bind_some] at seats
+    simp [computeSubnetsForSyncCommittee, next, seats, found, Except.mapError, bind, Except.bind,
+      pure, Except.pure]
 
 /-! ## Gloas duties -/
 

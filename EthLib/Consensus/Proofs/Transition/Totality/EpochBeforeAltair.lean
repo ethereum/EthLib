@@ -83,10 +83,8 @@ theorem processRegistryUpdates_registryKept {config : Config} {after : BeaconSta
       after.historicalSummaries = state.historicalSummaries ∧
       after.validators.data.map (·.effectiveBalance) =
         state.validators.data.map (·.effectiveBalance) := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  unfold processRegistryUpdates at computed
-  simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
   -- Each entry joins the queue, which sets only its eligibility epoch, and may start an exit.
   have first := foldlM_ok_invariant (RegistryKept state) (fun middle index next before ok => by
     refine before.trans ?_
@@ -157,13 +155,15 @@ private theorem getPendingAttestingIndices_eq_of_eq {other : BeaconState preset 
 
 The preset has circular buffers of slashed balances and of RANDAO mixes.
 
-Both must have a positive length. -/
+Both must have a positive length, and the churn quotient of the configuration must not be 0. -/
 theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChecks}
     {budget epochBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     [NeZero preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat]
     -- The divisors of the preset must be positive.
     (before : fork < .altair) (positive : preset.DivisorsPositive)
+    -- The churn quotient of the configuration must not be 0.
+    (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0)
     -- An epoch of the preset must have two slots at least.
     --
     -- The buffer of block roots of the preset must reach the epoch before.
@@ -293,7 +293,7 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
   --
   -- They keep the balances and every effective balance.
   obtain ⟨registered, registeredOk, -⟩ := processRegistryUpdates_total_of_lt_electra
-    (config := config) rewarded electra ceiling (by rw [currentEpoch2]; exact first)
+    (config := config) rewarded electra quotient ceiling (by rw [currentEpoch2]; exact first)
     (by rw [validators2]; exact exits) (by rw [validators2]; exact exitRoom)
   obtain ⟨slot3, balances3, slashings3, roots3, -, effective3⟩ :=
     processRegistryUpdates_registryKept electra registeredOk

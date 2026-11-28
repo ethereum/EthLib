@@ -386,16 +386,20 @@ private theorem partial_calls_le_window (calls : List (IndexedDepartureCall pres
     ((calls.filter fun called => called.index.isNone &&
       decide (called.call.epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤
         cutoff)).map (·.call.amount.toNat)).sum ≤
-    ((calls.filter fun called => called.call.epoch.toNat ≤ cutoff).map
+    ((calls.filter fun called =>
+        called.call.epoch.toNat ≤ cutoff - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat).map
       (·.call.amount.toNat)).sum := by
   induction calls with
   | nil => exact Nat.le_refl _
   | cons called rest ih =>
     by_cases due : called.call.epoch.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤ cutoff
-    · have before : called.call.epoch.toNat ≤ cutoff := by omega
+    · have before : called.call.epoch.toNat ≤
+          cutoff - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by omega
       cases indexed : called.index.isNone <;> simp [due, before, indexed] <;> omega
-    · by_cases before : called.call.epoch.toNat ≤ cutoff <;> simp [due, before] <;> omega
+    · by_cases before : called.call.epoch.toNat ≤
+          cutoff - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <;>
+        simp [due, before] <;> omega
 private theorem initial_partials_at_L (x : ForkedBeaconState preset) (high : Nat)
     (electra : .pectra ≤ x.fork) :
     (((x.state.pendingPartialWithdrawals electra).data.toList.filter
@@ -426,76 +430,6 @@ private theorem initial_partials_le_Pp (x : ForkedBeaconState preset) (high : Na
       simp [due, later]; omega
     · by_cases later : entry.withdrawableEpoch.toNat ≤
         horizonEnd x high <;> simp [due, later] <;> omega
-private theorem opened_exit_capacity_le_paid (x : ForkedBeaconState preset) (high : Nat)
-    (electra : .pectra ≤ x.fork) :
-    (∑ epoch ∈ Finset.Ico (max (getCurrentEpoch x.state).toNat (exitQueueStart x + 1))
-        (horizonEnd x high + 1),
-      exitFlowAt (config := config) x high (epoch - (getCurrentEpoch x.state).toNat)) ≤
-    (((List.range (driftHorizon x high + 2)).filter
-      (max (exitQueueStart x - (getCurrentEpoch x.state).toNat)
-        (preElectraEpochs config x high) ≤ ·)).map (exitFlowAt (config := config) x high)).sum := by
-  have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
-  have zero : preElectraEpochs config x high = 0 := by simp [preElectraEpochs, notBefore]
-  have convertSum :
-      (((List.range (driftHorizon x high + 2)).filter
-        (max (exitQueueStart x - (getCurrentEpoch x.state).toNat)
-          (preElectraEpochs config x high) ≤ ·)).map (exitFlowAt (config := config) x high)).sum =
-      ∑ t ∈ Finset.range (driftHorizon x high + 2),
-        if exitQueueStart x - (getCurrentEpoch x.state).toNat ≤ t then
-          exitFlowAt (config := config) x high t else 0 := by
-    have sums := Base.sum_map_ite_eq_sum_filter
-      (fun t => exitQueueStart x - (getCurrentEpoch x.state).toNat ≤ t)
-      (exitFlowAt (config := config) x high) (List.range (driftHorizon x high + 2))
-    rw [← List.sum_toFinset _ List.nodup_range] at sums
-    simpa [zero, List.toFinset_range] using sums.symm
-  rw [convertSum]
-  refine Finset.sum_le_sum_of_injOn
-    (s := Finset.Ico (max (getCurrentEpoch x.state).toNat (exitQueueStart x + 1))
-      (horizonEnd x high + 1))
-    (t := Finset.range (driftHorizon x high + 2))
-    (fun epoch => epoch - (getCurrentEpoch x.state).toNat) ?_ ?_ ?_ ?_
-  · intro a ha b hb same
-    have ha := Finset.mem_Ico.mp ha
-    have hb := Finset.mem_Ico.mp hb
-    change a - (getCurrentEpoch x.state).toNat = b - (getCurrentEpoch x.state).toNat at same
-    omega
-  · intro epoch member
-    obtain ⟨original, inside, rfl⟩ := Finset.mem_image.mp member
-    have inside := Finset.mem_Ico.mp inside
-    simp only [Finset.mem_range]
-    unfold horizonEnd at inside
-    omega
-  · intro epoch member
-    simp only [Finset.mem_Ico] at member
-    rw [ite_eq_left (by omega)]
-  · intro _ _ _
-    exact Nat.zero_le _
-private theorem exit_trace_le_paid (x : ForkedBeaconState preset) (high : Nat)
-    (electra : .pectra ≤ x.fork) {epoch : Epoch} {left : Gwei}
-    {calls : List DepartureQueueCall}
-    (trace : DepartureQueueTrace (x.state.earliestExitEpoch electra)
-      (x.state.exitBalanceToConsume electra) calls epoch left)
-    (starts : ∀ call ∈ calls, (getCurrentEpoch x.state).toNat ≤ call.first.toNat)
-    (rates : ∀ call ∈ calls, ∀ n, call.first.toNat ≤ n → call.earliest.toNat < n →
-      n ≤ call.epoch.toNat → call.rate.toNat ≤
-        exitFlowAt (config := config) x high (n - (getCurrentEpoch x.state).toNat)) :
-    ((calls.filter fun call => call.epoch.toNat ≤ horizonEnd x high).map (·.amount.toNat)).sum ≤
-      withdrawalBudget (config := config) x high -
-          duePartialWithdrawals x (driftHorizon x high) := by
-  have bound := trace_window_envelope_from trace
-    (fun n => exitFlowAt (config := config) x high (n - (getCurrentEpoch x.state).toNat))
-    (getCurrentEpoch x.state).toNat (horizonEnd x high) starts rates
-  have capacity := opened_exit_capacity_le_paid (config := config) x high electra
-  have start : (x.state.earliestExitEpoch electra).toNat = exitQueueStart x := by
-    simp [exitQueueStart, electra]
-  rw [start] at bound
-  by_cases inside : exitQueueStart x ≤ horizonEnd x high
-  · rw [ite_eq_left inside] at bound
-    simp only
-        [withdrawalBudget, dueExitCarry, inside, ↓reduceIte, exitBalanceCarry, electra, ↓reduceDIte]
-    omega
-  · rw [ite_eq_right inside] at bound
-    exact bound.trans (Nat.zero_le _)
 theorem exit_rate_le_churn {fork : Fork} {s : BeaconState preset fork}
     (early : fork < .glamsterdam) {total rate : Gwei}
     (read : getTotalActiveBalance s = .ok total)
@@ -505,8 +439,12 @@ theorem exit_rate_le_churn {fork : Fork} {s : BeaconState preset fork}
   have value : rate = min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT
       (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
         (total / config.CHURN_LIMIT_QUOTIENT))) := by
-    simpa [exitChurnLimit, notGloas, getActivationExitChurnLimit,
-      getBalanceChurnLimit, read, bind, Except.bind, pure, Except.pure] using computed.symm
+    simp only [exitChurnLimit, notGloas, ↓reduceIte, getActivationExitChurnLimit, bind_ok_iff,
+      pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, balanceOk, rfl⟩ := computed
+    obtain ⟨_, again, -, rfl⟩ := getBalanceChurnLimit_ok_iff.mp balanceOk
+    cases read.symm.trans again
+    rfl
   rw [value, Uint64.toNat_min, toNat_roundToIncrement, Uint64.toNat_max, UInt64.toNat_div]
   have share := Nat.div_add_mod (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat)
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -581,7 +519,11 @@ private theorem run_partials_le_paid (x : ForkedBeaconState preset) (high : Nat)
     high (horizonEnd x high) electra tail early replayed endpoint ceilings
   rw [initial_partials_at_L x high electra] at partials
   have selected := partial_calls_le_window calls (horizonEnd x high)
-  have capacity := exit_trace_le_paid x high electra trace
+  -- The calls withdrawable by the window's end are at most a delay before it.
+  have bound := trace_window_envelope_from trace
+    (fun n => exitFlowAt (config := config) x high (n - (getCurrentEpoch x.state).toNat))
+    (getCurrentEpoch x.state).toNat
+    (horizonEnd x high - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (by
       intro call member
       obtain ⟨called, present, rfl⟩ := List.mem_map.mp member
@@ -590,18 +532,32 @@ private theorem run_partials_le_paid (x : ForkedBeaconState preset) (high : Nat)
       intro call member
       obtain ⟨called, present, rfl⟩ := List.mem_map.mp member
       exact rates called present)
-  have mapped : (((calls.map (·.call)).filter fun call => call.epoch.toNat ≤ horizonEnd x high).map
-      (·.amount.toNat)).sum =
-      ((calls.filter fun called => called.call.epoch.toNat ≤ horizonEnd x high).map
-        (·.call.amount.toNat)).sum := by
-    rw [List.filter_map, List.map_map]
-    rfl
-  rw [mapped] at capacity
-  have included : duePartialWithdrawals x (driftHorizon x high) ≤
-      withdrawalBudget (config := config) x high := by
-    unfold withdrawalBudget
-    omega
-  omega
+  have start : (x.state.earliestExitEpoch electra).toNat = exitQueueStart x := by
+    simp [exitQueueStart, electra]
+  have carry : (x.state.exitBalanceToConsume electra).toNat = exitBalanceCarry x := by
+    simp [exitBalanceCarry, electra]
+  rw [start, carry, List.filter_map, List.map_map] at bound
+  have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
+  have zero : preElectraEpochs config x high = 0 := by simp [preElectraEpochs, notBefore]
+  unfold withdrawalBudget
+  rw [zero, Nat.add_zero]
+  by_cases due : exitQueueStart x + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤
+      horizonEnd x high
+  · rw [ite_eq_left (by omega)] at bound
+    rw [ite_eq_left due]
+    exact partials.trans (Nat.add_le_add_left (selected.trans bound) _)
+  · rw [ite_eq_right due]
+    by_cases short : config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤ horizonEnd x high
+    · -- The queue starts after the last epoch that the delay leaves, so no call is withdrawable.
+      rw [ite_eq_right (by omega)] at bound
+      exact partials.trans (Nat.add_le_add_left (selected.trans bound) _)
+    · -- The delay is longer than the window, so no call is withdrawable within it.
+      have none : (calls.filter fun called => called.index.isNone &&
+          decide (called.call.epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤
+            horizonEnd x high)) = [] :=
+        List.filter_eq_nil_iff.mpr fun called _ => by simp; omega
+      rw [none] at partials
+      simpa using partials
 private theorem run_partials_le_paid_of_stake (x : ForkedBeaconState preset) (high : Nat)
     (electra : .pectra ≤ x.fork) {y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)

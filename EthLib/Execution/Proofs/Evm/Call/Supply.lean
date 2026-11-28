@@ -313,7 +313,7 @@ theorem stepRules_supplyLe :
   trans := SupplyLe.trans
   static h := SupplyLe.of_eq (TransactionState.supply_eq_of_sameOutside h.state) h.created
   -- A write of storage keeps the supply.
-  sstore _ _ _ _ _ _ h :=
+  sstore _ _ _ _ _ h :=
     SupplyLe.of_eq (TransactionState.supply_setStorage h)
       (TransactionState.createdAccounts_setStorage h)
   tstore _ _ _ _ := SupplyLe.of_eq rfl rfl
@@ -331,7 +331,7 @@ theorem ordinaryStepRules_supply :
     OrdinaryStepRules fork (fun a b : Evm fork Meter => b.state.supply = a.state.supply) where
   trans hab hbc := hbc.trans hab
   static h := TransactionState.supply_eq_of_sameOutside h.state
-  sstore _ _ _ _ _ _ h := TransactionState.supply_setStorage h
+  sstore _ _ _ _ _ h := TransactionState.supply_setStorage h
   tstore _ _ _ _ := rfl
   log _ hs _ _ _ := by rw [hs]
   incrementNonce _ _ _ _ h := TransactionState.supply_incrementNonce h

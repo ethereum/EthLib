@@ -21,6 +21,7 @@ import EthLib.Consensus.Proofs.Transition.Payload
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.Requests
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
+import EthLib.Consensus.Proofs.Transition.Totality.Supply
 import EthLib.Consensus.Proofs.Transition.Withdrawals
 import Mathlib.Data.Nat.Sqrt
 
@@ -1329,13 +1330,10 @@ private theorem rise_attestation (altair : .altair ≤ fork) {first s t : Beacon
       Rise ((potential altair first perIncrement.toNat t -
         potential altair first perIncrement.toNat s) / 448) s t := by
   rw [processAttestation_of_altair altair] at computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, _, _, _, _, _, _, _, read, readOk,
-    attesters, _, ⟨updated, numerator⟩, folded, proposer, _, raised, raisedOk, final⟩ := computed
+  obtain ⟨-, earned, _, read, attesters, updated, numerator, proposer, raised, -, -, -, readOk, -,
+    folded, -, raisedOk, written⟩ := processAttestationAltair_reads computed
   rw [totalOk] at readOk
   cases Except.ok.inj readOk
-  dsimp only at folded raisedOk
   have flags := flagSum_foldlM_addAttesterFlags
     (fun _ _ ok => baseAt_of_getBaseReward altair validators perIncrementOk ok) folded
   dsimp only at flags
@@ -1344,11 +1342,8 @@ private theorem rise_attestation (altair : .altair ≤ fork) {first s t : Beacon
   have tail : t.previousEpochParticipation = raised.previousEpochParticipation ∧
       t.currentEpochParticipation = raised.currentEpochParticipation ∧
       t.slashings = raised.slashings ∧ supply t = supply raised := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact ⟨rfl, rfl, rfl, rfl⟩
-    · cases final
-      exact ⟨rfl, rfl, rfl, rfl⟩
+    rw [written]
+    exact ⟨rfl, rfl, rfl, rfl⟩
   -- Raising the balance of the proposer keeps the flags.
   have kept : raised.previousEpochParticipation = (setEpochParticipation s
         (attestation.data.target.epoch == getCurrentEpoch s) updated).previousEpochParticipation ∧
@@ -2282,12 +2277,14 @@ def flagWeightBound (preset : Preset) (budget : Nat) : Nat :=
 
 /-- A bound on what the sync aggregate of one block pays, for effective balances within a budget.
 
-It puts the budget in place of the total active balance.
+The increments of the active balance, times the base reward of one, are at most `F * (√A + 2)`.
 
-It takes the largest base reward of one increment. -/
+Here `F` is the base reward factor and `A` the total active balance.
+
+The bound puts the budget in place of that total. -/
 def syncRewardBound (preset : Preset) (budget : Nat) : Nat :=
-  let participant := budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-    preset.largestPerIncrement * SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat /
+  let participant := preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt budget + 2) *
+    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat /
       preset.SLOTS_PER_EPOCH.toNat / preset.SYNC_COMMITTEE_SIZE.toNat
   preset.SYNC_COMMITTEE_SIZE.toNat * (participant + participant * PROPOSER_WEIGHT.toNat /
     (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
@@ -2358,12 +2355,19 @@ theorem syncRewardCap_le {state : BeaconState preset fork} {budget : Nat}
     cases totalState : getTotalActiveBalance state with
     | error => simp
     | ok total =>
-      obtain ⟨low, high⟩ := getTotalActiveBalance_bounds totalState
+      obtain ⟨-, high⟩ := getTotalActiveBalance_bounds totalState
       have totalLe : total.toNat ≤ budget := le_trans high (max_le incLe sumLe)
       cases perState : getBaseRewardPerIncrement preset total with
       | error => simp only [perState]; exact Nat.zero_le _
       | ok per =>
-        have perLe := baseRewardPerIncrement_bound perState low
+        -- The increments of the total times the base reward of one grow as the root of the total.
+        have rewards : total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * per.toNat ≤
+            preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt budget + 2) := by
+          rw [toNat_getBaseRewardPerIncrement perState]
+          rcases Nat.eq_zero_or_pos total.toNat with zero | positive
+          · simp [zero]
+          · exact (div_mul_div_sqrt_le positive _).trans
+              (Nat.mul_le_mul_left _ (Nat.add_le_add_right (Nat.sqrt_le_sqrt totalLe) 2))
         simp only [perState]
         gcongr
   · simp [altair]

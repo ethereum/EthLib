@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 
 /-!
@@ -193,8 +192,7 @@ theorem onExecutionPayloadEnvelope_equivocatingIndices {gloas : .glamsterdam ≤
     {signed : SignedExecutionPayloadEnvelope preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     after.equivocatingIndices = store.equivocatingIndices := by
-  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
   rfl
 
 /-- From Heze, an inclusion list keeps the equivocators. -/
@@ -428,58 +426,6 @@ theorem Execution.equivocatingIndices_honest (slots : 0 < config.SLOT_DURATION_M
       · have sent := e.view_subset_sent n u mem
         rw [e.isSlashableAttestationData_honest slots n honest sent sent one two] at slash
         exact Bool.false_ne_true slash
-
-variable [DecidablePred (· ∈ J)]
-
-/-- Lemmas 4 and 3 of the paper for a block that the store of an honest validator confirms.
-
-The store is that of an honest validator in an execution, so no known equivocator is honest.
-
-The honest stores must list no honest equivocator at the start, and slots must last a positive time.
-
-The other hypotheses are those of the store-level form of the lemmas. -/
-theorem Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed
-    (slots : 0 < config.SLOT_DURATION_MS)
-    (start : ∀ u ∈ J, ∀ v ∈ (e.start u).equivocatingIndices, v ∉ J) (n : ℕ) {u : ValidatorIndex}
-    (receiver : u ∈ J) {head root : Root} {balanceSource : BeaconState preset fork}
-    {currentSlot firstSlot lastSlot startSlot : Slot} {block parentBlock : BeaconBlock preset fork}
-    {participants : Std.TreeSet ValidatorIndex}
-    {proposerScore maximumSupport discount adversary : Gwei}
-    (within : balanceSource.RegistryWithinLimit)
-    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok currentSlot)
-    (blockOk : ((e.world n).state u).block root = .ok block)
-    (parentOk : ((e.world n).state u).block block.parentRoot = .ok parentBlock)
-    (boostOk : computeProposerScore config balanceSource = .ok proposerScore)
-    (firstOk : addChecked parentBlock.slot 1 = .ok firstSlot)
-    (lastOk : subChecked currentSlot 1 = .ok lastSlot)
-    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head balanceSource
-      firstSlot lastSlot = .ok maximumSupport)
-    (discountOk : ((e.world n).state u).computeEmptySlotSupportDiscount config head balanceSource
-      root = .ok discount)
-    (adversaryOk : ((e.world n).state u).getAdversarialWeight config head balanceSource root =
-      .ok adversary)
-    (rangeOk : ((e.world n).state u).computeAdversarialWeight config head balanceSource startSlot
-      lastSlot = .ok adversary)
-    (participantsOk : ((e.world n).state u).getCommitteesBetweenSlots head startSlot lastSlot =
-      .ok participants)
-    (confirmed : ((e.world n).state u).isOneConfirmed config head balanceSource
-      (((e.world n).state u).tallyVotes balanceSource) root = .ok true)
-    (supportersIn : ∀ v ∈ ((e.world n).state u).supportersOf balanceSource ⟨root, .pending⟩,
-      v ∈ participants)
-    (aligned : EffectiveBalancesAligned balanceSource)
-    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
-    (byzantine : ByzantineStakeAtMost (fun v => balanceAt balanceSource v.toNat)
-      (Store.activeMembers balanceSource participants) J
-      config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat 100) :
-    maximumSupport.toNat + proposerScore.toNat <
-      discount.toNat + 2 * stake (fun v => balanceAt balanceSource v.toNat)
-        {v ∈ ((e.world n).state u).supportersOf balanceSource ⟨root, .pending⟩ | v ∈ J} :=
-  Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed within slotOk blockOk parentOk boostOk
-    firstOk lastOk maximumOk discountOk adversaryOk rangeOk participantsOk confirmed supportersIn
-    -- The store-level form of Lemmas 4 and 3 assumes that no known equivocator is honest.
-    --
-    -- An honest execution discharges that assumption.
-    aligned increment (e.equivocatingIndices_honest slots start n receiver) byzantine
 
 end Models.Network
 

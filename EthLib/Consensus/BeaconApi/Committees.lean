@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.StateQueries
+public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.PayloadTimeliness
 
 /-!
@@ -108,13 +109,12 @@ def committeesResponse (state : BeaconState preset fork) (epoch : Option Epoch)
 /-- From Altair: the sync committee of the period of an epoch, or an error with code 400. -/
 def syncCommitteeOf (state : BeaconState preset fork) (altair : .altair ≤ fork) (epoch : Epoch) :
     Except ErrorMessage (SyncCommittee preset) :=
-  let period := computeSyncCommitteePeriod preset epoch
-  let current := computeSyncCommitteePeriod preset (getCurrentEpoch state)
   -- The state holds only two committees: the one of the current period, and the next one.
-  if period = current then .ok (state.currentSyncCommittee altair).value
-  else if period.toNat = current.toNat + 1 then .ok (state.nextSyncCommittee altair).value
+  match syncCommitteeOfPeriod state altair (computeSyncCommitteePeriod preset epoch) with
+  | some committee => .ok committee
   -- Any other period: code 400, with the example message of the source.
-  else .error { code := 400, message := "Epoch is outside the sync committee period of the state" }
+  | none =>
+    .error { code := 400, message := "Epoch is outside the sync committee period of the state" }
 
 /-- A sync committee by the indices of its members, with its slices for the subnets. -/
 structure SyncCommitteeIndices where

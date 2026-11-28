@@ -257,6 +257,24 @@ def test_configuration_replacement_is_read():
     assert info.value.code == 0
 
 
+@pytest.mark.parametrize("fork", ["phase0", "deneb", "electra"])
+def test_zero_churn_quotient(fork: str):
+    # Each epoch reads the churn limit, which divides by the churn quotient of the configuration.
+    # The source divides by 0 there, so the epoch is a rejection.
+    case = sorted((FILES / "minimal" / fork / "sanity" / "slots").rglob("pre.ssz_snappy"))[0]
+    pre = snappy.decompress(case.read_bytes())
+    # The slot follows genesis_time (8 bytes) and genesis_validators_root (32 bytes).
+    # A minimal epoch has 8 slots, so the target slot ends the epoch of the state.
+    target = int.from_bytes(pre[40:48], "little") // 8 * 8 + 8
+    message = (
+        "EthLib.Consensus.TransitionError.accessor "
+        "(EthLib.Consensus.AccessorError.arith (EthLib.Base.ArithError.divisionByZero))"
+    )
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_slots("minimal", FORKS[fork], pre, target, {"CHURN_LIMIT_QUOTIENT": 0})
+    assert info.value.code == 1
+
+
 def test_slots_out_of_range():
     message = f"expected an int below {2**64}, got {2**64}"
     with raises(consensus.TransitionError, message) as info:

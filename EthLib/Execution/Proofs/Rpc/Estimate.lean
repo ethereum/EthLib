@@ -98,11 +98,12 @@ theorem completes_iff {g : Nat} :
   · rintro ⟨_, s, o, hs, hr, he, -⟩
     exact ⟨s, o, ⟨hs, hr⟩, he⟩
 
-/-- The estimate is a gas limit with which the call completes.
+/-- An estimate comes from a prepared call that completes at its gas limit.
 
-It is at most the gas limit of the call that the request prepares. -/
-theorem estimateGas_completes {g : Nat} (h : v.estimateGas tx p c = .ok g) :
-    v.Completes tx p c g ∧ ∃ s, v.prepareCall tx p c = .ok s ∧ g ≤ s.transaction.gas.toNat := by
+It is the answer of the search from 0 to that limit. -/
+private theorem estimateGas_ok {g : Nat} (h : v.estimateGas tx p c = .ok g) :
+    ∃ s, v.prepareCall tx p c = .ok s ∧ v.Completes tx p c s.transaction.gas.toNat ∧
+      g = v.searchGas tx p c 0 s.transaction.gas.toNat := by
   unfold estimateGas at h
   rcases hs : v.prepareCall tx p c with e | s
   · simp [hs, bind, Except.bind] at h
@@ -117,7 +118,15 @@ theorem estimateGas_completes {g : Nat} (h : v.estimateGas tx p c = .ok g) :
   have hdone : o.error = none := by
     unfold callAnswer at ha
     split at ha <;> simp_all
-  exact ⟨searchGas_completes ⟨s', o, hr, hdone⟩, s, rfl, searchGas_le _ _⟩
+  exact ⟨s, rfl, ⟨s', o, hr, hdone⟩, rfl⟩
+
+/-- The estimate is a gas limit with which the call completes.
+
+It is at most the gas limit of the call that the request prepares. -/
+theorem estimateGas_completes {g : Nat} (h : v.estimateGas tx p c = .ok g) :
+    v.Completes tx p c g ∧ ∃ s, v.prepareCall tx p c = .ok s ∧ g ≤ s.transaction.gas.toNat := by
+  obtain ⟨s, hs, hdone, rfl⟩ := estimateGas_ok h
+  exact ⟨searchGas_completes hdone, s, hs, searchGas_le _ _⟩
 
 /-- The estimate is at most each positive gas limit with which the call completes.
 
@@ -129,21 +138,8 @@ theorem estimateGas_least
       v.Completes tx p c b)
     {g g' : Nat} (h : v.estimateGas tx p c = .ok g) (hpos : 0 < g')
     (hc : v.Completes tx p c g') : g ≤ g' := by
-  unfold estimateGas at h
-  rcases hs : v.prepareCall tx p c with e | s
-  · simp [hs, bind, Except.bind] at h
-  simp only [hs, bind, Except.bind] at h
-  rcases hr : v.runCall { tx with gas := some s.transaction.gas.toNat } p c with e | ⟨s', o⟩
-  · simp [hr] at h
-  simp only [hr] at h
-  rcases ha : callAnswer o with e | out
-  · simp [ha] at h
-  simp only [ha, pure, Except.pure, Except.ok.injEq] at h
-  subst h
-  have hdone : o.error = none := by
-    unfold callAnswer at ha
-    split at ha <;> simp_all
-  exact searchGas_least hconv ⟨s', o, hr, hdone⟩ hpos hc
+  obtain ⟨s, -, hdone, rfl⟩ := estimateGas_ok h
+  exact searchGas_least hconv hdone hpos hc
 
 /-- `eth_estimateGas` fails exactly when `eth_call` fails, and with the same error. -/
 theorem estimateGas_eq_error_iff {e : Serialization.JsonRpc.RpcError} :
@@ -187,17 +183,7 @@ theorem searchGas_pred_not_completes {lo hi : Nat} (hlt : lo < hi)
 That holds unless the estimate is at most 1. -/
 theorem estimateGas_pred_not_completes {g : Nat} (h : v.estimateGas tx p c = .ok g) :
     g ≤ 1 ∨ ¬ v.Completes tx p c (g - 1) := by
-  unfold estimateGas at h
-  rcases hs : v.prepareCall tx p c with e | s
-  · simp [hs, bind, Except.bind] at h
-  simp only [hs, bind, Except.bind] at h
-  rcases hr : v.runCall { tx with gas := some s.transaction.gas.toNat } p c with e | ⟨s', o⟩
-  · simp [hr] at h
-  simp only [hr] at h
-  rcases ha : callAnswer o with e | out
-  · simp [ha] at h
-  simp only [ha, pure, Except.pure, Except.ok.injEq] at h
-  subst h
+  obtain ⟨s, -, -, rfl⟩ := estimateGas_ok h
   rcases Nat.eq_zero_or_pos s.transaction.gas.toNat with h0 | hpos
   · left
     rw [h0, searchGas]

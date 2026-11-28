@@ -269,4 +269,53 @@ theorem calculateBaseFeePerGas_pos (parentGasLimit parentGasUsed : Nat) {parentB
     Nat.div_lt_self h (by decide)
   omega
 
+/-! ## The base fee that a supply of ether can pay -/
+
+/-- A parent whose gas, at its base fee, cost at most `supply` wei limits the next base fee.
+
+The next fee is at most the parent's fee, or the fee after a full parent at `supply / (t + 1)`.
+
+Here `t` is the target of the parent.
+
+The parent must use at most its gas limit. -/
+theorem calculateBaseFeePerGas_le_of_mul_le
+    {parentGasLimit parentGasUsed parentBaseFeePerGas supply : Nat}
+    (used : parentGasUsed ≤ parentGasLimit) (paid : parentBaseFeePerGas * parentGasUsed ≤ supply) :
+    calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
+      ≤ max parentBaseFeePerGas (calculateBaseFeePerGas parentGasLimit parentGasLimit
+          (supply / (parentGasLimit / ELASTICITY_MULTIPLIER + 1))) := by
+  rcases Nat.lt_or_ge (parentGasLimit / ELASTICITY_MULTIPLIER) parentGasUsed with hgt | hle
+  · -- Above the target, the parent paid its fee for more than `t` gas, so the fee is that small.
+    have hfee : parentBaseFeePerGas ≤ supply / (parentGasLimit / ELASTICITY_MULTIPLIER + 1) :=
+      (Nat.le_div_iff_mul_le (Nat.succ_pos _)).mpr
+        (Nat.le_trans (Nat.mul_le_mul_left _ hgt) paid)
+    -- A full parent gives at least as high a fee, and so does a higher fee.
+    exact Nat.le_trans (calculateBaseFeePerGas_mono _ _ used)
+      (Nat.le_trans (calculateBaseFeePerGas_mono_baseFee _ _ hfee)
+        (Nat.le_max_right _ _))
+  · -- At or below the target, the fee does not rise.
+    exact Nat.le_trans (calculateBaseFeePerGas_le_self _ hle) (Nat.le_max_left _ _)
+
+/-- The next base fee stays below `2^64` when the fee and `supply / (t + 1)` are small.
+
+The fee of the parent is below `2^64`, and `supply / (t + 1)` is below `2^63`.
+
+Here the parent's gas cost at most `supply` wei at its fee, and `t` is its target. -/
+theorem calculateBaseFeePerGas_lt_two_pow_64
+    {parentGasLimit parentGasUsed parentBaseFeePerGas supply : Nat}
+    (used : parentGasUsed ≤ parentGasLimit) (paid : parentBaseFeePerGas * parentGasUsed ≤ supply)
+    (fee : parentBaseFeePerGas < 2 ^ 64)
+    (small : supply / (parentGasLimit / ELASTICITY_MULTIPLIER + 1) < 2 ^ 63) :
+    calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas < 2 ^ 64 := by
+  refine Nat.lt_of_le_of_lt (calculateBaseFeePerGas_le_of_mul_le used paid)
+    (Nat.max_lt.mpr ⟨fee, ?_⟩)
+  -- After a full parent, the fee rises by at most a quarter of itself, or by 1.
+  have rise := calculateBaseFeePerGas_le_of_le_gasLimit
+    (supply / (parentGasLimit / ELASTICITY_MULTIPLIER + 1)) (Nat.le_refl parentGasLimit)
+  generalize supply / (parentGasLimit / ELASTICITY_MULTIPLIER + 1) = f at rise small
+  generalize parentGasLimit / ELASTICITY_MULTIPLIER = t at rise
+  have hdiv : f / t ≤ f := Nat.div_le_self f t
+  unfold BASE_FEE_MAX_CHANGE_DENOMINATOR at rise
+  omega
+
 end EthLib.Execution.Fees.BaseFee

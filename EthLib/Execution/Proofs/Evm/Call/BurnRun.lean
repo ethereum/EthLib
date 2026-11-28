@@ -179,6 +179,50 @@ inductive RunReaches (fork : Fork) (Meter : Type) [GasMeter Meter] :
       (run : RunReaches fork Meter (.call message prepared substate meter) reached) :
       RunReaches fork Meter (.create message state substate meter) reached
 
+/-- Every frame that a run from `start` reaches meets `P`. -/
+def ReachesAll (P : Evm fork Meter → Prop) (start : BurnStart fork Meter) : Prop :=
+  ∀ reached, RunReaches fork Meter start reached → P reached
+
+/-- A certified run of a frame that ends with no error ends in a frame that it reaches. -/
+theorem RunBurns.reaches_of_frame {start : BurnStart fork Meter} {ended : Evm fork Meter}
+    {log : BurnLog} (h : RunBurns fork Meter start ended log) :
+    ∀ evm, start = .frame evm → ended.error = none → RunReaches fork Meter (.frame evm) ended := by
+  induction h with
+  | stopped evm _ =>
+    intro e he _
+    cases he
+    exact .here _
+  | next running hstep _ ih =>
+    intro e he herr
+    cases he
+    exact .next running hstep (ih _ rfl herr)
+  | child running hstep run resumed _ _ ihTail =>
+    intro e he herr
+    cases he
+    exact .childTail running hstep run resumed (ihTail _ rfl herr)
+  -- An exceptional halt ends with an error.
+  | halt | failedResume => intro _ _ herr; simp [exceptionalHalt] at herr
+  | _ => intro _ he; cases he
+
+/-- A certified call that selects no precompile and ends with no error ends in a frame it reaches.
+-/
+theorem RunBurns.reaches_of_call {message : Message fork} {state : TransactionState}
+    {substate : Substate} {meter : Meter} {ended : Evm fork Meter} {log : BurnLog}
+    (h : RunBurns fork Meter (.call message state substate meter) ended log)
+    (selected : precompileAddress fork message = none) (herr : ended.error = none) :
+    RunReaches fork Meter (.call message state substate meter) ended := by
+  cases h with
+  | @call _ _ _ _ _ _ ended _ entered run _ =>
+    -- With no error, the call ends in the frame of its code, with nothing rolled back.
+    have hnone : ended.error = none := by
+      unfold rollbackOnError at herr
+      split at herr <;> exact herr
+    rw [show rollbackOnError state ended = ended by simp [rollbackOnError, hnone]]
+    cases run with
+    | bodyFrame _ run => exact .call entered (.body selected (run.reaches_of_frame _ rfl hnone))
+    | skipPrecompile _ _ selected' _ => simp [startFrame, selected] at selected'
+    | precompile selected' _ _ => simp [startFrame, selected] at selected'
+
 /-- A certified run ends with the supply of its start, less the total of its log. -/
 theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
     (h : RunBurns fork Meter start ended log) :

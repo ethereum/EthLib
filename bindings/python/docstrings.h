@@ -783,7 +783,7 @@
   "From Altair: whether a validator serves on the sync committee of the period of an epoch."
 
 #define DOC_consensus_compute_subnets_for_sync_committee \
-  "From Altair: the sync committee subnets of a validator for the next slot, as a list."
+  "From Altair: the sync committee subnets of a validator for its messages of a slot, as a list."
 
 #define DOC_consensus_get_ptc_assignment \
   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator."
@@ -858,7 +858,7 @@
   "From Bellatrix: whether a block may be imported optimistically, given the known blocks."
 
 #define DOC_consensus_latest_verified_ancestor \
-  "From Bellatrix: the root of the latest block of a chain that is not optimistic."
+  "From Bellatrix: the latest node at or above a node that is verified or of genesis."
 
 #define DOC_consensus_on_valid_payload \
   "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list."

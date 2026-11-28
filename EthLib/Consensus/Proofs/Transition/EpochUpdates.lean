@@ -299,10 +299,10 @@ theorem sameSizes_processEffectiveBalanceUpdates
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateEffectiveBalance step))
     (SameSizes.refl state) computed
 
-/-- A property that each successful update of one effective balance keeps holds after the pass.
+/-- A property holds after the pass when it holds before and each update of one balance keeps it.
 
-The step must keep it for every index, not only for the indices of the registry. -/
-theorem processEffectiveBalanceUpdates_invariant (P : BeaconState preset fork → Prop)
+Each update must keep it from every state and at every index, not only at those of the pass. -/
+theorem processEffectiveBalanceUpdates_induction (P : BeaconState preset fork → Prop)
     (step : ∀ current index next, P current →
       updateEffectiveBalance current index = .ok next → P next)
     (holds : P state) (computed : processEffectiveBalanceUpdates state = .ok after) : P after := by
@@ -329,10 +329,14 @@ theorem sameSizes_activateValidator {index : ValidatorIndex}
   exact sameSizes_setValidator set
 
 /-- The activation churn limit is at most the configured maximum and the validator churn limit. -/
-theorem getValidatorActivationChurnLimit_le {config : Config} :
-    getValidatorActivationChurnLimit config state ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT ∧
-      getValidatorActivationChurnLimit config state ≤ getValidatorChurnLimit config state :=
-  ⟨Std.min_le_left, Std.min_le_right⟩
+theorem getValidatorActivationChurnLimit_le {config : Config} {limit : UInt64}
+    (limitOk : getValidatorActivationChurnLimit config state = .ok limit) :
+    limit ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT ∧
+      ∃ churn, getValidatorChurnLimit config state = .ok churn ∧ limit ≤ churn := by
+  simp only [getValidatorActivationChurnLimit, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at limitOk
+  obtain ⟨churn, churnOk, rfl⟩ := limitOk
+  exact ⟨Std.min_le_left, churn, churnOk, Std.min_le_right⟩
 
 /-- The activation epoch at an index, or the accessor error outside the registry. -/
 def activationEpochAt (state : BeaconState preset fork) (index : ValidatorIndex) :
@@ -495,6 +499,29 @@ theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex
         subst other
         exact ⟨epoch, calculated, by rw [unchanged index tail, epochs index, ite_eq_left rfl]⟩
 
+/-- Before Electra, the registry updates are a pass over the validators, then activations.
+
+The activations take the head of the queue after the first pass, as many as the limit allows.
+
+From Deneb that limit is capped, as [EIP-7514] specifies.
+
+[EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
+-/
+theorem processRegistryUpdates_ok_of_lt_electra {config : Config} (before : fork < .pectra)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ (updated : BeaconState preset fork) (limit : UInt64),
+      (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
+        .ok updated ∧
+      (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated) = .ok limit ∧
+      ((activationQueue updated).take limit.toNat).foldlM activateValidator updated =
+        .ok after := by
+  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
+  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok]
+    at computed
+  obtain ⟨updated, first, limit, limitOk, last⟩ := computed
+  exact ⟨updated, limit, first, limitOk, last⟩
+
 /-- Before Electra, the registry writes activation epochs only in a bounded queue prefix.
 
 The queue and the limit are read after the first pass, as the step reads them.
@@ -508,15 +535,16 @@ From Deneb it is capped, as [EIP-7514] says.
 theorem processRegistryUpdates_activationEpochs {config : Config}
     (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) :
-    ∃ updated : BeaconState preset fork,
+    ∃ (updated : BeaconState preset fork) (churn limit : UInt64),
       (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
         .ok updated ∧
-      let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-        else getValidatorChurnLimit config updated
+      getValidatorChurnLimit config updated = .ok churn ∧
+      (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated) = .ok limit ∧
       -- The queue sorts by eligibility epoch, then by validator index.
       let selected := (activationQueue updated).take limit.toNat
       selected.length ≤ limit.toNat ∧
-      limit ≤ getValidatorChurnLimit config updated ∧
+      limit ≤ churn ∧
       (.dencun ≤ fork → limit ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT) ∧
       (∀ index, index ∉ selected →
         activationEpochAt after index = activationEpochAt state index) ∧
@@ -526,9 +554,14 @@ theorem processRegistryUpdates_activationEpochs {config : Config}
           activationEpochAt after index = .ok epoch) ∧
       -- Each selected validator had the far-future activation epoch, 2^64 - 1, before the step.
       (∀ index, index ∈ selected → activationEpochAt state index = .ok FAR_FUTURE_EPOCH) := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, first, last⟩ := computed
+  obtain ⟨updated, limit, first, limitOk, last⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
+  -- The activation limit reads the validator churn limit, so that limit succeeds too.
+  obtain ⟨churn, churnOk, below⟩ : ∃ churn, getValidatorChurnLimit config updated = .ok churn ∧
+      limit ≤ churn := by
+    split at limitOk
+    · exact (getValidatorActivationChurnLimit_le limitOk).2
+    · exact ⟨limit, limitOk, UInt64.le_refl _⟩
   -- The first pass leaves every input activation epoch and the current epoch unchanged.
   have kept := foldlM_ok_invariant
     (fun next : BeaconState preset fork => next.slot = state.slot ∧
@@ -538,13 +571,12 @@ theorem processRegistryUpdates_activationEpochs {config : Config}
       exact ⟨slot.trans holds.1, fun index => (epochs index).trans (holds.2 index)⟩)
     ⟨rfl, fun _ => rfl⟩ first
   obtain ⟨_, unchanged, written⟩ := foldlM_activateValidator_activationEpochs last
-  refine ⟨updated, first, List.length_take_le .., ?_, ?_, ?_, ?_, ?_⟩
-  · split
-    · exact (getValidatorActivationChurnLimit_le).2
-    · exact UInt64.le_refl _
+  refine ⟨updated, churn, limit, first, churnOk, limitOk, List.length_take_le .., ?_, ?_, ?_, ?_,
+    ?_⟩
+  · exact below
   · intro deneb
-    simp only [deneb, ↓reduceIte]
-    exact (getValidatorActivationChurnLimit_le).1
+    simp only [deneb, ↓reduceIte] at limitOk
+    exact (getValidatorActivationChurnLimit_le limitOk).1
   · intro index outside
     exact (unchanged index outside).trans (kept.2 index)
   · intro index member
@@ -564,17 +596,17 @@ A changed index is one whose activation epoch differs after the step. -/
 theorem processRegistryUpdates_changedActivationCount {config : Config}
     (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) :
-    ∃ updated : BeaconState preset fork,
+    ∃ (updated : BeaconState preset fork) (limit : UInt64),
       (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
         .ok updated ∧
-      let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-        else getValidatorChurnLimit config updated
+      (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated) = .ok limit ∧
       ∀ changed : List ValidatorIndex, changed.Nodup →
         (∀ index ∈ changed, activationEpochAt after index ≠ activationEpochAt state index) →
         changed.length ≤ limit.toNat := by
-  obtain ⟨updated, first, bounded, _, _, unchanged, _, _⟩ :=
+  obtain ⟨updated, _, limit, first, _, limitOk, bounded, _, _, unchanged, _, _⟩ :=
     processRegistryUpdates_activationEpochs before computed
-  refine ⟨updated, first, fun changed distinct differ => ?_⟩
+  refine ⟨updated, limit, first, limitOk, fun changed distinct differ => ?_⟩
   -- An index outside the prefix keeps its activation epoch, so each changed index is in it.
   refine Nat.le_trans (distinct.length_le_of_subset fun index member => ?_) bounded
   exact Classical.byContradiction fun outside => differ index member (unchanged index outside)
@@ -585,26 +617,24 @@ That exception guards against an epoch that reaches 2^64 - 1, not a protocol con
 theorem processRegistryUpdates_changedActivationEpochs_exact {config : Config}
     (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) :
-    ∃ updated : BeaconState preset fork,
+    ∃ (updated : BeaconState preset fork) (limit : UInt64),
       (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
         .ok updated ∧
-      let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-        else getValidatorChurnLimit config updated
+      (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated) = .ok limit ∧
       let selected := (activationQueue updated).take limit.toNat
       ∀ epoch, computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch →
         epoch ≠ FAR_FUTURE_EPOCH →
         ∀ index, activationEpochAt after index ≠ activationEpochAt state index ↔
           index ∈ selected := by
-  obtain ⟨updated, first, _, _, _, unchanged, written, unactivated⟩ :=
+  obtain ⟨updated, _, limit, first, _, limitOk, _, _, _, unchanged, written, unactivated⟩ :=
     processRegistryUpdates_activationEpochs before computed
-  refine ⟨updated, first, ?_⟩
+  refine ⟨updated, limit, first, limitOk, ?_⟩
   dsimp only
   intro epoch calculated finite index
   constructor
   · intro changed
-    by_cases member : index ∈ (activationQueue updated).take
-        (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-          else getValidatorChurnLimit config updated).toNat
+    by_cases member : index ∈ (activationQueue updated).take limit.toNat
     · exact member
     · exact False.elim (changed (unchanged index member))
   · intro member
@@ -633,18 +663,55 @@ theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch 
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
 
+/-- From Electra, the registry updates are a pass over the validators. -/
+private theorem registryUpdates_ok_of_electra {config : Config} (electra : .pectra ≤ fork)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ activationEpoch,
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch ∧
+      (List.range state.validators.data.size).foldlM
+        (updateRegistryEntryElectra config activationEpoch) state = .ok after := by
+  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok,
+    liftArith, mapError_ok_iff] at computed
+  exact computed
+
+/-- From Electra and before Gloas, the registry updates are a pass over the validators.
+
+The pass activates at the first epoch an activation may take, as [EIP-7251] specifies.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
+theorem processRegistryUpdates_ok_of_electra {config : Config} (electra : .pectra ≤ fork)
+    -- A step that a later fork adds to the update does not run before Gloas.
+    (_early : fork < .glamsterdam)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ activationEpoch,
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch ∧
+      (List.range state.validators.data.size).foldlM
+        (updateRegistryEntryElectra config activationEpoch) state = .ok after :=
+  registryUpdates_ok_of_electra electra computed
+
+/-- From Electra, the registry updates keep each property that every update of one entry keeps.
+
+The step must keep it for every index, at the first epoch an activation may take. -/
+theorem processRegistryUpdates_invariant_of_electra {config : Config} (electra : .pectra ≤ fork)
+    (P : BeaconState preset fork → Prop)
+    (step : ∀ activationEpoch,
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch →
+      ∀ current index next, P current →
+        updateRegistryEntryElectra config activationEpoch current index = .ok next → P next)
+    (holds : P state) (computed : processRegistryUpdates config state = .ok after) : P after := by
+  obtain ⟨activationEpoch, epochOk, folded⟩ := registryUpdates_ok_of_electra electra computed
+  exact foldlM_ok_invariant P (step activationEpoch epochOk) holds folded
+
 /-- The registry updates keep the sizes. -/
 theorem sameSizes_processRegistryUpdates {config : Config}
     (computed : processRegistryUpdates config state = .ok after) : SameSizes state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact foldlM_ok_invariant (SameSizes state)
-      (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntryElectra step))
+  by_cases electra : .pectra ≤ fork
+  · exact processRegistryUpdates_invariant_of_electra electra (SameSizes state)
+      (fun _ _ _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntryElectra step))
       (SameSizes.refl state) computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) computed
   have first := foldlM_ok_invariant (SameSizes state)
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntry step))
     (SameSizes.refl state) updatedOk

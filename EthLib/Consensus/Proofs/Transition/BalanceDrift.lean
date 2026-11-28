@@ -807,7 +807,7 @@ theorem processEffectiveBalanceUpdates_max_le {fork : Fork} {s t : BeaconState p
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
     max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by
-  exact processEffectiveBalanceUpdates_invariant
+  exact processEffectiveBalanceUpdates_induction
     (fun t => max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i))
     (fun _ _ _ previous step => Nat.le_trans (updateEffectiveBalance_funding step i) previous)
@@ -925,7 +925,7 @@ theorem balanceDrift_epoch {f : Fork} {s t : BeaconState preset f}
 private theorem balanceDrift_update_upper {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
     effectiveAt ⟨f, t⟩ i ≤ max (effectiveAt ⟨f, s⟩ i) (actualBalanceAt ⟨f, s⟩ i) := by
-  have result := processEffectiveBalanceUpdates_invariant
+  have result := processEffectiveBalanceUpdates_induction
     (fun t => t.balances = s.balances ∧
       effectiveAt ⟨f, t⟩ i ≤ max (effectiveAt ⟨f, s⟩ i) (actualBalanceAt ⟨f, s⟩ i))
     (fun a index b previous step => ?_)

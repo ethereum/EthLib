@@ -919,18 +919,15 @@ private theorem blockKeeps_processRegistryUpdates
     (computed : processRegistryUpdates config state = .ok after) : BlockKeeps state after := by
   have grows := (frame_processRegistryUpdates computed).registryGrows
   by_cases electra : Fork.pectra ≤ fork
-  · unfold processRegistryUpdates at computed
-    simp only [electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
-      mapError_ok_iff] at computed
-    obtain ⟨activationEpoch, activationOk, computed⟩ := computed
-    -- An activation lands at the first epoch it may take, `MAX_SEED_LOOKAHEAD + 1` epochs on.
-    have activationEq := (computeActivationExitEpoch_ok_iff.mp activationOk).2
-    -- Each step keeps the slot, so the activation epoch stays after the fixed epoch.
-    refine (foldlM_ok_invariant (fun middle => BlockKeeps state middle ∧ middle.slot = state.slot)
-      (fun middle _ next before ok => ⟨before.1.trans
+  · -- Each step keeps the slot, so the activation epoch stays after the fixed epoch.
+    refine (processRegistryUpdates_invariant_of_electra electra
+      (fun middle => BlockKeeps state middle ∧ middle.slot = state.slot)
+      (fun _ activationOk middle _ next before ok => ⟨before.1.trans
         (blockKeeps_updateRegistryEntryElectra ?_ ok),
         (frame_updateRegistryEntryElectra ok).slot.trans before.2⟩)
       ⟨BlockKeeps.refl state, rfl⟩ computed).1
+    -- An activation lands at the first epoch it may take, `MAX_SEED_LOOKAHEAD + 1` epochs on.
+    have activationEq := (computeActivationExitEpoch_ok_iff.mp activationOk).2
     have epoch : getCurrentEpoch middle = getCurrentEpoch state := by
       simp only [getCurrentEpoch, before.2]
     rw [epoch, activationEq]
@@ -980,7 +977,7 @@ private theorem ExitsSame.setValidatorAt {state current after : BeaconState pres
 /-- The update of the effective balances writes validators that keep their exit epochs. -/
 private theorem exitsSame_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : ExitsSame state after := by
-  refine processEffectiveBalanceUpdates_invariant (ExitsSame state)
+  refine processEffectiveBalanceUpdates_induction (ExitsSame state)
     (fun current _ next kept step => ?_)
     (fun _ w read => ⟨w, read, rfl⟩) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step

@@ -38,7 +38,7 @@ theorem PlainAccount.of_createsFresh {allowed : Address → Prop} {address : Add
     (hallowed : ¬allowed address) : PlainAccount address tx' := by
   obtain ⟨hn, hc, hcode⟩ := plain
   have hc' : address ∉ tx'.createdAccounts := fun hx =>
-    (h.fresh address hx hc).elim (fun h0 => by omega) hallowed
+    (h.fresh address hx hc).elim (fun h0 => by have := h0.1; omega) hallowed
   -- A message never creates the account, so it keeps no code.
   exact ⟨Nat.le_trans hn (h.nonce address), hc', h.code address hc' hcode⟩
 
@@ -59,7 +59,7 @@ theorem stepRules_unmarked (address : Address) :
           address ∉ b.substate.accountsToDelete)) where
   trans hab hbc := ⟨fun h => hbc.1 (hab.1 h), fun h hx => hbc.2 (hab.1 h) (hab.2 h hx)⟩
   static h := ⟨fun hne => h.message ▸ hne, fun _ hx => h.toDelete ▸ hx⟩
-  sstore _ _ _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
+  sstore _ _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
   tstore _ _ _ _ := ⟨id, fun _ hx => hx⟩
   log _ _ hsub hm _ := ⟨fun hne => hm ▸ hne, fun _ hx => by rw [hsub]; exact hx⟩
   -- SELFDESTRUCT marks for deletion at most the account that runs it.

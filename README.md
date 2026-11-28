@@ -7,7 +7,7 @@ Clients may use the bindings temporarily until a native implementation exists, o
 
 ## Architecture
 
-EthLib is organised in layers, from the bytes and integers every specification uses up to the two layers of the protocol.
+EthLib is organised in layers, from the bytes and integers of every specification up to the two protocol layers and the Engine layer above them.
 A module imports only from its own layer or from those below it, and the execution and consensus layers never import each other.
 
 [ARCHITECTURE.md](ARCHITECTURE.md) gives the scope, the rules behind each layer, the types that modules share and how forks are written.
@@ -48,6 +48,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Execution | [`Blocks`](EthLib/Execution/Blocks/) | the header, withdrawals, logs, receipts and block of each fork, the logs bloom filter, the header hash, and before Paris the difficulty, the proof of work, the ommers, the rewards and the DAO Fork |
 | Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, its Merkle proofs, and the hex-prefix encoding of its paths |
 | Consensus | [`Consensus`](EthLib/Consensus/) | the configuration, presets and constants, slots and epochs, the fork of an epoch, signing domains, the swap-or-not shuffle and committees, containers with the execution payload, the custody of data columns, the gossip topics of each fork and the subnets of messages, the request and response messages, the weak subjectivity period of a checkpoint, the duties of an honest validator and what it puts in a block it proposes, and models of Casper FFG and the LMD-GHOST fork choice |
+| Engine | [`Engine`](EthLib/Engine/) | the Engine API between the two protocol layers, with its JSON form, its authentication and its methods, the execution block of a payload, the execution engine of the beacon chain, the payload attributes event of the Beacon API, and an execution node that keeps what the Engine API tells it |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
 

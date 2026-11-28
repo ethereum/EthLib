@@ -240,6 +240,8 @@ inductive ForkChoiceError where
   | unknownInclusionListSatisfaction (root : Root)
   /-- From Heze: an inclusion list is for a slot after the current one.
 
+  A node does not drop such a list: it holds the list until its slot starts, then checks it.
+
   The error gives the slot of the list, then the current slot. -/
   | futureInclusionList (slot currentSlot : Slot)
   /-- From Heze: an inclusion list is for a slot before the window that the node keeps.
@@ -471,7 +473,13 @@ structure Store where
   /-- The vote of each member of the payload committee on whether the blob data is available. -/
   payloadDataAvailabilityVote :
     Since .glamsterdam fork (Std.TreeMap Root (Vector (Option Bool) preset.PTC_SIZE.toNat))
-  /-- From Heze: the inclusion lists that the node has received. -/
+  /-- From Heze: the inclusion lists that the node has received.
+
+  A node keeps the lists of a slot for at least `MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS + 1` slots.
+
+  The payload of the next slot reads them, and it can arrive one slot late.
+
+  This store keeps every list. -/
   inclusionLists : Since .hegota fork InclusionListStore
   /-- From Heze: whether the payload of each block satisfied the inclusion lists of the slot before.
 

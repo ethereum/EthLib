@@ -103,41 +103,8 @@ The checks test that each string of the setup encodes its table entry.
 They also compare each transform of size 16 with the entries of its inputs and outputs.
 -/
 
-/-- A table of 4096 affine points, as pairs of naturals read by index.
-
-Four tables hold the points.
-
-- Table `M` holds the decoded monomial points, and table `L` the decoded Lagrange points.
-- Tables `A` and `B` hold the results of the first two rounds. -/
-abbrev Table := Nat → Nat × Nat
-
 /-- Entry `n` of a table, as a point of `G1`. -/
 def Table.point (t : Table) (n : Nat) : G1 := affinePoint (t n).1 (t n).2
-
-/-- Each list of digit codes encodes its entry of the table, from entry `a` on. -/
-def decodeCheck (t : Table) : Nat → List (List Nat) → Bool
-  | _, [] => true
-  | a, c :: cs => encodes c (t a).1 (t a).2 && decodeCheck t (a + 1) cs
-
-/-- The roots `u^i` of the transforms of size 16. -/
-def roots16 : Vector Nat (2 ^ 4) := Vector.ofFn fun i => rootPowNat i.val
-
-/-- The first round at `(j2, j3)`, from `M(256 j1 + 16 j2 + j3)` to `A(256 k1 + 16 j2 + j3)`. -/
-def checkA (tM tA : Table) (j2 j3 : Nat) : Bool :=
-  dftCheck (k := 4) (Vector.ofFn fun i => tM (256 * i.val + 16 * j2 + j3))
-    (Vector.ofFn fun _ => 1) roots16 (Vector.ofFn fun k1 => tA (256 * k1.val + 16 * j2 + j3))
-
-/-- The second round at `(k1, j3)`, from `A(256 k1 + 16 j2 + j3)` to `B(256 k1 + 16 k2 + j3)`. -/
-def checkB (tA tB : Table) (k1 j3 : Nat) : Bool :=
-  dftCheck (k := 4) (Vector.ofFn fun i => tA (256 * k1 + 16 * i.val + j3))
-    (Vector.ofFn fun i => scalarB k1 i.val) roots16
-    (Vector.ofFn fun k2 => tB (256 * k1 + 16 * k2.val + j3))
-
-/-- The third round at `(k1, k2)`, from `B(256 k1 + 16 k2 + j3)` to `L(k1 + 16 k2 + 256 k3)`. -/
-def checkC (tB tL : Table) (k1 k2 : Nat) : Bool :=
-  dftCheck (k := 4) (Vector.ofFn fun i => tB (256 * k1 + 16 * k2 + i.val))
-    (Vector.ofFn fun i => scalarC k1 k2 i.val) roots16
-    (Vector.ofFn fun k3 => tL (k1 + 16 * k2 + 256 * k3.val))
 
 
 /-! ## What the checks give -/

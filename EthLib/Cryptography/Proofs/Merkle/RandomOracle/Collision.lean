@@ -231,15 +231,22 @@ theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
     change g (w.position, w.y.1, w.y.2) = g (w.position, x.1, x.2) at heq
     exact hx.trans (congrArg some heq.symm)
 
-/-- Replaying a successful collision search from a cache exposes a collision in that cache.
+omit [DecidableEq D] in
+/-- Replaying a successful search of any node hash from a cache exposes a collision in the cache.
 
-The replay answers each call from the cache, and fails on an input the cache lacks.
+It holds when each replayed node hash returns the cached answer of one input.
 
-So both inputs of the collision it returns are in the cache. -/
-theorem collision_of_partial_findCollision [DecidableEq R]
-    (c : (NodeInput R →ₒ R).QueryCache) :
+At one position, that input must determine the two children. -/
+theorem collision_of_replay_findCollision [DecidableEq R]
+    {hash : Position → R → R → OracleComp (D →ₒ R) R} {input : Position → R → R → D}
+    {c : (D →ₒ R).QueryCache}
+    -- Each replayed node hash returns the cached answer of the input of its children.
+    (hstep : ∀ p a b v, simulateQ c.toPartialImpl (hash p a b) = some v →
+      c (input p a b) = some v)
+    -- At one position, an input determines its two children.
+    (hinput : ∀ p, Function.Injective2 (input p)) :
     ∀ (s t : List R) (p : Position) (a b : R) (w : Merkle.Collision R),
-      simulateQ c.toPartialImpl (findCollision queryNode p a b s t) = some (some w) →
+      simulateQ c.toPartialImpl (findCollision hash p a b s t) = some (some w) →
         Collision c := by
   intro s
   induction s with
@@ -250,20 +257,36 @@ theorem collision_of_partial_findCollision [DecidableEq R]
     | nil => simp [findCollision] at hw
     | cons v t =>
       -- The replay read both parents of this level from the cache.
-      simp only [findCollision, queryNode, simulateQ_bind, simulateQ_spec_query,
-        QueryCache.toPartialImpl_apply] at hw
+      simp only [findCollision, simulateQ_bind] at hw
       obtain ⟨x, hx, hw⟩ := Option.bind_eq_some_iff.mp hw
       obtain ⟨y, hy, hw⟩ := Option.bind_eq_some_iff.mp hw
       split at hw
       · -- The search stopped here: two different pairs have one cached answer.
         rename_i h
-        refine ⟨(p.parent, (ordered p a u).1, (ordered p a u).2),
-          (p.parent, (ordered p b v).1, (ordered p b v).2), x, ?_, hx, ?_⟩
-        · intro heq
-          exact h.1 (by simpa using congrArg (fun z : NodeInput R => z.2) heq)
-        · simpa [h.2] using hy
+        refine ⟨input p.parent (ordered p a u).1 (ordered p a u).2,
+          input p.parent (ordered p b v).1 (ordered p b v).2, x, fun heq => h.1 ?_,
+          hstep _ _ _ _ hx, ?_⟩
+        · exact Prod.ext (hinput _ heq).1 (hinput _ heq).2
+        · rw [h.2]
+          exact hstep _ _ _ _ hy
       · -- The search went on, so the collision is in the replay of the rest.
         exact ih t _ x y w hw
+
+/-- With the node oracle, replaying a successful collision search from a cache exposes a collision.
+
+The replay answers each call from the cache, and fails on an input the cache lacks.
+
+So both inputs of the collision it returns are in the cache. -/
+theorem collision_of_partial_findCollision [DecidableEq R]
+    (c : (NodeInput R →ₒ R).QueryCache) :
+    ∀ (s t : List R) (p : Position) (a b : R) (w : Merkle.Collision R),
+      simulateQ c.toPartialImpl (findCollision queryNode p a b s t) = some (some w) →
+        Collision c :=
+  -- A node hash of this oracle is one call, on the position and the two children.
+  collision_of_replay_findCollision (input := fun p a b => (p, a, b))
+    (fun _ _ _ _ h => by
+      simpa only [queryNode, simulateQ_spec_query, QueryCache.toPartialImpl_apply] using h)
+    (fun _ _ _ _ _ h => by simpa using h)
 
 /-- The birthday bound for a computation that only calls the oracle.
 

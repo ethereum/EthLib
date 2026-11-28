@@ -504,7 +504,7 @@ theorem exitQueue_lt {exitBalance : Gwei} {queued : BeaconState preset fork} {ex
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
     obtain ⟨epoch, epochOk, -, rfl⟩ := computed
     simp only [exitQueueEpoch, bind_ok_iff, liftArith, mapError_ok_iff] at epochOk
-    obtain ⟨earliest, earliestOk, rest⟩ := epochOk
+    obtain ⟨earliest, earliestOk, _, _, rest⟩ := epochOk
     have earliestEq := (computeActivationExitEpoch_ok_iff.mp earliestOk).2
     have latest := UInt64.le_iff_toNat_le.mp (le_foldl_maxExitEpoch
       (state.validators.data.toList.filter (·.exitEpoch != FAR_FUTURE_EPOCH)) earliest).1
@@ -873,22 +873,12 @@ theorem processAttestation_registry {parentSlot : Slot} {attestation : Attestati
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     after.validators = state.validators ∧ after.randaoMixes = state.randaoMixes := by
   by_cases altair : Fork.altair ≤ fork
-  · unfold processAttestation at computed
-    simp only [altair, ↓reduceDIte] at computed
-    unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := computed
+  · rw [processAttestation_of_altair altair] at computed
+    obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes computed
     -- The flags and the proposer reward leave the registry alone, and so does a payment.
-    have last : after.validators = raised.validators ∧ after.randaoMixes = raised.randaoMixes := by
-      split at final
-      · rw [recordPaymentWeight_eq final]
-        exact ⟨rfl, rfl⟩
-      · cases final
-        exact ⟨rfl, rfl⟩
     obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
     obtain ⟨_, rfl⟩ := setBalance_ok set
-    rw [last.1, last.2]
+    rw [written]
     unfold setEpochParticipation
     split <;> exact ⟨rfl, rfl⟩
   · obtain ⟨_, -, -, -, -, recorded, -⟩ :=
@@ -907,11 +897,8 @@ theorem processAttestation_slotEpoch {parentSlot : Slot} {attestation : Attestat
     computeEpochAtSlot preset attestation.data.slot = getPreviousEpoch state ∨
       computeEpochAtSlot preset attestation.data.slot = getCurrentEpoch state := by
   by_cases altair : Fork.altair ≤ fork
-  · unfold processAttestation at computed
-    simp only [altair, ↓reduceDIte] at computed
-    unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, ensure_ok_iff] at computed
-    obtain ⟨_, recent, _, slotEpoch, -⟩ := computed
+  · rw [processAttestation_of_altair altair, processAttestationAltair_eq_ok_iff] at computed
+    obtain ⟨⟨recent, slotEpoch, -⟩, -⟩ := computed
     exact slotEpoch ▸ recent
   · obtain ⟨recent, slotEpoch, -⟩ := processAttestation_checks (Nat.lt_of_not_le altair) computed
     exact slotEpoch ▸ recent
@@ -1000,10 +987,8 @@ private theorem keeps_foldlM_activateValidator :
 
 private theorem keeps_processRegistryUpdates (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) : Keeps state after := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  unfold processRegistryUpdates at computed
-  simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
   have first := Keeps.foldlM (fun _ _ _ ok => keeps_updateRegistryEntry ok) updatedOk
   refine first.trans (keeps_foldlM_activateValidator (fun index member validator found => ?_)
     activated)
@@ -1063,7 +1048,7 @@ private theorem keeps_processEth1DataReset {hegota : fork < .hegota}
 
 private theorem keeps_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : Keeps state after := by
-  refine processEffectiveBalanceUpdates_invariant (Keeps state)
+  refine processEffectiveBalanceUpdates_induction (Keeps state)
     (fun _ _ _ before ok => before.trans ?_) (Keeps.refl state) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨validator, found, _, _, effectiveBalance, _, set⟩ := ok

@@ -40,12 +40,17 @@ def indexedEntries (values : List ByteArray) : Except RlpError (List (ByteArray 
   (List.range values.length).zip values |>.mapM fun (index, value) => do
     return (← Codec.encode index, value)
 
-/-- The root of a list: the root of the plain trie of its indexed entries. -/
-def indexedRoot (values : List ByteArray) : Except TrieError Hash32 := do
+/-- The root of a list: the root of the plain trie of its indexed entries.
+
+The hash may answer inside a monad, as for the root of a trie. -/
+def indexedRootM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
+    (values : List ByteArray) : ExceptT TrieError m Hash32 := do
   -- `TRIE` of Appendix D over those pairs, whose keys are not hashed first.
-  --
-  -- Ethereum hashes with Keccak-256.
-  root keccak256 ⟨false, ← (indexedEntries values).mapError .rlp⟩
+  rootM hash ⟨false, ← ((indexedEntries values).mapError .rlp : Except TrieError _)⟩
+
+/-- The root of a list, with the hash of Ethereum: Keccak-256. -/
+def indexedRoot (values : List ByteArray) : Except TrieError Hash32 :=
+  (indexedRootM (m := Id) keccak256 values).run
 
 /-- The transactions root: the root of the list of the bytes of each transaction. -/
 def transactionsRoot (transactions : List Transaction) : Except TrieError Hash32 := do
@@ -64,11 +69,18 @@ def receiptsRoot {fork : Fork} (receipts : List (UInt8 × Receipt fork)) :
   -- The value of `p_R` is `RLP(L_R(R))` for `R_x = 0`, and `(R_x) · RLP(L_R(R))` otherwise.
   indexedRoot (← (receipts.mapM fun (type, r) => encodeReceipt (fork := fork) type r).mapError .rlp)
 
-/-- The withdrawals root: the root of the list of the RLP encoding of each withdrawal. -/
-def withdrawalsRoot (withdrawals : List Withdrawal) : Except TrieError Hash32 := do
+/-- The withdrawals root: the root of the list of the RLP encoding of each withdrawal.
+
+The hash may answer inside a monad, as for the root of a list. -/
+def withdrawalsRootM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
+    (withdrawals : List Withdrawal) : ExceptT TrieError m Hash32 := do
   -- Yellow Paper §4.4.2: `H_w = TRIE({p_W(i, B_W[i])})`.
   --
   -- The value of `p_W` is `RLP(L_W(W))`, the second part of `p_W(k, W) = (RLP(k), RLP(L_W(W)))`.
-  indexedRoot (← (withdrawals.mapM Codec.encode).mapError .rlp)
+  indexedRootM hash (← ((withdrawals.mapM Codec.encode).mapError .rlp : Except TrieError _))
+
+/-- The withdrawals root, with the hash of Ethereum: Keccak-256. -/
+def withdrawalsRoot (withdrawals : List Withdrawal) : Except TrieError Hash32 :=
+  (withdrawalsRootM (m := Id) keccak256 withdrawals).run
 
 end EthLib.Execution.Blocks

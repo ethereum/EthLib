@@ -886,11 +886,7 @@ private theorem attestation_balance_not_lowered {f : Fork}
     refine ⟨now, located, UInt64.le_iff_toNat_le.mpr ?_⟩
     rw [value]
     exact Nat.le_add_right _ _
-  · unfold processAttestation at ok
-    simp only [altair, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure,
-      Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
+  · obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
     have kept := recordPendingAttestation_ok recorded
     split at kept <;>
     · obtain ⟨_, rest⟩ := kept
@@ -1225,21 +1221,15 @@ private theorem PartialsAt.attestation {f : Fork} {reached : Prop}
     PartialsAt reached t := by
   by_cases altair : .altair ≤ f
   · rw [processAttestation_of_altair altair] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := ok
+    obtain ⟨_, _, _, _, raisedOk, written⟩ := processAttestationAltair_writes ok
     have flags (participation : EpochParticipation preset f) :
         PartialsAt reached (setEpochParticipation s
           (attestation.data.target.epoch == getCurrentEpoch s) participation) := by
       unfold setEpochParticipation
       split <;> exact held
     have paid := (flags _).increase raisedOk
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact paid
-    · cases final
-      exact paid
+    rw [written]
+    exact paid
   · intro electra
     exact (altair (Nat.le_trans (by decide : Fork.altair ≤ .pectra) electra)).elim
 
@@ -2551,12 +2541,9 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
         (one.2.2.2.2.2 activation finite funded held)⟩
   suffices held : R s t from
     ⟨held.1, held.2.1, held.2.2.1, held.2.2.2.1, held.2.2.2.2.2⟩
-  unfold processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact foldlM_ok_invariant (R s)
-      (fun _ _ _ previous edge => trans previous
+  by_cases electra : .pectra ≤ f
+  · exact processRegistryUpdates_invariant_of_electra electra (R s)
+      (fun _ _ _ _ _ previous edge => trans previous
         ⟨(CapStep.registryElectra edge).1, (CapStep.registryElectra edge).2.1,
           (CapStep.registryElectra edge).2.2.1,
           (fun _ _ => (CapStep.registryElectra edge).2.2.2.1),
@@ -2564,18 +2551,17 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
           fun _ finite funded held => (CapStep.registryElectra edge).2.2.2.2
             (by rw [previous.2.2.2.2.1]; exact finite) funded held⟩)
       (refl s) ok
-  · rename_i notElectra
-    simp only [bind_ok_iff] at ok
-    obtain ⟨middle, updated, activated⟩ := ok
+  · obtain ⟨middle, _, updated, _, activated⟩ :=
+      processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) ok
     have before : f < .glamsterdam :=
-      Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
+      Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
     have small : middle.validators.data.size < 2 ^ 64 :=
       Nat.lt_of_le_of_lt (middle.validators.bound before) (UInt64.toNat_lt _)
     have first : R s middle := foldlM_ok_invariant (R s)
       (fun _ _ _ previous edge => trans previous
         ⟨(CapStep.registryEntry edge).1, (CapStep.registryEntry edge).2.1,
-          (fun _ _ electra => (notElectra electra).elim),
-          (fun electra => (notElectra electra).elim),
+          (fun _ _ later => (electra later).elim),
+          (fun later => (electra later).elim),
           (frame_updateRegistryEntry edge).finalized,
           fun _ _ _ => (CapStep.registryEntry edge).2.2⟩) (refl s) updated
     refine trans first
@@ -2586,8 +2572,8 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
     · intro a b i v original member located epoch found far ok
       refine ⟨(CapStep.activate found far ok).1,
         (fun _ => (CapStep.activate (config := config) found far ok).2.1),
-        (fun _ _ electra => (notElectra electra).elim),
-        (fun electra => (notElectra electra).elim),
+        (fun _ _ later => (electra later).elim),
+        (fun later => (electra later).elim),
         (frame_activateValidator ok).finalized, ?_⟩
       intro _ finite funded held
       apply (CapStep.activate (config := config) found far ok).2.2 ?_ funded held
@@ -3837,7 +3823,7 @@ private theorem CapStep.effective {f : Fork} {s t : BeaconState preset f}
           preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →
         ScheduledFree s ((getCurrentEpoch s).toNat + 1) →
           ScheduledFree t ((getCurrentEpoch s).toNat + 1)) := by
-  have result := processEffectiveBalanceUpdates_invariant (fun t => CapStepR config s t ∧
+  have result := processEffectiveBalanceUpdates_induction (fun t => CapStepR config s t ∧
     (preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0 →
       (∀ {h : Fork} (v : Validator),
         preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →

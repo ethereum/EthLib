@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1315 | 8 |
-| altair | 1333 | 8 |
-| bellatrix | 1334 | 8 |
-| shapella | 1345 | 8 |
-| dencun | 1354 | 8 |
-| pectra | 1374 | 8 |
-| fusaka | 1381 | 8 |
-| glamsterdam | 1500 | 9 |
-| hegota | 1489 | 9 |
+| phase0 | 1323 | 11 |
+| altair | 1340 | 11 |
+| bellatrix | 1341 | 11 |
+| shapella | 1352 | 11 |
+| dencun | 1361 | 11 |
+| pectra | 1381 | 11 |
+| fusaka | 1388 | 11 |
+| glamsterdam | 1510 | 13 |
+| hegota | 1499 | 13 |
 <!-- end generated -->
 
 ### XMSS
@@ -497,7 +497,117 @@ A header past genesis whose root is zero bytes would share the leaf of the genes
 Such a header is a preimage of zero bytes under SHA-256.
 
 `isValidLightClientHeader` checks the execution branch of a header, from Capella, which also hashes with SHA-256.
-No theorem composes that check with the branch bound.
+`Consensus/Proofs/LightClient/ExecutionRandomOracle.lean` composes that check with the branch bound, from Capella to Fulu, for slots from Capella, and from Deneb at a fork from Deneb.
+From Capella to Fulu, the branch climbs from the root of the execution payload header, at node 25, to the body root of the beacon header.
+The preset and the fork are fixed before the run, and an adversary outputs a body root and two execution headers with a branch each.
+The extraction roots both headers with the extraction of whole values, then climbs both branches.
+The adversary wins when the headers differ, both branches have 4 nodes, and both climbs reach the body root.
+
+`collision_of_extractExecution` shows that every win leaves two different cached inputs with one answer.
+Two different leaves that climb to one body root give the inputs that `collision_of_extractBranches` finds.
+One leaf for two different headers is a win of the extraction of whole values, whose collision `collision_of_extract` finds.
+`prEvent_experimentWith_le` then gives `prEvent_executionWins_le`, which bounds a win by `Q^2 / N`.
+`extractExecution_queryBound` shows that the extraction makes the calls of the extraction of whole values and at most 8 more, one per climbed node.
+`prEvent_executionWins_le_of_adversary` states the bound with `Q = q + n + 8` and `N = 2^256`, for an adversary of `q` queries.
+There `n` bounds the calls of the extraction of whole values on two execution headers, which no theorem counts, as for the bound on whole values above.
+With SHA-256 as the answer table, `executionWins_sha256_iff` shows that a win is two different headers whose branches `isValidMerkleBranch` accepts, from the roots of the headers to the body root.
+`executionWins_of_isValidLightClientHeader` gives such a win for two valid headers with one body root and different execution headers.
+It needs both slots from Capella, and from Deneb when the fork is Deneb or later, so that the execution root of each header is the root of its execution header.
+A header from Deneb to Fulu at a slot before Deneb climbs from the root of its header cut to the fields of Capella, and no theorem bounds that case.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+From Gloas the header carries the parent block hash instead, which climbs by a normalized branch, and no theorem composes that check with the branch bound.
+
+### RLP
+
+Recursive Length Prefix (RLP) is the encoding of the execution layer.
+Many hashes of the chain, such as the hash of a block header, are taken over RLP bytes.
+So every item must have one encoding, and every client must reject what is not an encoding.
+The source is Appendix B of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version.
+It defines the encoding, and of the decoding it asks only that a scalar with a leading zero byte be dismissed.
+EthLib's decoder accepts exactly the outputs of EthLib's encoder, and the theorems of `Proofs/Rlp/` prove it.
+
+Every length of 56 or more, and every scalar, is written as `BE(n)`, the bytes of `n` in base 256 with no leading zero byte.
+`bigEndian_value` and `bigEndian_head_ne_zero` (`Proofs/Rlp/Item.lean`) prove that `bigEndian n` has both properties.
+`bigEndian_unique` proves that no other bytes have them, so `bigEndian` computes the `BE` of the Yellow Paper.
+
+The Yellow Paper gives no encoding to a payload of `2^64` bytes or more.
+The payload of a byte string is its bytes, and the payload of a list is the encodings of its items.
+`encode_error` (`Proofs/Rlp/Bound.lean`) proves that the only failure of `encode` is `payloadTooLong`, with a length of at least `2^64`.
+`encode_bytes_succeeds_iff` proves that a byte string encodes exactly when it has fewer than `2^64` bytes.
+`encode_list_succeeds_iff` takes a list whose items encode.
+It proves that the list encodes exactly when the joined encodings of its items have fewer than `2^64` bytes.
+Below that bound, `lengthPrefix_first_byte_le` (`Proofs/Rlp/Encode.lean`) bounds the first byte of a long prefix by `0xbf` for a byte string and `0xff` for a list.
+So that byte never wraps around 256, and the long prefix of a byte string stays below `0xc0`, where lists start.
+
+`Proofs/Rlp/Bound.lean` also bounds the size of an encoding.
+A prefix has at most 9 bytes, and 1 byte for a length below 56 (`lengthPrefix_size_le`).
+So a byte string encodes to at most 9 more bytes than it has, and to at most 1 more below 56 bytes (`encode_bytes_size_le`).
+A list encodes to at most 9 more bytes than the joined encodings of its items (`encode_list_size_le`).
+Every encoding has at least 1 byte (`one_le_encode_size`).
+The encoding of a list has more bytes than the list has items, and each item encodes to fewer bytes than the list (`encode_list_size_gt`).
+
+`decode_encode` (`Proofs/Rlp/RoundTrip.lean`) proves that decoding undoes encoding: if `encode x = .ok b`, then `decode b = .ok x`.
+Its one hypothesis is that the encoding exists, and by `encode_error` it is missing only for a payload of `2^64` bytes or more.
+`encode_injective` follows: two items with one encoding are equal.
+`encode_prefix_free` proves that no encoding is a proper prefix of another, so a sequence of encodings splits into items in only one way.
+`decode_trailing` proves that an encoding followed by more bytes is rejected with `trailingBytes`, which carries the number of extra bytes.
+`decodeItem_encode` proves that the decoder reads an encoding at any position of a longer input, and stops right after it.
+
+The converse is `encode_decode` (`Proofs/Rlp/Canonical.lean`): if `decode b = .ok x`, then `encode x = .ok b`.
+It assumes nothing about `b` beyond its acceptance, so the decoder accepts only canonical input, including every item nested in a list.
+`decode_eq_ok_iff` joins the two directions, so `encode` is a bijection between the items that have an encoding and the inputs that `decode` accepts.
+`decode_isOk_iff` states that `decode` succeeds exactly on the encodings of items.
+For a stream, `decodeItem_append` proves that the decoder reads the same item, and stops at the same position, when more bytes follow.
+`encode_of_decodeItem` proves that the bytes it read are the encoding of that item.
+
+`Proofs/Rlp/Strict.lean` names the error of each of five non-canonical forms, in three groups, whatever bytes follow the form:
+
+- `81 x` with `x < 0x80` puts a prefix before a byte that is its own encoding, and fails with `singleByteWithPrefix` (`decodeItem_singleByteWithPrefix`).
+- `b8 l` or `f8 l` with `0 < l < 56` writes a short length in the long form, and fails with `longFormForShortLength` (`decodeItem_longFormForShortLength_bytes`, `decodeItem_longFormForShortLength_list`).
+- `b7 + k` or `f7 + k` with `1 <= k <= 8`, then `k` length bytes whose first is zero, fails with `leadingZeroInLength` (`decodeItem_leadingZero_bytes`, `decodeItem_leadingZero_list`).
+
+Each theorem holds for the form at any position of the input, and `decode_eq_error` lifts it to a whole input that starts with the form.
+No theorem of `Proofs/Rlp/Strict.lean` names the error of an input that ends before the bytes its prefix announces.
+`encode_decode` still covers such an input, as it covers every input: what the decoder accepts is an encoding.
+`RlpError.code_injective` (`Proofs/Rlp/Item.lean`) proves that two errors with one code come from one constructor.
+That code is the number that the C exports give for an error.
+
+A scalar is a non-negative integer, and its item is the byte string `BE(n)`.
+`decodeScalar_eq_ok_iff` (`Proofs/Rlp/Scalar.lean`) proves that `decodeScalar b = .ok n` exactly when `encode (.scalar n) = .ok b`.
+With `encode_decode`, `encode_injective` and `bigEndian_head_ne_zero`, it follows that the scalar decoder rejects every input whose byte string starts with a zero byte.
+For example, it rejects `00` and `82 00 01`.
+`toScalar_scalar` and `eq_scalar_of_toScalar` state the same on items, and `scalar_injective` proves that two scalars never share an item.
+`encode_scalar_succeeds_iff` proves that a scalar encodes exactly when `BE(n)` has fewer than `2^64` bytes.
+`encode_scalar_succeeds` proves that every scalar below `2^256` encodes, so every 256-bit word does.
+
+A codec writes a typed value as an item, and reads an item back as a value (`Rlp/Codec.lean`).
+`LawfulCodec` (`Proofs/Rlp/Codec.lean`) asks that the two directions undo each other.
+For every lawful codec, `Codec.decode_encode` and `Codec.encode_decode` carry the two directions above to typed values, and `Codec.decode_eq_ok_iff` joins them.
+So a typed decoder accepts a byte string for a value exactly when it is the encoding of that value.
+`Codec.encode_injective` proves that two values with one encoding are equal.
+
+The file proves the laws for `Nat`, `U256`, `UInt64`, `UInt32`, `UInt16`, `UInt8`, `Bool`, `ByteArray`, `Vector UInt8 n` and `Item`, and for a list of a lawful type.
+So each bounded integer type rejects a scalar too large for it, and `Vector UInt8 n` rejects a byte string of another length.
+An `Option α` is lawful when `α` is lawful and `NeverEmpty`: no value of `α` has the empty byte string as its item.
+Then `none` is written as the empty byte string, and `Codec.decode_eq_ok_none_iff` proves that `none` decodes exactly from the byte `80`.
+`not_neverEmpty_nat` proves that `Nat` is not `NeverEmpty`, since 0 is the empty byte string.
+`LawfulCodec.wrapper` carries the laws to a structure around one value, when its two conversions undo each other.
+The structures of the execution layer, such as the block header and the transactions, have their own `LawfulCodec` instances, proved under `Execution/Proofs/`.
+
+`listEncodings_of_encode` (`Proofs/Rlp/Encodings.lean`) proves that the encoding of a list splits into the encodings of its items, in order.
+An `Encoded` value keeps an item next to the bytes that the decoder read it from.
+Take a list kept with its own encoding.
+`Encoded.parts_of_encode` and `Encoded.parts_eq_ok_iff` prove that its parts are its items, each kept with its own encoding.
+So a caller can hash the bytes of each part in place of encoding its item again.
+
+The round trip and canonicity relate the decoder to the encoder, and both are EthLib's definitions.
+That the encoder is the `RLP` of Appendix B rests on its shape, case by case, which A1 covers.
+The cases of `RLPTests` in `ethereum/tests` also check it, both ways, as the RLP README says.
+Only `BE` is proved against the definition in the paper.
+`R_l`, the encoding of a list, has the guard `s(x) ≠ ∅`, where `s(x)` is the joined encodings of the items.
+The encoder reads that `∅` as no encoding, so the empty list encodes as `c0`.
+The paper also writes `∅` for an empty value, so this reading is EthLib's choice.
+No theorem covers the depth of nesting that the compiled code handles, which B1 records.
 
 ### leanSPHINCS
 
@@ -632,21 +742,54 @@ The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) 
 `outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
 `verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
 So one secret gives different outputs at different indices, unless Keccak-256 collides.
-That two such outputs behave as independent values is a random-oracle heuristic, which no theorem states.
-A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
+In the random oracle model, `run_outputs_evalDistEq` (`Proofs/Vrf/OutputRandomOracle.lean`) shows that the outputs of one secret at distinct indices are independent uniform 32-byte values.
+It fixes the secret and the indices, and assumes that the initial cache holds no answer for any of their output inputs.
+`prEvent_outputs_pair_of_fresh` states the case of two different indices.
+Two events, one on each output, both hold with the product of their probabilities for two uniform values.
+`evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
+`prEvent_outputs_pair_keccak256With_le_add` (`Proofs/Vrf/OutputPermutation.lean`) states the case of two different indices with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
+The permutation is drawn after the secret, the indices and the events are fixed.
+With Keccak-f[1600] itself, the two hashes are the outputs of the specification at the two indices, by definition.
+Over the permutation, the chance that both events hold is within `spongeIndiffBound (2 ^ 1600) (2 ^ 512) 2` of the product of their probabilities for two uniform values.
+That bound is `2^-1600 + 6 / 2^512`, below `2^-509`.
+It is the bound of `keccak256_indifferentiable` (`Proofs/Hash/Keccak/Sponge.lean`) at a cost of 2.
+An output input has 49 bytes (`size_outputInput`, `Proofs/Vrf/Hash.lean`), below the 136 bytes of one block, so each hash costs one block.
+The proof applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the two hash calls, then `prEvent_outputs_pair_of_fresh` with the empty cache.
+Over the permutation, no theorem covers more than two indices, or the two outputs together with other hashes, such as those of the tree.
+Carrying the permutation bound over to Keccak-f[1600] is an idealisation of A4, not a theorem.
+These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs, or after the permutation was drawn.
+Such a holder can grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
 A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
 `prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) covers a holder that chooses every secret of its tree.
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
 The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance.
-The uniqueness bound above takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
+`Proofs/Vrf/SelectionRandomOracle.lean` bounds the chance that this search finds a pair in an experiment of its own, with the tree hash a random oracle, as in the uniqueness bound above.
+No theorem composes the two bounds, so no theorem bounds that last chance with Keccak-256 itself, which `prEvent_selected_le` takes as the tree hash.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
 It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
 The game is EthLib's own.
 `selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
+
+`prEvent_extractCollision_isSome_le_two_pow` (`Proofs/Vrf/SelectionRandomOracle.lean`) bounds the probability that the search against the honest opening finds a pair, with the tree hash a random oracle.
+An adversary makes classical queries to that oracle, then outputs the secrets of a tree, an index and an opening.
+The experiment builds the honest opening at that index as `opening` does, with a query for each Keccak-256 call.
+It then runs the search on the two openings, again with a query for each Keccak-256 call.
+The search finds a pair with probability at most `Q^2 / 2^256`, where `Q` bounds the oracle queries of the whole experiment.
+`extractCollision_pure` shows that, with any function as the hash, this search is `findHashCollisionWith` on the opening and the honest opening that the function builds.
+`extractCollision_keccak256` shows that, with Keccak-256 in place of the oracle, it is `findHashCollision` on the opening and the honest opening.
+`Selection.Collides` is the event of the last term above.
+`Selection.collides_iff_extractCollision` shows that it holds for a run of the selection game exactly when this search, with Keccak-256, finds a pair.
+`collision_of_extractCollision` shows that every pair found leaves two different cached inputs with one answer.
+For the node inputs it uses `collision_of_replay_findCollision` (`Proofs/Merkle/RandomOracle/Collision.lean`).
+That theorem holds for any node hash whose replay reads the cache at one input that determines its two children.
+`extractCollision_queryBound` shows that the honest opening, the two leaf hashes and the search make at most `2^(h + 1) + 2 h` queries, for a tree of height `h`.
+The honest opening makes at most `2^(h + 1) - 2` of them (`openingWith_queryBound`), the two leaves make two, and the search makes at most two per level.
+`prEvent_extractCollision_isSome_le_of_adversary` states the bound with `Q = q + 2^(h + 1) + 2 h` for an adversary of at most `q` hash queries, which is `q + 2^33 + 64` at height 32.
+The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
+Carrying this bound over to Keccak-256 is an idealisation of A4, not a theorem.
 
 [EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
 The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
@@ -1573,6 +1716,9 @@ The simulator of their §4.3, Algorithm 3, does so, adapted to a 256-bit oracle 
 Their §4 shows that the composition fails for multi-stage games.
 Let each hash call cost at least 1.
 `isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
+`Indifferentiable.prEvent_le_add` applies indifferentiability to a computation that calls only the hash, at a cost of at most `N`.
+It runs with the hash over the permutation, or with a random oracle from an empty cache.
+Each event has chances in the two runs at most the bound for `N` apart, since the image never asks the simulator.
 `Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
 Its bound is the closed form of equation (6) of Bertoni et al.
 For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
@@ -1655,6 +1801,8 @@ Of the setup, they assume only that it decodes.
 The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
 `TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
 It also assumes only that the setup decodes.
+`pointEvaluation_eq_ok_iff_kzg` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states, with that one assumption, that the precompile succeeds exactly when the KZG check of the cryptography layer accepts, once the length, the gas and the versioned hash pass.
+On a well-formed setup (assumption D3), `pointEvaluation_opening` in the same file gives the opening equation `c - y = w (τ - z)` of every successful call.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
 On a well-formed setup (assumption D3), `blobToKzgCommitment_binding` in the same file proves that two blobs whose decoded values differ share a commitment only when the secret is a root of `p - p'`.
@@ -1922,6 +2070,8 @@ It states the size of the code, its bytes and the data of a PUSH from that numbe
 `NatCode.valid_of_walk` proves that a JUMPDEST is a valid jump destination when a walk along the opcodes from position 0 reaches it.
 `decide +kernel` checks the walk.
 `Logic/Steps.lean` defines the tactic `evm_step`, which applies the rule of the opcode at the program counter and proves the facts about the code by evaluation.
+The tactic `evm_stepK` does the same over frames that know a few ranges of memory, with the rules of `Logic/Known.lean` for MSTORE, MLOAD, KECCAK256, CALLDATACOPY and MCOPY.
+Its MLOAD and KECCAK256 also read a range within one fact, or along adjacent facts, through `readFacts`, and its writes keep the parts of the facts outside the range they write.
 The tactic proves nothing on its own: each step it takes applies one of the rules above, and the kernel checks the result.
 `Logic/Fault.lean` gives the postcondition `Faulted` of a frame that halts exceptionally: no output, the error, no gas with the one-counter meter, and the state and substate the frame had.
 The caller discards that state; no theorem here states it.
@@ -1990,15 +2140,15 @@ These write rules ask for a range of some bytes.
 `Logic.return_known` proves that RETURN of the range of a fact returns the bytes of the fact.
 `Logic.revert_known` proves the same for REVERT from Byzantium.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
-`Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
+`Logic.staticcallWith` is the rule for STATICCALL at every fork from Berlin, with the one-counter meter.
 Its message carries no value and is static.
 `Logic.staticcall` is its case with empty ranges of input and output.
 `Logic.callStep_child` gives the step of a call that sends no value of its own, for each kind of call.
-`Logic.callKindWith` is the rule for such a call from Berlin to before Glamsterdam.
+`Logic.callKindWith` is the rule for such a call at every fork from Berlin, with the one-counter meter.
 After the call, the return data is the output of the frame that ends the message.
-`Logic.delegatecallWith` is the rule for DELEGATECALL from Berlin to before Glamsterdam.
+`Logic.delegatecallWith` is the rule for DELEGATECALL at every fork from Berlin, with the one-counter meter.
 Its message runs the code of the address on the current account, with the sender and the value of the current message.
-`Logic.callcodeWith` is the rule for CALLCODE with no value from Berlin to before Glamsterdam.
+`Logic.callcodeWith` is the rule for CALLCODE with no value at every fork from Berlin, with the one-counter meter.
 Its message runs the code of the address on the current account, as its sender.
 `Logic.createStep_child` gives the step of CREATE or CREATE2 that sends its message, from Berlin to before Glamsterdam.
 It needs the new address to hold no code and a nonce of 0, as EIP-684 asks.
@@ -2081,7 +2231,7 @@ A message that succeeds gives the facts of some slots, some balances and some ac
 It needs the two accounts to exist and the sender to have a nonce or a code.
 `Logic.agrees_modifyState` proves that a change of one account that keeps it alive changes only that account and keeps every code.
 `Logic.CallMessage` is the message that a call sends when it sends no value of its own, by the kind of the call.
-`Logic.callKind_stored` proves that from Berlin to before Glamsterdam, such a call keeps the facts of a `Stored` frame.
+`Logic.callKind_stored` proves that at every fork from Berlin, with the one-counter meter, such a call keeps the facts of a `Stored` frame.
 It keeps each fact of a slot that the effect of the callee does not touch.
 It needs an input range that a fact of memory holds, an output range within memory, and the gas of a cold call.
 It also needs an assumption that gives the effect of each frame that ends the message.
@@ -2098,9 +2248,9 @@ Its new base agrees with the old one outside the touched slots and the slots of 
 `Logic.delegatecall_stored` proves this for DELEGATECALL.
 `Logic.callcode_stored` proves this for CALLCODE with no value.
 `Logic.ValueMessage` is the message that CALL sends with a value.
-`Logic.callValue_stored` proves that from Berlin to before Glamsterdam, CALL with a value that is not 0 keeps the facts of a `Stored` frame in the same way.
+`Logic.callValue_stored` proves that at every fork from Berlin, with the one-counter meter, CALL with a value that is not 0 keeps the facts of a `Stored` frame in the same way.
 It needs a frame that may change the state, and its account must hold the value in the base state.
-It needs the gas of a cold call, 9000 for the value, and 25000 more when the callee is dead in the base state.
+It needs the gas of a cold call, the price of the value, and the price of a new account when the callee is dead in the base state.
 On success the new base also holds the balances and the facts of accounts of the effect.
 The new base agrees with the old one outside the addresses whose balances the effect moves or whose accounts it remakes, too.
 `Logic.CreateMessage` is the message that a creation sends, to run its init code at the new address.
@@ -2129,6 +2279,15 @@ Each specification holds from every frame that a message with its code enters, s
 The proof is an induction on the bound on the gas of messages.
 `HoareUnder.of_exists` proves a triple from a precondition that gives a witness, with a triple for each witness.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
+`wp` (`Logic/Wp.lean`) is the weakest precondition of an opcode at a fork, for a postcondition, under a runner of messages.
+It is defined by a match on every opcode, so Lean rejects it if one is missing.
+`Logic.wp_iff` proves, for every opcode and every fork, that a running frame whose byte decodes to the opcode meets `wp` exactly when one `StepBy` step reaches a frame of the postcondition.
+That step continues, halts exceptionally, or resumes after a message that the runner ends.
+`Logic.wpFrame_iff` extends it to every running frame, past the end of its code and on a byte that is no opcode.
+`Hoare.of_wp` turns the weakest precondition of an opcode with an instruction into a triple of one step, by `Logic.wp_iff_step`.
+`At.rule` is proved from it, and `Step.of_instruction`, which `At.ruleG` and `At.ruleGA` use, from `Logic.wp_iff_step`.
+The rules of a step that sends a message (`HoareUnder.of_child`, `HoareOn.of_child`) are proved from `Logic.wpFrame_iff`.
+The rules of an exceptional halt (`Logic/Fault.lean`) state the error of the step directly.
 `runFrame_eq_of_reaches` proves that `runFrame` runs a frame as it runs each frame that it reaches.
 It holds for every relation whose steps `runFrame` runs alike at both ends, as `Step` and `StepBy` do.
 A runner can also fail on a message, and then `runFrame` fails with the error of the runner.
@@ -2158,19 +2317,42 @@ So the assumption is all that a triple says about a frame that ends a message, a
 It pays the growth of memory for both ranges, and the message carries the bytes of the input range.
 The caller writes the start of the output of the callee at the start of the output range, as far as both go.
 `Logic.call` is its case with empty ranges.
-It holds from Berlin to before Glamsterdam, with the one-counter meter.
-It pays 2600 or 100 for the access to the address, by EIP-2929.
+It holds at every fork from Berlin, with the one-counter meter.
+It pays the access to the address: 2600 when cold and 100 when warm by EIP-2929, and 3000 when cold from Glamsterdam by EIP-8038.
 It passes on at most all but one 64th of the gas left, by EIP-150.
 Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
+`Logic.staticcall_noCode_meter` and `Logic.staticcall_noCode_returndatasize_meter` (`Logic/CallMeter.lean`) give STATICCALL to no code under the meter of EIP-8037, so a check of 32 bytes of return data fails closed there too.
+`Logic.staticcall_returnsWord` gives the other branch from Berlin, for a callee whose specification ends with no error and the 32 bytes of a word.
+It assumes `RunsAsUpToGas` for the callee, which `meets_of_specUnder` with `Meets.upToGas` discharges, and a callee that is no precompile and, from Pectra, no delegation.
+The call pushes 1, RETURNDATASIZE pushes 32, and the output range and the return data hold the word, with at least the gas left after the call.
+The first describes the interpreter before Glamsterdam, with one counter.
+`Logic.staticcall_returnsWord_meter` gives the same under the meter of EIP-8037, under `RunsAsMeter`, which `meets_runsAsMeter` discharges for checked callee code.
+The rules compare nothing themselves: the comparisons of the size and of the word follow with the rules of EQ and MLOAD.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
-`Logic.callValue` is the rule for CALL with a value that is not 0, from Berlin to before Glamsterdam.
+`Logic.callValue` is the rule for CALL with a value that is not 0, at every fork from Berlin, with the one-counter meter.
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
+From Glamsterdam, it pays 3000 for a cold access and 11300 for the value by EIP-8038, and the state gas of a new account in place of the 25000 by EIP-8037.
+With one counter, that state gas is never refilled, although EIP-8037 refills it when the callee fails or never runs.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 The message is not static.
+`Logic.HoareUnder.meterCovers` carries a rule for the calls to the meter of EIP-8037 for checked code whose frames end with no error or a revert.
+It needs the assumption under that meter to give the one under one counter, for the frame that ends a covering message, with its gas capped.
+It may use that the gas of the covering message fits a word, which holds since the gas of its caller fits one.
+The rules under a specification of the callee code carry through `Logic.RunsAsUpToGas` (`Logic/Callee.lean`).
+It is the form of `RunsAs` whose specification holds of a covering message, with at least the gas of the message.
+It leaves open the gas of the frame that ends the message, down to the least of the gas of the stopped frame and of the message.
+It also leaves open the message of that frame, all but its current target.
+`Logic.Meets.upToGas` gives it from `RunsAs`, so the runner of one counter meets it.
+`Logic.meets_runsAsMeter` (`Logic/CallMeter.lean`) proves that the runner of the meter of EIP-8037 meets `Logic.RunsAsMeter`.
+It needs a specification under one counter of checked callee code, whose stopped frames end with no error or a revert.
+It also needs the runner of that meter to meet, at every bound, an assumption on the messages of the callee that gives the one of the specification.
+`Logic.RunsAsMeter.lowerMeter` gives `RunsAsUpToGas` from it, when the assumption on the start of the message carries to a covering message.
+`Logic.HoareUnder.runsAsMeter` carries each rule under `RunsAsUpToGas` over checked code, such as `Logic.callWith`, `Logic.staticcallWith` and `Logic.delegatecallWith`, to the meter of EIP-8037 under `RunsAsMeter`, when the frames of its postcondition have no error or a revert.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
+From Glamsterdam, with one counter, it keeps the state gas of a new account paid, which EIP-8037 refills.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
 Its return data is then empty.
 `meets_paidNoCode` (`Logic/Callee.lean`) proves that the runner ends a message with value to no code with no error.
@@ -2217,7 +2399,7 @@ The call pays the access to the address, the access to the delegate, the growth 
 `Logic.callKindRoute` proves the rule for such a call as a `HoareOn` triple.
 Its set holds only the message of the call, so a run may stop because the runner fails only on that message.
 `Logic.callRoute` proves its case for CALL.
-Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
+Unlike `Logic.callWith`, neither rule asks that the code be no delegation.
 `Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
 `Logic.callStep_fails_of_routes` (`Logic/CallSteps.lean`) proves that such a call fails, or halts the frame with an error, when its gas is below its price before the gas it passes on.
 That price is the access to the address, the access to the delegate if any, and the growth of memory.
@@ -2239,11 +2421,11 @@ A triple says about the state after a message only what its assumption says, so 
 It is the assumption `Logic.MeetsOk` of a triple, for that condition on the frame that ends the message.
 `R` holds from the state of the frame that sends the message to the state of the frame that ends it.
 `Logic.KeepsOn.mono` proves that a smaller set of messages and a weaker relation keep the assumption.
-`Logic.ReadsAs tx S` says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
+`State.TransactionState.ReadsAs tx S` (`State/Frame.lean`) says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
 It leaves free the block before the transaction, the created accounts, the wiped storage and the read records.
-`Logic.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
-`Logic.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
-`Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
+`State.TransactionState.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
+`State.TransactionState.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
+`State.TransactionState.ReadsAs.routeState` (`Logic/Keeps.lean`) proves the same for the state once a call follows a route.
 `Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
 `Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
 Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
@@ -2374,12 +2556,47 @@ Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract
 They require the specified bytecode at the contract's address.
 The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
 
-`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to a stopped frame under the state gas meter when its execution gas initially covers that counter.
+`Logic.Reaches.followsMeter_revert` lifts, under the same bound, a run from a normal frame that ends in a revert.
+Both ask that the execution gas held under the state gas meter fit a word.
 The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
 `Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
-The list leaves out GAS and every instruction that sends a message.
+The list leaves out GAS and the creations, and the check accepts GAS when the next opcode is a call.
+After GAS, each frame holds its own gas left, so the call asks the state gas meter for as much more gas as its excess (`Logic.GasPending`, `Logic.callStep_asks`).
+It keeps the calls: a run of steps without a message passes a call only where it sends none, and `Logic.callStep_bridge` lifts that step.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
+`Logic.Spec.covered` lifts a whole specification of checked code whose runs stop with no error or a revert.
+The rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 (`spec_add_covered`) hold that way under the state gas meter.
+`Logic.Reaches.meterCovers` also keeps a ledger: the execution gas and the reservoir drop by at most what the counter drops.
+A charge of state gas lowers the reservoir first and then the gas left, and a refill raises them, while the counter ignores refills.
+`Logic.Costs.covered` (`Logic/MeterCost.lean`) turns a cost under one counter into the same bound on the sum of the execution gas and the reservoir.
+`WithdrawalRequests.costs_add_covered` gives that bound for a call that adds a withdrawal request.
+`Logic.HoareUnder.meterCovers` and `Logic.SpecUnder.covered` lift a triple with messages, under an assumption on the frames that end messages under each meter.
+The assumption under the state gas meter must give the one under one counter, for a frame that ends a covering message, seen under one counter with its gas capped by that message.
+
+### Invariants of the storage of a contract
+
+`Execution/Proofs/Evm/Call/StorageAt.lean` proves that a message, a transaction and a system call keep or wipe the storage of an account that they do not read.
+`Execution/Proofs/Evm/Call/StorageInvariant.lean` proves that a message keeps an invariant of the storage of an account that holds a given code.
+Each call that runs that code at the account must keep the invariant, as a proof about the contract shows.
+The message must start where the account holds the code and its storage meets the invariant, run the code if it goes there, and return a frame.
+`Execution/Proofs/Transactions/StorageInvariant.lean` and `Execution/Proofs/Blocks/StorageInvariant.lean` carry it to transactions, system calls, blocks and chains.
+The theorems over transactions, blocks and chains also need Cancun or later, where SELFDESTRUCT deletes only accounts that the transaction created.
+From Hegotá a transaction and a block fail, so those theorems hold there with nothing to show.
+The state keeps each code under its hash.
+So a code with the Keccak-256 hash of that code, stored by the run, would change the code that a later call to the account runs.
+Each theorem assumes that the runs it covers output and set no such code.
+A code that a run stores is the output of a frame of a creation, or the delegation code of an authorization.
+`NoCollision` says that no frame that the run reaches outputs a code other than that code with its hash (`Collides`).
+`CallApart`, `TransactionApart`, `SystemCallApart`, `BodyApart` and `BlockApart` add that no authorization sets such a code, for a transaction, a system call, a block and a block on a chain.
+For a block that passes its transition, each of these hypotheses names the runs that it performs, from the states where it performs them, and the authorizations that its transactions list.
+So it fails only if a frame of one of those runs outputs, or an authorization sets, a code other than that code with its hash: an explicit collision.
+When the code is fixed before the chain, as the code of EIP-2935 is, falsifying the hypothesis means finding a second preimage of its hash.
+No theorem bounds the probability of that; the theorems turn each failure into an explicit pair.
+The theorem over chains, `BlockChain.Reaches.goodAt`, takes it for each block through the predicate of `BlockChain.Reaches`.
+`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code and that property.
+It covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
 
 ### SHA-256 precompile
 
@@ -2773,10 +2990,15 @@ Applied to the plain tries of two lists with these distinct keys, `root_binding`
 Otherwise `findCollision` returns a collision in the proofs of that key.
 The path searches return nothing there, since the trie is not secured.
 `indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
+It is the Keccak-256 case of `indexedRootM_binding`, which states the same for any plain hash.
 Two transactions, or two withdrawals, with the same bytes are equal, so `transactionsRoot_binding` and `withdrawalsRoot_binding` conclude the same for the lists themselves.
 `receiptsRoot_binding` does so for receipts whose types are below `0xc0`, which holds for type 0 and for every type that a fork adds.
-No theorem bounds the probability of the indexed-root search itself.
-The bound below covers two tries that give one key two values.
+`prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds by `Q^2 / 2^256` the probability that an adversary outputs two different lists with one root, with the hash a random oracle.
+The root of a list takes its hash in any monad, so the experiment runs it with a hash that queries the oracle.
+It then queries the inputs of the binding search at the key of every index below the longer length.
+Such lists then leave a collision of the oracle among the queried proof nodes.
+`Q` counts every hash call of the experiment, and it grows at least as the square of the longer length, since each index rebuilds both proofs.
+The trie bound below covers two tries that give one key two values.
 
 `Execution/Proofs/Trie/RandomOracle.lean` turns this binding into a probability bound, with the hash a random oracle.
 The trie definitions take their hash in any monad, so the experiment runs the root of the specification with a hash that queries the oracle.
@@ -2804,7 +3026,13 @@ The storage theorem assumes whole tries before the last range; every range start
 `verifyAccountRange_complete_nil`, `verifyStorageRanges_complete_nil`, `verifyAccountRange_whole` and `verifyStorageRanges_whole` cover empty last ranges and whole tries; whole tries need no proof and no collision alternative.
 An empty AccountRange with no proof is the empty reply `noState`, rather than a claim about the trie.
 `findCrossCollision_self` shows that the search finds none when the sent proof is the honest one and holds no collision.
-No theorem bounds the probability that `findCrossCollision` finds a collision.
+`prEvent_rangeWins_le` (`Execution/Proofs/Trie/RangeRandomOracle.lean`) bounds the probability that `findCrossCollision` finds a pair, with the hash a random oracle.
+The adversary chooses the trie, the ends of the range and the sent proof.
+The experiment builds the honest proof of each end with a hash that queries the oracle, then queries every honest and every sent node.
+The search, run with the recorded answers, finds a pair with probability at most `Q^2 / 2^256`, where `Q` counts every hash call of the experiment.
+Building a proof hashes the subtrees on its path, so `Q` grows with the size of the trie.
+The adversary chooses the 32-byte keys freely, so the bound covers the hashed keys of a secured trie too.
+Two keys with one hash stay outside it, since the completeness theorems assume increasing hashed keys.
 
 An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
 It checks the account proof, then each slot proof against the storage root of the answer.
@@ -3429,15 +3657,20 @@ The sum of the gas limits may exceed it, since a transaction only has to fit in 
 So a correct node never rejects it.
 The check reads each body with the bytes it was decoded from, and hashes the legacy transactions and the ommers from their slices of those bytes.
 `checkBody_complete` holds for every encoding of the body.
-`checkBody_binding` proves that two bodies that pass for one header, each read from its own encoding, are equal in each part, or that a Keccak-256 collision is named.
+`checkBody_binding` proves that two bodies that pass for one header, each read from its own encoding, are equal in each part, or that a collision of the hash is named.
+The check takes its hash in any monad, and the theorem holds for any plain hash, Keccak-256 among them.
 For the transactions and the withdrawals, the search of the trie binding returns the collision; for the ommers, the two encodings are the collision.
-It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
+It reuses `indexedRootM_binding` and `withdrawalsRootM_binding` for the roots, and `encode_injective` for the ommers.
 `checkBody_gasLimit_le` proves that each transaction of a body that passes decodes at the fork, with a gas limit at most that of the header.
 The step loses no valid block: `checkBody_complete` covers it.
 The proof of `checkBody_complete` uses `stateTransition_fork_le` and `stateTransition_txGas_le` (`Execution/Proofs/Blocks/BodyGas.lean`).
 They show that each transaction of a block that passes has a type of its fork, and a gas limit at most the block's.
 `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
-No theorem bounds the probability of finding two bodies that pass for one header and differ.
+`prEvent_bodyWins_le` (`Execution/Proofs/Network/BodiesRandomOracle.lean`) bounds by `Q^2 / 2^256` the probability that an adversary outputs a header and two different bodies that keep their encodings and pass for it, with the hash a random oracle.
+The experiment runs the check of the specification with a hash that queries the oracle.
+It then queries the binding inputs of the tries of the transactions and of the withdrawals, and both encodings of the ommers.
+Two such bodies then leave a collision of the oracle among the queried inputs.
+`Q` counts every hash call of the experiment, and it grows at least as the square of the longer list, since each index rebuilds both proofs.
 The Python suite checks the bodies of the execution-specs block fixtures and of era 0 of mainnet.
 It also checks mainnet block 19426587, the first block of Cancun, whose body holds 37 transactions and 16 withdrawals.
 
@@ -3606,6 +3839,7 @@ Its state is not one that a chain can reach: one validator holds about 1.4 billi
 `computeWeakSubjectivityPeriodPhase0_le` bounds the Phase 0 period by the withdrawal delay plus the longer of two terms, `160 N / (600 delta)` and `230 N / (600 Delta)`.
 Here `N` is the number of active validators, `delta` the churn of validators in one epoch and `Delta` the deposits that fit in one epoch.
 The bound needs no condition beyond success of the computation.
+It takes `delta` from the churn limit, which succeeds whenever the period does.
 It depends on the state through `N` and `delta`, so it gives no number for the parameters alone.
 
 `isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.
@@ -3797,7 +4031,7 @@ It needs slots that last a positive time, and honest stores that start with no h
 A store built from an anchor starts with none, by `Store.getForkchoiceStore_equivocatingIndices`.
 In the model an honest validator signs a vote only after checking it against its own votes in its view.
 Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
-`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
+`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
 
 `Execution.isSlashableAttestationData_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves that no two votes of one honest validator in sent messages can be slashed together, when slots last a positive time.
 The check before signing that gives it is the last condition of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`), a rule on the votes in the validator's view.
@@ -3815,6 +4049,16 @@ The ancestry needs only the two block reads and that local slot order, not `Reac
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
+`VoteAt.latest_signed_at_next_slot` and `Execution.latest_signed_of_duty` in `Consensus/Proofs/ForkChoice/VoteDelivery.lean` close the later-store side only in part ([#2053](https://github.com/ethereum/EthLib/issues/2053)).
+An up-to-date honest receiver at the next slot holds a signed vote from the duty slot or later, or bounded honest stores exhibit a block collision.
+This assumes delayed block admission, and that no block in the voter's store has a zero state root.
+It also assumes that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root: the root's ancestor at the first slot of that epoch is the finalized root.
+The slot floor persists at later events.
+The receiver must be up to date at the next slot and at least a delay after the deadline.
+They give a floor on the slot of the latest vote, not that the latest vote is the duty vote.
+They hold before and from Gloas, including votes for a full payload from Gloas.
+`Execution.latest_signed_of_duty` starts from an up-to-date receiver at the next slot boundary, not from its first up-to-date event later in the window.
+`BlocksAdmitted` assumes that the block handler succeeds, so they do not derive the provenance of the voted block.
 
 `Execution.isAncestor_getHead_of_historical_anchor` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalAnchor.lean` derives later head ancestry from a guarded historical margin.
 It applies `Execution.source_surplus_or_historical_evidence`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.
@@ -4264,6 +4508,14 @@ It assumes only that the call succeeds.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
 No theorem here proves conditional or accountable safety of the confirmed block.
 
+`Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` states how old a finalized checkpoint other than the anchor's is ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+The store is forward reachable from the store initialized from the anchor state and block.
+Its finalized checkpoint differs from the anchor's.
+The block epoch of that checkpoint's root is at most its epoch, and its epoch plus two is at most the current epoch.
+It assumes the anchor invariant, a positive slot duration, and that an epoch has at least one slot.
+It also assumes that the anchor block is not after the anchor state, and that the anchor state does not hash to the zero root.
+It also assumes a history of at least two epochs of block roots, and that the store's current epoch can be read.
+
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
 The block is due from the first slot two epochs after that one.
@@ -4372,8 +4624,8 @@ It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggr
 `isAssignedToSyncCommittee_ok_iff` states when the sync committee seat check succeeds.
 Its answer is then whether the validator's key is in the current or the next committee.
 `computeSubnetsForSyncCommittee_ok` shows that its sync committee subnets come once each, in increasing order, from the seats of its key.
-`syncCommitteeAtNextSlot_eq` (`Consensus/Proofs/Gossip/SyncCommittee.lean`) states the committee that signs in the slot after a state.
-It is the next committee of the state when that slot starts a period, and the current one otherwise; it fails with an overflow at the largest slot.
+`syncCommitteeAtSlot_of_period` (`Consensus/Proofs/Gossip/SyncCommittee.lean`) states the committee that signs in a slot of the period of the state, such as the slot of a message while the head state lags behind it.
+It is the next committee of the state when the slot after it starts a period, and the current one otherwise; there is none at the largest slot.
 `getSyncSubcommitteePubkeys_eq` states that, for a subcommittee index below the number of subnets, the keys that gossip checks are the slice of that committee.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
@@ -4710,11 +4962,23 @@ The rule approximates the guide, which asks that every viable branch was invalid
 EthLib counts a dropped justified block as no viable branch, a choice of its own.
 `hasNoViableBranch_eq_ok_true_iff` shows that, with the justified block known and the filter successful, no viable branch means that no leaf above it passes the viability filter.
 `filterNodeTree_eq_nil_iff` gives the same fact for the filtered tree of any node.
-The re-run of the merge block checks is not defined, nor the answer to an execution layer that fails to respond.
+The re-run of the merge block checks is not defined.
+`importAction` states what a node does with a block, or from Gloas an envelope, for the answer of the execution layer.
+`importAction_eq_defer_iff` shows that it maps an error, or no answer, to `.defer`: the guide asks that such a unit be neither imported nor applied, and it may be queued.
+`importAction_eq_accept_iff` shows that the answer lets it be imported exactly for a valid or a not validated payload.
+The other conditions of an optimistic import, such as a candidate block and a parent payload that is not invalidated, are checked apart.
+`importAction_eq_invalidate_iff` shows that an invalidated payload with a latest valid hash rejects the unit and passes the hash on.
+The caller then runs `Store.onInvalidPayload` for that hash, which handles the zero hash and a hash that names no known payload.
+`importAction_eq_reject_iff` shows that an invalidated payload without a hash rejects the unit only, and the caller runs no invalidation.
+The Gloas guide says so, and before Gloas the unit itself is then the first invalid block, which the store does not hold.
+A status outside the three of the guide counts as an error, a choice of EthLib, so it never invalidates a payload.
+The caller runs the import, the rejection and the invalidation; no theorem relates the action to the handlers.
+From Gloas a builder of an optimistic node submits no bid; `mayBuilderSubmitBid_eq_ok_iff` shows that its node lets it bid exactly when the node is not optimistic.
+The rule restricts bids, not the builder domain, since a builder also signs its envelope under that domain and the guide forbids only the bid.
 
 From Gloas a block carries a bid, and its payload arrives later in an envelope.
-The optimistic sync guide has no Gloas text, and its tests stop before Gloas.
-EthLib therefore reads the Bellatrix guide at Gloas, a choice of its own.
+The optimistic sync guide has Gloas text, but its tests stop before Gloas.
+EthLib keeps the optimistic set by block root, where that text keeps payload hashes; the lines below state each choice and each difference.
 A root of the optimistic set then names a block whose payload was imported optimistically, as the Gloas gossip rules key a payload status by block root.
 A block carries a payload when its bid names a nonzero block hash; `isExecutionBlock_of_glamsterdam` states it.
 `payloadChain_of_glamsterdam` shows that the payload chain is the chain of the block, filtered by the block hashes that the bids name.
@@ -4728,22 +4992,27 @@ A payload that builds on an invalid payload in that way leaves the set.
 A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
 So its own optimistic payload stays when only the payload of the parent is invalid.
 From Gloas the head of the fork choice is a block with or without its payload, so the optimistic store keeps the status of the head.
-A full head reads the payload of its block, an empty head the payload its block builds on, and a pending head both; `isHeadOptimistic_of_full`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` state it.
-The search of the head never stops at a pending node, so reading both for a pending head is a choice of EthLib, the cautious one.
-`isHeadOptimistic_of_empty_of_unnamed` shows that an empty head whose bid names no known payload fails with `payloadNotVerified`.
-That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds.
-The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree.
-From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
-A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
-`latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
-So a pending node reads as full or empty for the head, and as empty for the ancestor: each reading is the cautious one.
+A full head reads the payload of its block, and an empty or pending head the payload its block builds on, each by its block hash; `isHeadOptimistic_of_full` and `isHeadOptimistic_of_not_full` state it.
+A pending head reads as an empty one, as the source states.
+A payload is optimistic when an optimistic root names a block whose bid has its block hash (`isOptimisticPayload_eq_true_iff`).
+That stands for the source's set of optimistic payload hashes under two assumptions: each optimistic root names a block whose payload was imported optimistically, and the hashes are those of payloads of this fork.
+The updates of the set act on roots along payload chains, so when two blocks carry one bid, a payload may stay optimistic after the source has cleared it, the cautious side.
+`isOptimisticPayload_eq_isOptimistic` shows that the read by block hash agrees with the read by root when no other optimistic root names the hash.
+`isHeadOptimistic_of_not_full_of_unknown_payload` shows that an empty or pending head fails with `payloadNotVerified` when no known block names the payload it builds on.
+That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds, and of an empty anchor.
+The rule fails there rather than call that payload verified, a choice of EthLib: the source reads the hash, which may name an optimistic payload of Fulu.
+`isHeadOptimistic_of_unknown` shows that from Gloas the rule fails at a head block that the store does not know.
+From Gloas the latest verified ancestor walks the nodes of the fork choice, as the source does, and returns a node.
+An optimistic node reads as the pending node of its block, and an optimistic pending node climbs to its parent: full when it builds on the payload of the parent, else empty.
+`latestVerifiedNode_of_not_optimistic`, `latestVerifiedNode_of_full_optimistic` and `latestVerifiedNode_climb` state each step.
+`latestVerifiedAncestor_of_glamsterdam` and `latestVerifiedNode_spec` show that the answer has a known block, and is not optimistic or is a node of the genesis block, pending or on a payload that is not optimistic.
+So a pending node reads as an empty one for the head, and the walk reads an optimistic empty node as pending, as the source does.
 The status of a node is an assumption: a full node must name a payload that the store holds, and the rules do not check it.
 The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
-`latestVerifiedAncestor_of_glamsterdam` shows that the answer is the first of those payloads that is not optimistic, with every one before it optimistic.
-`latestVerifiedAncestor_eq_error_of_optimistic` shows that it fails with `payloadNotVerified` when all of them are optimistic, or when there is none.
-Before Gloas the walk returns an optimistic genesis block; from Gloas it never returns an optimistic payload, a choice of EthLib.
-No published source says what an invalid payload removes from the store of the fork choice from Gloas.
-EthLib defines it as follows, a reading of its own that follows the fork choice of Gloas.
+Before Gloas the walk returns an optimistic genesis block, and from Gloas a node of the genesis block, as the source does.
+Away from genesis, the walk fails with `payloadNotVerified` where a node builds on a payload that no known block names, as the head rule does.
+The Gloas guide says that the full node of an invalid payload and every node built on it are not viable and carry no weight.
+EthLib defines the removal from its store as follows, a reading of its own that follows the fork choice of Gloas.
 A block and its payload are two nodes, and the state of a block does not depend on the block's own payload.
 So an invalid payload leaves its block valid, and the node of that block without its payload stays.
 A block whose bid builds on the invalid payload starts from a state that assumes that payload, so it leaves the store with its descendants.
@@ -4781,8 +5050,10 @@ The verdict of the execution layer follows from the same status.
 `BlockSources.withPayloadStatus` puts the status into the sources that the handlers read.
 For a payload not yet validated, its execution layer accepts every payload and the payload satisfies its lists.
 For an invalidated one, it rejects every payload and the payload does not satisfy them.
-`Store.isPayloadInclusionListSatisfied_of_notValidated` shows the answer `true` for an envelope that the handler accepts.
-`Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` shows that an invalidated payload is never kept.
+`Store.isPayloadInclusionListSatisfied_of_notValidated` shows the answer `true` for an envelope of a new payload that the handler accepts.
+`Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` shows that the handler never keeps an invalidated payload for a block without one.
+From Heze the handler skips an envelope for a block whose payload the store already holds, so a later envelope never changes the answer recorded for that payload.
+`Store.onExecutionPayloadEnvelope_isPayloadInclusionListSatisfied_of_known` shows that the handler never changes the answer for a payload that the store holds.
 A status outside the three of the guide counts as invalidated, a choice of EthLib: such a payload is never kept.
 The export rejects such a status before any step runs.
 `Store.recordValidatedInclusionListSatisfaction_satisfied` shows that a payload that turns valid takes the answer that the execution layer gives with its verdict.
@@ -6607,6 +6878,10 @@ That rests on the store, which checks the field of each block that it imports an
 `stateRoot_blockStates` and `stateRoot_resolveStateId_root` state it for a store that the handlers reach.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
 The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
+From Gloas the check with code 503 reads the node of the fork choice that a request resolves to, a choice of EthLib, since the Beacon APIs do not yet say which node that is.
+The attestation data reads the head node, and the sync committee contribution reads the pending node of its block.
+The aggregate reads the node that its data votes for: the full node for an index of 1 from Gloas, else the pending node, which reads the same payload as the empty node.
+A payload that no known block names counts as verified, as the debug endpoint reads it, and a node of a block that the store does not know reads its root.
 
 The answers that describe the chain are in `Consensus/BeaconApi/Config.lean`: the spec map, the fork schedule, the deposit contract and the genesis.
 The spec map writes each value of the configuration and of the presets under its name, from one enumeration that the preset and configuration exports also use.
@@ -6963,7 +7238,7 @@ It refuses with code 400 exactly when the slot is not that of the state, or the 
 Else it refuses with code 503 exactly when the root is optimistic.
 Else it refuses with code 404 exactly when no message of the slot on the root comes from a member of the subcommittee.
 A member is a known validator with a key of the subcommittee.
-That refusal also needs the sync committee of the next slot, which `syncCommitteeAtNextSlot_eq` gives at every slot but the last.
+That refusal also needs the sync committee that signs in the slot, which `syncCommitteeAtSlot_of_period` gives at every slot but the last.
 The three theorems share `checkVerified_bind_error_iff`.
 After the check of a block, an answer refuses with code 503 for an optimistic block, and else as the rest does.
 `aggregateAttestationResponse_error_iff` and `syncCommitteeContributionResponse_error_iff` lift these codes to the responses of the two endpoints.
@@ -7008,8 +7283,8 @@ It combines the same lemma with `aggregateAttestation_internal_iff_of_electra`, 
 The committee has no value, an attester is outside it, or before Gloas it is above the limit of an attestation.
 The fourth is that a single attestation of the committee with the data of the first match has a signature that does not decode.
 `produceSyncCommitteeContribution_internal_iff` states when the contribution answer refuses with code 500, once the slot, the subcommittee index and the root pass their checks.
-It then refuses so exactly when the sync committee of the next slot has no value, or the construction fails on a signature.
-The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
+It then refuses so exactly when the state holds no sync committee that signs in the slot, or the construction fails on a signature.
+At the slot of the state, that committee is missing only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtSlot_of_period`).
 The answer hands the construction only the messages of members.
 A private lemma of the same file shows that the construction then fails only for want of messages, or on a signature.
 `produceAttestationData_internal_iff` states when the attestation data answer refuses with code 500.
@@ -7307,7 +7582,11 @@ The source leaves these points open, decided here:
 - From Gloas, the `state` of a head event is the state root of the block, also when its payload is full.
 - Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
 
-The optimistic flag of each event is an input, since it depends on what the node has verified.
+The optimistic flag of each event reads an optimistic store, an input, since it depends on what the node has verified.
+The Beacon APIs do not yet say which node an event resolves to, so EthLib chooses.
+The head and the reorganization read the head node, with its payload status.
+The finalized event reads the pending node of the checkpoint block.
+`chainEvents_head_optimistic`, `chainEvents_reorg_optimistic` and `chainEvents_finalized_optimistic` state the three flags.
 The event of the payload attributes is in `Engine/BeaconApiEvents.lean`, since it needs the types of the Engine API.
 `payloadAttributesEvent_fields` (`Engine/Proofs/BeaconApiEvents.lean`) shows that the Engine API and the event write the fields of the attributes from one list.
 The event writes each name in snake case and each integer as decimal text, where the Engine API keeps the name and writes the integer in hexadecimal.
@@ -7399,7 +7678,7 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 `syncSubnets_pairwise` shows that the subnets of a sync committee message come once each, in increasing order.
 `mem_syncSubnets_of_seat` shows that a validator that holds a seat gets the subnets of its seats.
 `syncSubnets_of_no_seat` shows that any other validator gets subnet 0 alone, as does a message whose head state, validator or sync committee cannot be read.
-`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat in the sync committee of the slot after the head state.
+`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat in the sync committee that signs in the slot of the message.
 It rests on `seat_of_validateSyncCommitteeMessage_accept` (`Consensus/Proofs/Gossip/SyncCommittee.lean`): gossip accepts a message only on a subnet of a seat of its validator.
 `submitPool_syncCommitteeMessages_seat` shows the same for each message of an accepted request.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
@@ -7598,7 +7877,7 @@ Points that remain open:
 - The payload attestation data answers code 204 when the chain of the head has no block at the slot, even if the store holds one off that chain.
 - From Electra a committee index out of range with no matching message gets code 404, since the match comes before the range check of the aggregate.
 - The source names no code for a subcommittee index that names no subnet; EthLib gives code 400.
-- The contribution answer requires the slot of the state, and joins the messages of the sync committee of the next slot, as gossip checks them.
+- The contribution answer requires the slot of the state, and joins the messages of the sync committee that signs in that slot, as gossip checks them.
   It keeps only the messages of validators with a key of the requested subcommittee, so the messages of other subcommittees do not refuse the request.
   A message of a validator that the state does not know is left out too.
 - The weight of a view is "the raw stored weight" of the node; EthLib gives the weight of the head computation, with the votes of the justified state and the proposer boost.
@@ -8296,7 +8575,15 @@ A gas limit can grow by a 1024th of the parent's in each block, with no maximum,
 A difficulty can grow by a 2048th in each block before Paris, though mining long before `2^256` is out of reach.
 The blob base fee needs an excess blob gas that a genesis or a fork sets, as the paragraphs below show.
 The gas price is at most a fee field of the transaction, which is a word.
-The base fee rises only above a block's target, and every transaction of that block pays it from a balance below `2^256`, so it stays below the bound on a chain.
+The base fee rises only after a block above its target, and that block burns its base fee for each unit of its gas out of the supply before it.
+So from London to before Glamsterdam, the base fee that a block passes on is at most its own, or the fee after a full block at `S / (t + 1)` (`stateTransition_expectedBaseFee_le`, `Proofs/Blocks/BaseFeeBound.lean`).
+Here `S` is the supply before the block plus the ether it creates, and `t` is its target, its gas limit over 2.
+It stays below `2^64` while `S / (t + 1)` stays below `2^63` (`stateTransition_expectedBaseFee_lt_two_pow_64`).
+The supply is a sum of balances with no bound of its own, so these bounds alone do not keep the base fee below `2^64`.
+A rise needs a block above its target, whose senders pay the base fee from balances below `2^256`, but that bound below `2^256` is not proved here.
+A genesis can also set any base fee, so the hypothesis on the base fee of BASEFEE stays.
+With a mainnet supply near `2^87` wei, `S / (t + 1)` is below `2^63` from a target of about 13 million gas, below the mainnet target.
+From Glamsterdam, the burn counts the gas of the fees rather than the gas used of the header, and no such bound is stated yet.
 The number of a block grows by one per block.
 GAS needs no such rule here: the gas limit of a transaction is a word, so the gas left of a frame stays below `2^256`.
 
@@ -8314,6 +8601,8 @@ Below it, when the block sets no blob price and has the schedule of its fork, th
 From it on, the instruction aborts (`environmentStep_blobbasefee_of_le`).
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
+Every accumulator of the blob fee loop, whose factor is 1, is at most `F * 3^c` for an update fraction `F` and `c` the ceiling of the excess over it (`accum_le`).
+With `F` at most `2^24`, as at every mainnet schedule, an excess of at most 46 update fractions keeps each accumulator, its product with the excess, each partial sum and the fee below `2^128` (`lt_two_pow_128_of_le`).
 
 A block raises the excess by at most `GAS_PER_BLOB * (max - target)`, and along valid headers whose parents stay within the maximum the rises add up (`excessBlobGas_le_of_checkHeader`, `Proofs/Blocks/ExcessBlobGas.lean`).
 So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
@@ -8492,7 +8781,10 @@ So from Electra the runs that meet `DrawsAtCap` are far shorter than the horizon
 In the random oracle model, `prEvent_querySearch_fails_le` bounds the chance that one balance-weighted search fails, for a fixed seed and `n` members, by `n * (1 - 2^-b)^k` with `k` the floor of `(2^64 - 1) / n`.
 That is a bound on a probability, not a fact about SHA-256, so `DrawsEnd` stays a hypothesis.
 No theorem sums the bound over the draws of a run: a draw input may equal the seed input of a slot, and the oracle search caches every draw input of its seed.
-Before Gloas a proposer draw ends whenever a selection of one member ends (`computeProposerIndex_of_computeBalanceWeightedSelection`), so the bound with `n = 1` applies to it, though no theorem states that composition.
+`prEvent_queryProposerSearch_fails_le` (`Proofs/Accessors/ProposerRandomOracle.lean`) bounds the chance that the proposer search fails by `(1 - 2^-b)^(2^64 - 1)`, the bound with `n = 1`, for any order of the candidates.
+On the same draws, the proposer search ends whenever a search of one member ends.
+Before Gloas, the proposer draw of a slot runs that search on the shuffled order.
+`computeProposerIndex_eq_evalWithAnswerFn` shows that the oracle form of the search, on the shuffled order and answered by SHA-256, is the proposer draw, when there are between 1 and `2^40` candidates and each names a validator.
 The bound needs at least one candidate: a draw with none fails for any hash, so `DrawsEnd` also needs an active validator, unslashed from Gloas for the proposers, in each draw.
 `processSlotsAcross_exists_ok_emptyGenesisState` shows that the hypotheses can hold together with an empty registry before Altair.
 `runHypotheses_of_quiet_altair` (`Proofs/Transition/Totality/RunFromAltair.lean`) gives `SignersEarly`, `DrawsAtCap` and `EpochLimitBeforeAltair` for a run from Altair that ends before the Electra fork epoch; `DrawsAtCap.drawsEnd` turns the second into `DrawsEnd`.
@@ -8521,8 +8813,12 @@ From Electra one attester slashing may name `2048 * 64` validators.
 A step that covers that many names would pass `2^64` Gwei over the 2080 blocks of 64 epochs.
 So the slashing limit is far below what the protocol allows at every fork: the mainnet corollary allows `2^10` slashed validators in a block.
 At 2048 ETH each, the slashed balances reach `2^62` Gwei after about 2,180 blocks, so that limit alone stops the corollary at 67 epochs.
-With fewer slashings a block, the supply step would bind next.
-The hysteresis ratio asks at least 24,576 ETH of supply step for 16 joins of 2048 ETH, which stops it at about 82 epochs.
+In a block, a new validator joins with at most 32 ETH of effective balance before Electra, and with none from Electra.
+The sync aggregate of a block pays at most about 0.03 ETH at that budget, since its rewards grow with the root of the total active balance.
+So the mainnet step charges 15,000 ETH of supply a block, for the 10,000 ETH deposit limit and 4,096 ETH of whistleblower rewards.
+With fewer slashings a block, the registry load would bind next.
+The body types allow a load of `2^14` a block, a step of `2^15` at the weight before Electra.
+The load reaches the `2^27` pending deposits after about 3,970 blocks, so that limit alone stops the corollary at 123 epochs.
 A tight bound on the weight would read the flags, which `FlagsActive` sets only at active validators.
 It also needs the previous active balance to stay near the current one, which is not proved.
 Years of epochs would also need limits on the deposits and the slashings of the whole chain, not of each block.
@@ -8610,13 +8906,14 @@ The codeword searches of each scheme share the bullet of that scheme:
   In its bound for sidecars, the adversary picks both sidecars, and the experiment takes the header that each carries.
   The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
   The finality bound fixes the index before the run, and its adversary picks the state root, both headers and both branches.
+  The execution bound fixes the preset and the fork before the run, and its adversary picks the body root, both execution headers and both branches.
   An adversary that also picks the slot picks one of at most three indices, so its bound at most triples.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
   The bound on signing roots runs the same experiment, so it rests on the same oracle.
-- Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
-  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`.
+- Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie, and by the ommers list that the ommers hash reads.
+  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`, the range search bound `prEvent_rangeWins_le`, the list root bound `prEvent_indexedWins_le`, and the body bound `prEvent_bodyWins_le`.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8628,6 +8925,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
 - VRF uniqueness: Keccak-256 is a random oracle on byte strings, shared by the leaves, the nodes and the outputs of the tree.
+  The same assumption carries the bound on the collision search of a selection, `prEvent_extractCollision_isSome_le_two_pow`.
+  There the oracle answers every Keccak-256 call of the honest opening and of the search.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8638,10 +8937,26 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak-f[1600].
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
+  The bound on the collision search of a selection takes the tree hash as a random oracle instead, under the VRF uniqueness assumption above.
+  A composed bound would take the tree hash as a random oracle in the selection theorem too.
+  One oracle on byte strings gives independent oracles on the disjoint input lengths of the mix and the tree, but no theorem states that composition.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
   The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
+- VRF output independence: Keccak-256 is a random oracle on byte strings, as for VRF uniqueness, but the initial cache need not be empty.
+  Each new input receives 32 independent uniform bytes, and repeated inputs receive the same answer.
+  The secret and the indices are fixed, and the initial cache holds no answer for any of their output inputs.
+  The theorems say nothing about a secret chosen after the oracle answered one of those inputs.
+  The oracle answers classical queries only, so the theorems say nothing about a holder that evaluates Keccak-256 in superposition.
+  They say nothing either about an attack that uses the structure of Keccak.
+- VRF output independence over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once.
+  The Keccak-256 calls of both outputs use that permutation in place of Keccak-f[1600].
+  The secret, two different indices and an event on each output are fixed before the permutation is drawn.
+  No party evaluates the permutation beyond those two calls, and the events cannot depend on its other values, such as the root of the tree.
+  The theorem says nothing about a secret that depends on the permutation.
+  A secret chosen after the permutation was drawn, or hashed from a seed, is such a secret.
+  It says nothing either about an attack that uses the structure of Keccak-f[1600].
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
@@ -8786,8 +9101,9 @@ No caller passes one: EXP reduces modulo `2 ^ 256`, X25519 modulo its prime, and
 
 ### B3. Native code during elaboration
 
-The `EthLib`, `Exports` and `PythonConversions` libraries set `precompileModules := true`.
+The `Exports` and `PythonConversions` libraries set `precompileModules := true`.
 So `#eval`, or a tactic that evaluates, in any module that imports them runs natively compiled code.
+In a module that imports only the specification, it runs the interpreter, unless that module's library or package precompiles its imports.
 A proof is unaffected unless it uses one of the tactics of C2.
 
 ### B4. The C boundary
@@ -8970,12 +9286,15 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/Sponge/`
 - `EthLib/Cryptography/Proofs/SufCma/`
+- `EthLib/Cryptography/Proofs/SufCmaMultiKey.lean`
 - `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`
 - `EthLib/Cryptography/Proofs/Vrf/`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/Blocks/`
+- `EthLib/Execution/Proofs/Network/`
 - `EthLib/Execution/Proofs/State/`
 - `EthLib/Execution/Proofs/Trie/`
 - `EthLib/Serialization/Proofs/Ssz/`

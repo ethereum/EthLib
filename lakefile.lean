@@ -42,7 +42,10 @@ lean_lib «EthLib» where
   --
   -- Ordinary importers load public definitions without private proof bodies.
   requiresModuleSystem := true
-  precompileModules := true
+  -- Off, so that a proof waits only for the `.olean` files of its imports.
+  --
+  -- The exports precompile their imports, which builds the objects that `setup.py` links.
+  precompileModules := false
 
 /-- Proofs about the specification.
 
@@ -100,6 +103,14 @@ lean_lib «Exports» where
     .andSubmodules `EthLib.Serialization.Exports, .andSubmodules `EthLib.Engine.Exports]
   -- This builds the objects that `setup.py` links.
   precompileModules := true
+  -- This keeps the specification's shared library out of each export's trace.
+  --
+  -- An export then re-elaborates only when a module that it imports changes.
+  --
+  -- No export runs compiled code of the specification while it is elaborated.
+  --
+  -- So that library cannot change what an export elaborates to.
+  platformIndependent := true
   defaultFacets := #[LeanLib.leanArtsFacet, LeanLib.staticExportFacet]
 
 /-- Python conversion types and the proofs of their laws.
@@ -138,6 +149,15 @@ No default target builds it.
 lean_exe «known-answers» where
   srcDir := "scripts"
   root := `KnownAnswers
+
+/-- Writes the tables of affine points that the kernel checks of the Lagrange setup read.
+
+No default target builds it.
+
+`lake exe gen-setup-tables` writes them, and with `--check` it fails when one is stale. -/
+lean_exe «gen-setup-tables» where
+  srcDir := "scripts"
+  root := `GenSetupTables
 
 /-- A library of known answers that the kernel checks.
 

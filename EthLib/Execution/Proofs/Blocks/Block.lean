@@ -67,12 +67,7 @@ theorem Block.toItem_of_ofItem {forkOf : Nat → Fork} {item : Item} {b : Block 
     (hDecode : Block.ofItem forkOf item = .ok b) : b.toItem = item := by
   unfold Block.ofItem at hDecode
   dsimp only at hDecode
-  obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
-  have hItem := Item.fields_eq_ok.mp hFields
-  -- Each read takes the items of one part from the front of the rest.
-  iterate 3
-    obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
-    have := Item.eq_of_readField hRead
+  peel_decode_fields hDecode 3 with hItem hDecode
   obtain ⟨ommers, hOmmers, hDecode⟩ := bind_ok_iff.mp hDecode
   obtain ⟨⟨_, rest⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
   have := Item.eq_of_readSince hRead

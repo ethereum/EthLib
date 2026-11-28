@@ -416,16 +416,16 @@ private theorem exitChurnLimit_bounds (increment : 0 < preset.EFFECTIVE_BALANCE_
       churn.toNat ≤ exitChurnCeiling config s := by
   unfold exitChurnLimit at computed
   split at computed
-  · simp only [getExitChurnLimit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨total, totalOk, rfl⟩ := computed
+  · obtain ⟨total, totalOk, -, rfl⟩ := getExitChurnLimit_ok_iff.mp computed
     have totalLe := (getTotalActiveBalance_bounds totalOk).2
     obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
       config.CHURN_LIMIT_QUOTIENT_GLOAS increment minimum
     unfold exitChurnCeiling
     exact ⟨lower, by omega⟩
-  · simp only [getActivationExitChurnLimit, getBalanceChurnLimit, bind_ok_iff, pure,
-      Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, ⟨total, totalOk, rfl⟩, rfl⟩ := computed
+  · simp only [getActivationExitChurnLimit, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, wholeOk, rfl⟩ := computed
+    obtain ⟨total, totalOk, -, rfl⟩ := getBalanceChurnLimit_ok_iff.mp wholeOk
     have totalLe := (getTotalActiveBalance_bounds totalOk).2
     obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
       config.CHURN_LIMIT_QUOTIENT increment minimum
@@ -482,7 +482,7 @@ private theorem exitQueueEpoch_bound {a : BeaconState preset fork} {epoch : Epoc
     (holds : Holds config start ceiling a r u)
     (computed : exitQueueEpoch config a = .ok epoch) : epoch.toNat ≤ r + 1 := by
   simp only [exitQueueEpoch, bind_ok_iff, liftArith, mapError_ok_iff] at computed
-  obtain ⟨earliest, earliestOk, rest⟩ := computed
+  obtain ⟨earliest, earliestOk, _, _, rest⟩ := computed
   have earliestLe := (computeActivationExitEpoch_ok_iff.mp earliestOk).2
   have opens := holds.opens
   have latestLe := foldl_latest_le (r := r)
@@ -846,21 +846,15 @@ private theorem Plain.attestation {a b : BeaconState preset fork}
     {attestation : Attestation preset fork} {parentSlot : Slot}
     (ok : processAttestation config checks a parentSlot attestation = .ok b) : Plain a b := by
   by_cases altair : Fork.altair ≤ fork
-  · simp only [processAttestation, altair, ↓reduceDIte] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      ⟨updated, _⟩, folded, _, _, _, raisedOk, final⟩ := ok
+  · rw [processAttestation_of_altair altair] at ok
+    obtain ⟨updated, _, _, _, raisedOk, written⟩ := processAttestationAltair_writes ok
     have flagged : Plain a (setEpochParticipation a
         (attestation.data.target.epoch == getCurrentEpoch a) updated) := by
       unfold setEpochParticipation
       split <;> exact Plain.of_validators
     have raised := flagged.trans (Plain.increase raisedOk)
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact raised.trans Plain.of_validators
-    · cases final
-      exact raised
+    rw [written]
+    exact raised.trans Plain.of_validators
   · obtain ⟨_, _, _, _, _, recorded, _⟩ :=
       processAttestation_records (Nat.lt_of_not_le altair) ok
     have kept := recordPendingAttestation_ok recorded

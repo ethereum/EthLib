@@ -7,6 +7,7 @@ public import EthLib.Consensus.Proofs.Accessors.DrawBounds
 public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
 public import EthLib.Consensus.Proofs.Accessors.SearchRandomOracle
+public import EthLib.Consensus.Proofs.Accessors.ProposerRandomOracle
 public import EthLib.Consensus.Proofs.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BeaconApi.Committees
 public import EthLib.Consensus.Proofs.BeaconApi.ChainEvents
@@ -193,6 +194,7 @@ public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FinalityRandomOracle
+public import EthLib.Consensus.Proofs.LightClient.ExecutionRandomOracle
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
 public import EthLib.Consensus.Proofs.LightClient.SyncCommitteeRandomOracle

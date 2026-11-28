@@ -32,6 +32,8 @@ public import EthLib.Execution.Proofs.Transactions.Signature
 public import EthLib.Execution.Proofs.Transactions.StateAborts
 public import EthLib.Execution.Proofs.Transactions.StateGas
 public import EthLib.Execution.Proofs.Transactions.StateGasUsed
+public import EthLib.Execution.Proofs.Transactions.StorageAt
+public import EthLib.Execution.Proofs.Transactions.StorageInvariant
 public import EthLib.Execution.Proofs.Transactions.Supply
 public import EthLib.Execution.Proofs.Transactions.Types
 public import EthLib.Execution.Proofs.Transactions.Unfold
