@@ -23,6 +23,7 @@ public import EthLib.Execution.Proofs.Transactions.Overflow
 public import EthLib.Execution.Proofs.Transactions.Overrides
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Rebuild
+public import EthLib.Execution.Proofs.Transactions.Refund
 public import EthLib.Execution.Proofs.Transactions.Replay
 public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild

@@ -188,12 +188,12 @@ theorem stepRules_nonceLe :
     StepRules fork (fun a b : Evm fork Meter => NonceLe a.state b.state) where
   trans := NonceLe.trans
   static h := h.nonceLe
-  sstore _ _ _ _ _ h := nonceLe_setStorage h
+  sstore _ _ _ _ h := nonceLe_setStorage h
   tstore _ _ _ _ := NonceLe.of_getAccountOptional fun _ => rfl
   log _ hs _ _ _ := by rw [hs]; exact NonceLe.refl _
   selfdestruct _ _ h := nonceLe_finishSelfdestruct h
   -- A creation raises the nonce of the creator.
-  incrementNonce _ _ _ _ h := nonceLe_incrementNonce h
+  incrementNonce _ _ _ h := nonceLe_incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-- A result of a step from `evm` that keeps or raises every nonce.

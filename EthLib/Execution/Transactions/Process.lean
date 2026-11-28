@@ -192,6 +192,12 @@ def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Meter) (refund : Nat)
   if evm.error.isSome then
     ⟨evm.state, gasLeft, reservoir, refund, #[], #[], ∅, ∅, evm.error, evm.output, used⟩
   -- A frame that succeeds keeps its logs, its accounts to delete and its refund counter.
+  --
+  -- That counter is at least zero when no empty account holds storage before the transaction.
+  --
+  -- That also asks every delegation indicator to come with a nonce.
+  --
+  -- From any other state the counter can be negative, and the frame then passes on none of it.
   else
     ⟨evm.state, gasLeft, reservoir, refund + evm.substate.refundCounter.toNat, evm.substate.logs,
       evm.substate.simulatedLogs, evm.substate.accountsToDelete, touched, none, evm.output, used⟩

@@ -243,7 +243,7 @@ theorem processMessageCall_stateGasUsed_nonneg
   obtain ⟨hslots, hcur, hcreate, hcall⟩ := prepareFirstFrame_slots hfirst
   have hzero : (nonceOrCodeFreshSlots first.state).card = 0 := by
     rw [hfresh, Finset.subset_empty] at hslots
-    simp [nonceOrCodeFreshSlots, hslots]
+    simp [nonceOrCodeFreshSlots, nonceOrCodeSlots, hslots]
   -- A frame that pays for its slots from that meter then uses a net state gas of at least 0.
   have finish : ∀ (evm : Evm fork StateGasMeter) (refund : Nat) touched,
       MessagePays first.message first.state first.substate first.meter evm →

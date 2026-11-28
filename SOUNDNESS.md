@@ -9113,6 +9113,17 @@ The codeword searches of each scheme share the bullet of that scheme:
   That theorem also assumes correct representations from the adversary, a reading of the algebraic group model.
   The theorems say nothing about an attack that uses the structure of SHA-256.
 
+When the message of a transaction succeeds, the refund counter that it settles is at least zero, so taking its natural number never changes it (`processMessageCall_refundCounter_nonneg`, `Execution/Proofs/Transactions/Refund.lean`).
+The theorem assumes that the message starts from a state with the rebuild property and no write of storage, which `TransactionRun.refundReady` gives for a run of a transaction.
+That holds when, in the block state, each code matches its hash and empty or missing accounts hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
+[EIP-7523](https://eips.ethereum.org/EIPS/eip-7523#specification) states that mainnet and the public testnets hold no empty account after the merge, and setting a delegation always raises the nonce of its account.
+A chain whose genesis allocates an empty account with storage, or a delegation at nonce 0, is outside the theorem.
+There the counter can end below zero from Prague.
+An authorization that clears the code of an account with nonce 0 and balance 0 deletes its storage.
+A later write to a slot of that account then takes back a refund that no clear paid.
+EthLib then passes on nothing of the counter, while execution-specs raises an error ([execution-specs#4095](https://github.com/ethereum/execution-specs/issues/4095)).
+The second hypothesis excludes the account that holds a delegation at nonce 0, the case of [execution-specs#4093](https://github.com/ethereum/execution-specs/issues/4093).
+
 ## Gap B: does the code that runs match the definitions?
 
 s2n-bignum proves its theorems about the object code, so a compiler bug cannot invalidate them.
