@@ -138,9 +138,7 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
   -- The scalar can be any number between `0` and `2^256 - 1`.
   let n := ByteOrder.ofBE (bufferRead data 64 32)
   -- Output: the curve point `s * x`.
-  --
-  -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
-  return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
+  return ⟨(g1ToBytes (Point.mulNat n p0)).toArray⟩
 
 /-- An element of `Fp` from 32 bytes. -/
 def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
@@ -194,9 +192,7 @@ def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point ×
   -- For `G_2`, the order of the element has to be checked to be equal to the group order `q`.
   --
   -- Here the check is `q * Q = 0`: `q` is prime, so the order is 1 or `q`, and 1 is infinity.
-  --
-  -- The order has 254 bits, so 256 bits of the scalar cover it.
-  if Point2.mulBits 256 Fr.modulus q ≠ .infinity then
+  if Point2.mulNat Fr.modulus q ≠ .infinity then
     throw (.notInSubgroup ⟨(bufferRead data (192 * index + 64) 128).toArray⟩)
   return (p, q)
 

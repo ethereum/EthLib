@@ -58,18 +58,16 @@ def toMontgomeryCoords (p : Point) : Jacobian.Coords Fp.Montgomery :=
 def ofMontgomeryCoords (p : Jacobian.Coords Fp.Montgomery) : Point :=
   ofCoords Montgomery.inv Montgomery.toFin p
 
-/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
+/-- `k P`, left to right on the non-adjacent form of `k`.
 
 The steps run in Jacobian coordinates in Montgomery form.
 
 Only the conversion back takes an inverse. -/
-def mulBits (fuel k : Nat) (p : Point) : Point :=
-  ShortWeierstrass.Point.mulBits Montgomery.ofFin Montgomery.inv Montgomery.toFin 0 fuel k p
+def mulNat (k : Nat) (p : Point) : Point :=
+  ShortWeierstrass.Point.mulNat Montgomery.ofFin Montgomery.inv Montgomery.toFin 0 k p
 
-/-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`.
-
-`n` has 256 bits, so 256 steps cover every scalar. -/
-def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
+/-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`. -/
+def mul (k : Fn) (p : Point) : Point := mulNat k.val p
 
 end Point
 

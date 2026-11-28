@@ -380,8 +380,8 @@ The last check is skipped when the cofactor `h` is 1. -/
 theorem validatePublicKey_eq_ok_iff {n h : Nat} {Q R : Point (Fin p)} :
     validatePublicKey n h Q = .ok R ↔
       R = Q ∧ Q ≠ .infinity ∧ Q.isOnCurve = true ∧
-        (h = 1 ∨ Q.mulBits id ShortWeierstrass.Params.inv id ShortWeierstrass.Params.a
-          (n.log2 + 1) n = .infinity) := by
+        (h = 1 ∨ Q.mulNat id ShortWeierstrass.Params.inv id ShortWeierstrass.Params.a n =
+          .infinity) := by
   unfold validatePublicKey
   split_ifs with hinf hon hsub
   · simp [hinf]
@@ -411,14 +411,14 @@ theorem validatePublicKey_eq_ok_iff_nsmul {K : Type} [Field K] [DecidableEq K] {
     {Q R : Point (Fin p)} :
     validatePublicKey n h Q = .ok R ↔
       R = Q ∧ Q ≠ .infinity ∧ Q.isOnCurve = true ∧ n • Point.toPoint A B f Q = 0 := by
-  -- On the curve, `n Q = O` by double and add exactly when `n Q = 0` in the group.
+  -- On the curve, `n Q = O` by the scalar product exactly when `n Q = 0` in the group.
   have key : Q.isOnCurve = true →
-      (Q.mulBits id ShortWeierstrass.Params.inv id ShortWeierstrass.Params.a (n.log2 + 1) n =
+      (Q.mulNat id ShortWeierstrass.Params.inv id ShortWeierstrass.Params.a n =
         .infinity ↔ n • Point.toPoint A B f Q = 0) := fun hQ => by
-    rw [← Point.toPoint_mulBits_field hf hone Jacobian.Coords.Embedding.id
-        (fun x => hf.map_inv x) (fun _ => rfl) hf.map_a h2 _ n hQ Nat.lt_log2_self,
-      Point.toPoint_eq_zero hf (Point.isOnCurve_mulBits_field hf hone Jacobian.Coords.Embedding.id
-        (fun x => hf.map_inv x) (fun _ => rfl) hf.map_a h2 _ n hQ)]
+    rw [← Point.toPoint_mulNat_field hf hone Jacobian.Coords.Embedding.id
+        (fun x => hf.map_inv x) (fun _ => rfl) hf.map_a h2 n hQ,
+      Point.toPoint_eq_zero hf (Point.isOnCurve_mulNat_field hf hone Jacobian.Coords.Embedding.id
+        (fun x => hf.map_inv x) (fun _ => rfl) hf.map_a h2 n hQ)]
     exact Iff.rfl
   -- The points of the curve over `F_p` map one to one onto the group.
   have hgroup : Nat.card {Q : Point (Fin p) // Q.isOnCurve = true} =

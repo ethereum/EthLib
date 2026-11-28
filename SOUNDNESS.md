@@ -1111,11 +1111,11 @@ So an IPv6 endpoint without `quic6` has no QUIC port, as `quic_of_endpoints` sta
 
 The alt_bn128 theorems check the constants and the group law of `G_1`, which the ECADD, ECMUL and ECPAIRING precompiles use.
 `modulus_prime` (`Proofs/AltBn128/Field.lean`) proves that the base field modulus `p` and the group order `q` are prime.
-`toPoint_add` and `toPoint_mulBits` (`Proofs/AltBn128/Curve.lean`) prove that addition and double and add agree with the group law of `y^2 = x^3 + 3` over `ZMod p`.
+`toPoint_add` and `toPoint_mulNat` (`Proofs/AltBn128/Curve.lean`) prove that addition and the scalar product agree with the group law of `y^2 = x^3 + 3` over `ZMod p`.
 `card_point` (`Proofs/AltBn128/Order.lean`) proves that this group has `q` points, so the cofactor is 1.
 
 `instField` (`Proofs/AltBn128/Fp2.lean`) proves that `Fp2` is a field, and `toPoint_add` (`Proofs/AltBn128/Twist.lean`) proves the group law of the twist that holds `G_2`.
-`mulBits_order_eq_infinity_iff` proves that the `G_2` subgroup check of ECPAIRING accepts exactly the points `Q` on the twist with `q Q = O`.
+`mulNat_order_eq_infinity_iff` proves that the `G_2` subgroup check of ECPAIRING accepts exactly the points `Q` on the twist with `q Q = O`.
 `addOrderOf_generator` (`Proofs/AltBn128/G2Order.lean`) proves that the generator `P2` of EIP-197 lies on the twist and has order `q`.
 `instField` (`Proofs/AltBn128/Fp12.lean`) proves that `Fp12`, where the pairing lands, is a field with the product of the specification.
 `card_eq` proves that it has `p^12` elements, and `irreducible_poly` that `X^12 - 18 X^6 + 82` is irreducible over `ZMod p`.
@@ -1144,8 +1144,8 @@ It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `
 `Ate.ateValue_add_right` proves that they are linear in `Q'` on the untwist of `G_2`.
 `Ate.pairing_eq_ateValue` proves that the pairing of a finite `P` on the curve and a `Q` on the twist whose untwist lies in `G_2` is that value.
 `Point2.nsmul_order_eq_zero_iff` (`Proofs/AltBn128/G2Torsion.lean`) proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, as EIP-197 says.
-`Point2.mulBits_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulBits_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
-`exists_mulBits_generator_of_decodePair` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) combines them: every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
+`Point2.mulNat_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulNat_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
+`exists_mulNat_generator_of_decodePair` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) combines them: every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
 `exists_represents_of_decodePairs` and `exists_represents_of_ecpairing` (`Execution/Proofs/Evm/Precompiles/AltBn128/PairingProduct.lean`) lift this to lists of scalars `a_i` and `b_i` in `ZMod q`, for every successful decoding and every successful call.
 `ecpairing_eq_one_iff` and `ecpairing_eq_zero_iff` apply `AltBn128.pairingLaws`, with no hypothesis on the pairing.
 On a successful call, they prove that ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`, and the word 0 otherwise.
@@ -1159,7 +1159,7 @@ So each point that ECPAIRING decodes has one encoding.
 `bytesToG1_ecadd` and `bytesToG1_ecmul` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) prove that the output of a call of ECADD or ECMUL that succeeds decodes to that sum or that product.
 
 `decodePair_eq_ok_iff` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) proves that a pair of ECPAIRING decodes exactly when its two points decode and `q Q = O` holds for its point `Q` of the twist.
-`Point.mulBits_order` (`Proofs/AltBn128/Order.lean`) proves `q P = O` for every point `P` on the curve.
+`Point.mulNat_order` (`Proofs/AltBn128/Order.lean`) proves `q P = O` for every point `P` on the curve.
 So the curve equation is enough for `G_1`, as EIP-197 says, and the decoder checks the order of the point of the twist only.
 
 ### secp256r1
@@ -4533,7 +4533,8 @@ It also records the bound that the start is at most one epoch behind the current
 It assumes only that the call succeeds.
 `Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
-No theorem here proves conditional or accountable safety of the confirmed block.
+These call characterizations do not prove conditional or accountable safety of the confirmed block.
+The restart and fallback theorems below prove that a start stays on up-to-date honest heads, under further hypotheses or unless evidence holds.
 
 `Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` states how old a finalized checkpoint other than the anchor's is ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
 The store is forward reachable from the store initialized from the anchor state and block.
@@ -4547,7 +4548,7 @@ It also assumes a history of at least two epochs of block roots, and that the st
 It assumes the anchor invariant, an anchor block not after the anchor state, an anchor state that does not hash to the zero root, a nonempty epoch and at least two epochs of block-root history.
 
 `Execution.observedRestart_covers_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` is the safety of the restart from the observed justified block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
-The restart assumes synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
+The restart and the fallback below both assume synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
 The anchor state is reached by a run from genesis.
 All honest validators start at the store initialized from the anchor state and block, whose shared slot starts an epoch.
 The slot duration is positive and the preset meets the direct-safety parameters.
@@ -4560,6 +4561,32 @@ At the selected call by the limit it reads its slot and replaces its base with t
 Through the limit, when an up-to-date honest store reads its slot and its justified epoch exceeds the anchor's justified epoch, an honest validator has signed a vote targeting that checkpoint.
 The vote is from an earlier slot and appears in a message sent by the store's event time.
 The observed block is on every up-to-date honest head from the call through the limit, unless honest stores collide or give cross-store direct-safety or justified evidence.
+
+`Execution.finalized_ancestor_of_heads_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean` is the safety of the fallback to the finalized block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+It takes an honest caller at a slot's computed start.
+The successor slot and its start time are read successfully.
+An up-to-date honest receiver reads its head at an event from that next start through the limit.
+The caller's finalized root is an ancestor of that head, unless honest stores collide or give cross-store direct-safety evidence by the limit.
+`Execution.finalized_ancestor_of_heads` in the same file proves the ancestry alone.
+In place of the run, the direct-safety parameters, the horizon, anchor-boundary, anchor-parent, pre-upgrade and stake hypotheses, it assumes an invariant anchor state, nonempty epochs and two epochs of block-root history.
+It also assumes that honest stores agree on blocks and read each other's finality through the limit.
+
+For `Execution.observedRestart_covers_or_evidence` and `Execution.finalized_ancestor_of_heads_or_evidence`, the evidence counts drift from the anchor, so on a long execution with enough churn since the anchor it holds with no accountable key.
+Neither theorem shows that the evidence is one third of slashable stake, and neither covers honest stores that hold states past the next scheduled fork.
+The fact-form core has no evidence alternative and no fork-boundary hypothesis.
+
+`Execution.carrier_delivered` in the same file delivers a held block and its state; a private lemma orders the epochs for the fallback.
+Both assume synchrony, delayed block admission from time zero through the limit, nonempty epochs and at least two epochs of block-root history.
+All honest validators start at the store initialized from an invariant anchor state and block with matching slots.
+Through the limit their stores agree on blocks at common roots and hold only blocks with nonzero state roots.
+Both take an honest sender and an up-to-date honest receiver at least a delay later and by the limit.
+For delivery, the sender holds a block and its state and reads the receiver's finalized checkpoint on that block's chain at the checkpoint's epoch.
+The receiver then holds the same block and state at that root.
+The epoch order also requires positive slot duration and cross-store finality reads through the limit.
+It gives that the receiver's justified epoch is at least the sender's finalized epoch; this does not say that the sender's epoch itself is justified.
+
+For `anchorState_hash_nonzero`, all honest validators start at the store initialized from the anchor state and block, and their held blocks have nonzero state roots through the limit.
+Given some event by that limit with an honest validator, hashing the anchor state cannot return the zero root.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
@@ -8909,12 +8936,16 @@ The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSign
 The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
 The root of a bid (`getExecutionPayloadBidSignature_eq_of_requestSigningRoot`) assumes the same at the epoch of the slot of the bid; a builder that sends the fork of its head state before a fork gets the version of the old fork ([remote-signing-api#37](https://github.com/ethereum/remote-signing-api/issues/37)).
 
-From Glamsterdam, the list that a block commits to rebuilds the state after the block (`stateTransition_rebuild_of_rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
-The theorem assumes that, in the state before the block, no account with nonce 0 and no code holds storage (`Rebuildable`, `Execution/Proofs/State/Rebuild.lean`).
+From Glamsterdam, the list that a block commits to rebuilds the state after the block (`stateTransition_rebuild_of_wipeAllowed`, `Execution/Proofs/Blocks/BodyFollow.lean`).
+Of the state before the block, the theorem assumes only that each code matches its hash and that no account with nonce 0 has the code hash of a delegation indicator.
+It also assumes that the block wipes no storage of an account that had nonce 0, no code and storage before it (`WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`).
 A creation at such an account wipes its storage, and the list records no slot that the block does not touch, so the list cannot rebuild that state.
-Each transaction keeps the property (`RebuildEnd.rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
-The 28 mainnet accounts of that shape break it, so the theorem covers no mainnet block until a fork applies EIP-8253, which EthLib does not specify yet.
-A creation reaches none of them on mainnet without a spent nonce or a Keccak-256 preimage, as the paragraph on EIP-7610 under A1 explains, so a form of the theorem with an assumption on the creations of the run would cover mainnet.
+This is an assumption on the run of the block: the theorem reads it on the wipes that the body leaves in its block state.
+On mainnet, the accounts of that shape are the 28 of EIP-8253, and each holds a balance ([EIP-8253, `mainnet-prestate-alloc.json`](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/assets/eip-8253/mainnet-prestate-alloc.json)).
+Such an account loses ether only after it signs a transaction or an authorization, each of which raises its nonce, so none of the 28 becomes empty and is deleted as one.
+Only a creation at one of them wipes its storage, and a creation reaches none of them without a spent nonce or a Keccak-256 preimage, as the paragraph on EIP-7610 under A1 explains.
+So the assumption holds on every mainnet block where no creation lands on one of the 28 accounts.
+The earlier form (`stateTransition_rebuild_of_rebuildableBlock`) assumes instead that no such account exists, which gives the assumption on the run at once, and covers no mainnet block until a fork applies EIP-8253.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
@@ -9120,9 +9151,10 @@ The codeword searches of each scheme share the bullet of that scheme:
 
 When the message of a transaction succeeds, the refund counter that it settles is at least zero, so taking its natural number never changes it (`processMessageCall_refundCounter_nonneg`, `Execution/Proofs/Transactions/Refund.lean`).
 The theorem assumes that the message starts from a state with the rebuild property and no write of storage, which `TransactionRun.refundReady` gives for a run of a transaction.
-That holds when, in the block state, each code matches its hash and empty or missing accounts hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
-[EIP-7523](https://eips.ethereum.org/EIPS/eip-7523#specification) states that mainnet and the public testnets hold no empty account after the merge, and setting a delegation always raises the nonce of its account.
-A chain whose genesis allocates an empty account with storage, or a delegation at nonce 0, is outside the theorem.
+That holds when, in the block state, each code matches its hash, and accounts with nonce 0 and no code, missing ones too, hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
+Setting a delegation always raises the nonce of its account.
+The 28 mainnet accounts of EIP-8253 hold storage with nonce 0 and no code, so the theorem covers no mainnet transaction until a fork applies EIP-8253.
+A chain whose genesis allocates such an account, or a delegation at nonce 0, is outside the theorem too.
 There the counter can end below zero from Prague.
 An authorization that clears the code of an account with nonce 0 and balance 0 deletes its storage.
 A later write to a slot of that account then takes back a refund that no clear paid.

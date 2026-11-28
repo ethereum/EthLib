@@ -3,7 +3,9 @@ module
 public import EthLib.Cryptography.Xmss.Encoding
 public import EthLib.Cryptography.Proofs.Xmss.Words
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
-public import Mathlib.Tactic
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.NormNum
+import Mathlib.Tactic.Positivity
 
 /-!
 # Proofs: the leanXMSS target-sum code

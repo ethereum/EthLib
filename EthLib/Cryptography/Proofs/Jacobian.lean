@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Jacobian
 public import EthLib.Cryptography.Proofs.Inverse
 public import EthLib.Cryptography.Proofs.ShortWeierstrass
+public import EthLib.Cryptography.Proofs.ScalarProduct
 
 /-!
 # Proofs: Jacobian coordinates follow the group law
@@ -11,7 +12,9 @@ Each Jacobian form `(X, Y, Z)` with a nonzero `Z` gives the affine point `(X / Z
 
 Doubling and addition of forms give the forms of the group's sums.
 
-So double and add on forms computes `k P`, and one shared chain of doublings computes `k P + l Q`.
+So the scalar product of forms computes `k P`.
+
+One shared chain of doublings computes `k P + l Q`.
 
 The proofs hold over any field of characteristic other than 2.
 -/
@@ -74,21 +77,6 @@ namespace Coords
 section Steps
 
 variable {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
-
-/-- The scalar `0` gives the point at infinity, whatever the fuel. -/
-theorem mulBits_scalar_zero (a : F) (fuel : Nat) (p : Coords F) :
-    mulBits a fuel 0 p = infinity := by
-  cases fuel <;> simp [mulBits]
-
-/-- `k P = (k mod 2) P + (k / 2) (2 P)`, also when `k` is `0` and the chain stops early. -/
-theorem mulBits_succ (a : F) (fuel k : Nat) (p : Coords F) :
-    mulBits a (fuel + 1) k p =
-      let rest := mulBits a fuel (k / 2) (double a p)
-      if k % 2 = 1 then add a p rest else rest := by
-  by_cases hk : k = 0
-  · subst hk
-    simp [mulBits, mulBits_scalar_zero]
-  · simp [mulBits, hk]
 
 /-- Starting one bit later is reading both scalars one bit later. -/
 theorem mulAddBits_succ_start (a : F) (p q pq : Coords F)
@@ -196,14 +184,16 @@ theorem map_add (a : F) (p q : Coords F) :
     · exact map_infinity hf
     · simp only [map, hf.map_mul, hf.map_sub, hf.map_add]
 
-/-- The same bits select the same steps in both representations. -/
-theorem map_mulBits (a : F) (fuel k : Nat) (p : Coords F) :
-    (mulBits a fuel k p).map f = mulBits (f a) fuel k (p.map f) := by
-  induction fuel generalizing k p with
-  | zero => exact map_infinity hf
-  | succ fuel ih =>
-    simp only [mulBits_succ]
-    split <;> simp only [map_add hf, map_double hf, ih]
+omit [DecidableEq F] [DecidableEq G] in
+/-- Negation commutes with the change of representation. -/
+theorem map_neg (p : Coords F) : (neg p).map f = neg (p.map f) := by
+  simp only [neg, map, hf.map_sub, hf.map_zero]
+
+/-- The same digits select the same steps in both representations. -/
+theorem map_mulNat (a : F) (k : Nat) (p : Coords F) :
+    (mulNat a k p).map f = mulNat (f a) k (p.map f) := by
+  rw [mulNat, mulNat, ScalarProduct.map_naf (map f) (map_double hf a) (map_add hf a),
+    map_infinity hf, map_neg hf]
 
 /-- The simultaneous chain commutes with the change of representation, for every bit. -/
 theorem map_mulAddAux (a : F) (p q pq : Coords F) (fuel k l : Nat) :
@@ -243,18 +233,6 @@ theorem toAffine_eq [NeZero m] (p : Jacobian m) :
         let zi := Fin.inverse p.z
         let zi2 := zi * zi
         some (p.x * zi2, p.y * zi2 * zi) := rfl
-
-/-- No bits leave the point at infinity. -/
-theorem mulBits_zero [NeZero m] (a : Fin m) (k : Nat) (p : Jacobian m) :
-    mulBits a 0 k p = infinity := rfl
-
-/-- `k P = (k mod 2) P + (k / 2) (2 P)`. -/
-theorem mulBits_succ [NeZero m] (a : Fin m) (fuel k : Nat) (p : Jacobian m) :
-    mulBits a (fuel + 1) k p =
-      let rest := mulBits a fuel (k / 2) (double a p)
-      if k % 2 = 1 then add a p rest else rest := by
-  simp only [mulBits, Coords.mulBits_succ]
-  split <;> rfl
 
 /-- No bits leave the point at infinity. -/
 theorem mulAddAux_zero [NeZero m] (a : Fin m) (p q pq : Jacobian m) (k l : Nat) :
@@ -508,40 +486,41 @@ theorem add_spec {p q : Coords K} (hp : OnCurve A B p) (hq : OnCurve A B q) :
       field_simp
       ring
 
-/-- Double and add on forms stays on the curve. -/
-theorem onCurve_mulBits (fuel k : Nat) {p : Coords K} (hp : OnCurve A B p) :
-    OnCurve A B (mulBits A fuel k p) := by
-  induction fuel generalizing k p with
-  | zero => exact onCurve_infinity
-  | succ fuel ih =>
-    have hrest := ih (k / 2) (double_spec h2 hp).1
-    rw [mulBits_succ]
-    split
-    · exact (add_spec h2 hp hrest).1
-    · exact hrest
+omit h2 in
+/-- Negating a form on the curve gives a form on the curve, with the opposite element. -/
+theorem neg_spec {p : Coords K} (hp : OnCurve A B p) :
+    OnCurve A B (neg p) ∧ toPoint A B (neg p) = -toPoint A B p := by
+  have hz : (neg p).z = p.z := rfl
+  by_cases hz0 : p.z = 0
+  · exact ⟨fun h => absurd (hz.trans hz0) h, by
+      rw [toPoint_of_z_eq_zero (hz.trans hz0), toPoint_of_z_eq_zero hz0, neg_zero]⟩
+  have hy : affY (neg p) = -affY p := by
+    simp only [affY, neg, zero_sub, neg_div]
+  have he : -affY p * -affY p = affX p * affX p * affX p + A * affX p + B := by
+    rw [neg_mul_neg]
+    exact hp hz0
+  refine (spec_of_eq (ShortWeierstrass.nonsingular_of_eq he) (hz.trans_ne hz0) rfl hy).imp id
+    fun e => e.trans ?_
+  rw [toPoint_of_z_ne_zero hp hz0, WeierstrassCurve.Affine.Point.neg_some]
+  simp [ShortWeierstrass.curve]
 
-/-- Double and add on forms computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Coords K} (hp : OnCurve A B p) (hk : k < 2 ^ fuel) :
-    toPoint A B (mulBits A fuel k p) = k • toPoint A B p := by
-  induction fuel generalizing k p with
-  | zero =>
-    obtain rfl : k = 0 := by simpa using hk
-    simp [mulBits, toPoint_of_z_eq_zero (rfl : (infinity : Coords K).z = 0)]
-  | succ fuel ih =>
-    have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
-    obtain ⟨hd, hdp⟩ := double_spec h2 hp
-    have hrest := ih (k / 2) hd hk2
-    rw [hdp] at hrest
-    rw [mulBits_succ]
-    split
-    · -- An odd `k` is `2 (k / 2) + 1`.
-      rw [(add_spec h2 hp (onCurve_mulBits h2 fuel _ hd)).2, hrest]
-      conv_rhs => rw [show k = 2 * (k / 2) + 1 by omega]
-      module
-    · -- An even `k` is `2 (k / 2)`.
-      rw [hrest]
-      conv_rhs => rw [show k = 2 * (k / 2) by omega]
-      module
+/-- The scalar product of a form on the curve is on the curve, and it is `k P`. -/
+theorem mulNat_spec (k : Nat) {p : Coords K} (hp : OnCurve A B p) :
+    OnCurve A B (mulNat A k p) ∧ toPoint A B (mulNat A k p) = k • toPoint A B p :=
+  ScalarProduct.naf_spec (OnCurve A B) (toPoint A B) (fun _ hq => double_spec h2 hq)
+    (fun _ _ hq hr => add_spec h2 hq hr) onCurve_infinity
+    (toPoint_of_z_eq_zero (rfl : (infinity : Coords K).z = 0)) hp (neg_spec hp).1
+    (neg_spec hp).2 k
+
+/-- The scalar product of forms stays on the curve. -/
+theorem onCurve_mulNat (k : Nat) {p : Coords K} (hp : OnCurve A B p) :
+    OnCurve A B (mulNat A k p) :=
+  (mulNat_spec h2 k hp).1
+
+/-- The scalar product of forms computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Coords K} (hp : OnCurve A B p) :
+    toPoint A B (mulNat A k p) = k • toPoint A B p :=
+  (mulNat_spec h2 k hp).2
 
 /-- The joint chain stays on the curve. -/
 theorem onCurve_mulAddAux {p q pq : Coords K} (hp : OnCurve A B p) (hq : OnCurve A B q)
@@ -727,11 +706,11 @@ theorem map_add (p q : Jacobian m) :
 
 omit [(ShortWeierstrass.curve A B).IsElliptic] in
 include ha in
-/-- Double and add commutes with the value in `ZMod m`. -/
-theorem map_mulBits (fuel k : Nat) (p : Jacobian m) :
-    (mulBits a fuel k p).toCoords.map toZ = Coords.mulBits A fuel k (p.toCoords.map toZ) := by
+/-- The scalar product commutes with the value in `ZMod m`. -/
+theorem map_mulNat (k : Nat) (p : Jacobian m) :
+    (mulNat a k p).toCoords.map toZ = Coords.mulNat A k (p.toCoords.map toZ) := by
   rw [← ha]
-  exact Coords.map_mulBits toZ_embedding a fuel k p.toCoords
+  exact Coords.map_mulNat toZ_embedding a k p.toCoords
 
 omit [(ShortWeierstrass.curve A B).IsElliptic] in
 include ha in
@@ -761,17 +740,17 @@ theorem add_spec {p q : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q) :
 
 /-! ## Scalar multiplication -/
 
-/-- Double and add on forms stays on the curve. -/
-theorem onCurve_mulBits (fuel k : Nat) {p : Jacobian m} (hp : OnCurve A B p) :
-    OnCurve A B (mulBits a fuel k p) := by
-  rw [onCurve_iff, map_mulBits ha]
-  exact Coords.onCurve_mulBits h2 fuel k (onCurve_iff.mp hp)
+/-- The scalar product of forms stays on the curve. -/
+theorem onCurve_mulNat (k : Nat) {p : Jacobian m} (hp : OnCurve A B p) :
+    OnCurve A B (mulNat a k p) := by
+  rw [onCurve_iff, map_mulNat ha]
+  exact Coords.onCurve_mulNat h2 k (onCurve_iff.mp hp)
 
-/-- Double and add on forms computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Jacobian m} (hp : OnCurve A B p) (hk : k < 2 ^ fuel) :
-    toPoint A B (mulBits a fuel k p) = k • toPoint A B p := by
-  rw [toPoint_eq, toPoint_eq, map_mulBits ha]
-  exact Coords.toPoint_mulBits h2 fuel k (onCurve_iff.mp hp) hk
+/-- The scalar product of forms computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Jacobian m} (hp : OnCurve A B p) :
+    toPoint A B (mulNat a k p) = k • toPoint A B p := by
+  rw [toPoint_eq, toPoint_eq, map_mulNat ha]
+  exact Coords.toPoint_mulNat h2 k (onCurve_iff.mp hp)
 
 /-! ## Two scalar multiplications with shared doublings -/
 
@@ -815,7 +794,7 @@ open Jacobian (toZ)
 
 A point of a short Weierstrass curve converts to a form and back.
 
-So double and add on points computes `k P`, in any representation of any such field.
+So the scalar product of points computes `k P`, in any representation of any such field.
 -/
 
 section Field
@@ -904,46 +883,46 @@ private theorem map_encode (henc : ∀ x, read (encode x) = x) (p : Point F) :
     (p.toCoords.map encode).map (fun x => f (read x)) = p.toCoords.map f := by
   cases p <;> simp only [toCoords, Jacobian.Coords.infinity, Jacobian.Coords.map, henc]
 
-/-- Double and add stays on the curve, in any representation of any field.
+/-- The scalar product stays on the curve, in any representation of any field.
 
 Reading back must keep the operations and undo the encoding.
 
 The inverse must read as the inverse of the field.
 
 The representation must hold the curve's `a`, and 2 must be nonzero. -/
-theorem isOnCurve_mulBits_field (hf : Embedding f A B) (hone : f 1 = 1)
+theorem isOnCurve_mulNat_field (hf : Embedding f A B) (hone : f 1 = 1)
     (hr : Jacobian.Coords.Embedding read) (hinv : ∀ x, f (read (inverse x)) = (f (read x))⁻¹)
     (henc : ∀ x, read (encode x) = x) (ha : f (read a) = A) (h2 : (2 : K) ≠ 0)
-    (fuel k : Nat) {p : Point F} (hp : p.isOnCurve = true) :
-    (mulBits encode inverse read a fuel k p).isOnCurve = true := by
+    (k : Nat) {p : Point F} (hp : p.isOnCurve = true) :
+    (mulNat encode inverse read a k p).isOnCurve = true := by
   have hon : Jacobian.Coords.OnCurve A B
-      ((Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode)).map fun x => f (read x)) := by
-    simp only [Jacobian.Coords.map_mulBits (embedding_comp hf hone hr), ha, map_encode henc]
-    exact Jacobian.Coords.onCurve_mulBits h2 fuel k (toCoords_spec hf hone hp).1
+      ((Jacobian.Coords.mulNat a k (p.toCoords.map encode)).map fun x => f (read x)) := by
+    simp only [Jacobian.Coords.map_mulNat (embedding_comp hf hone hr), ha, map_encode henc]
+    exact Jacobian.Coords.onCurve_mulNat h2 k (toCoords_spec hf hone hp).1
   exact (ofCoords_spec hf hr hinv hon).1
 
-/-- Double and add computes `k P`, when `k < 2^fuel`, in any representation of any field.
+/-- The scalar product computes `k P`, in any representation of any field.
 
 Reading back must keep the operations and undo the encoding.
 
 The inverse must read as the inverse of the field.
 
 The representation must hold the curve's `a`, and 2 must be nonzero. -/
-theorem toPoint_mulBits_field (hf : Embedding f A B) (hone : f 1 = 1)
+theorem toPoint_mulNat_field (hf : Embedding f A B) (hone : f 1 = 1)
     (hr : Jacobian.Coords.Embedding read) (hinv : ∀ x, f (read (inverse x)) = (f (read x))⁻¹)
     (henc : ∀ x, read (encode x) = x) (ha : f (read a) = A) (h2 : (2 : K) ≠ 0)
-    (fuel k : Nat) {p : Point F} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint A B f (mulBits encode inverse read a fuel k p) = k • toPoint A B f p := by
+    (k : Nat) {p : Point F} (hp : p.isOnCurve = true) :
+    toPoint A B f (mulNat encode inverse read a k p) = k • toPoint A B f p := by
   have hJ := toCoords_spec hf hone hp
-  have hmap : (Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode)).map
-      (fun x => f (read x)) = Jacobian.Coords.mulBits A fuel k (p.toCoords.map f) := by
-    simp only [Jacobian.Coords.map_mulBits (embedding_comp hf hone hr), ha, map_encode henc]
+  have hmap : (Jacobian.Coords.mulNat a k (p.toCoords.map encode)).map
+      (fun x => f (read x)) = Jacobian.Coords.mulNat A k (p.toCoords.map f) := by
+    simp only [Jacobian.Coords.map_mulNat (embedding_comp hf hone hr), ha, map_encode henc]
   have hon : Jacobian.Coords.OnCurve A B
-      ((Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode)).map fun x => f (read x)) := by
+      ((Jacobian.Coords.mulNat a k (p.toCoords.map encode)).map fun x => f (read x)) := by
     rw [hmap]
-    exact Jacobian.Coords.onCurve_mulBits h2 fuel k hJ.1
-  rw [mulBits, (ofCoords_spec hf hr hinv hon).2, hmap,
-    Jacobian.Coords.toPoint_mulBits h2 fuel k hJ.1 hk, hJ.2]
+    exact Jacobian.Coords.onCurve_mulNat h2 k hJ.1
+  rw [mulNat, (ofCoords_spec hf hr hinv hon).2, hmap,
+    Jacobian.Coords.toPoint_mulNat h2 k hJ.1, hJ.2]
 
 end Field
 
@@ -954,7 +933,7 @@ section Representation
 variable {m : Nat} [NeZero m] {G : Type} [OfNat G 0] [OfNat G 1] [Add G] [Sub G] [Mul G]
   [DecidableEq G]
 
-/-- A representation of `Fin m` for double and add, with its maps in and out, and its inverse.
+/-- A representation of `Fin m` for the scalar product, with its maps in and out, and its inverse.
 
 Reading back is a change of representation, it keeps the inverse, and it undoes the encoding. -/
 structure Representation (encode : Fin m → G) (inverse : G → G) (read : G → Fin m) : Prop where
@@ -988,13 +967,13 @@ theorem ofCoords_map {read : G → Fin m} (hf : Jacobian.Coords.Embedding read) 
   rw [← Jacobian.Coords.map_toAffine hf hinv q]
   cases q.toAffine inv <;> rfl
 
-/-- Double and add in a representation is double and add on `Fin m`, for every input. -/
-theorem mulBits_eq_jacobian {encode : Fin m → G} {inverse : G → G} {read : G → Fin m}
-    (hr : Representation encode inverse read) (a : G) (fuel k : Nat) (p : Point (Fin m)) :
-    mulBits encode inverse read a fuel k p =
-      ofJacobian (Jacobian.mulBits (read a) fuel k (toJacobian p)) := by
-  rw [mulBits, ofCoords_map hr.embedding hr.read_inverse,
-    Jacobian.Coords.map_mulBits hr.embedding]
+/-- The scalar product in a representation is the scalar product on `Fin m`, for every input. -/
+theorem mulNat_eq_jacobian {encode : Fin m → G} {inverse : G → G} {read : G → Fin m}
+    (hr : Representation encode inverse read) (a : G) (k : Nat) (p : Point (Fin m)) :
+    mulNat encode inverse read a k p =
+      ofJacobian (Jacobian.mulNat (read a) k (toJacobian p)) := by
+  rw [mulNat, ofCoords_map hr.embedding hr.read_inverse,
+    Jacobian.Coords.map_mulNat hr.embedding]
   -- Reading back the encoded form of the point gives the form itself.
   have h : (p.toCoords.map encode).map read = p.toCoords := by
     simp only [Jacobian.Coords.map, hr.read_encode]
@@ -1041,22 +1020,22 @@ private theorem read_inverse_field (hz : ∀ x, toZ x = f x)
     f (read (inverse x)) = (f (read x))⁻¹ := by
   rw [hr.read_inverse, ← hz, ← hz, Jacobian.toZ_inverse]
 
-/-- Double and add stays on the curve.
+/-- The scalar product stays on the curve.
 
 The representation must hold the curve's `a`, and 2 must be nonzero in `ZMod m`. -/
-theorem isOnCurve_mulBits (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
+theorem isOnCurve_mulNat (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
     (hr : Representation encode inverse read) (ha : toZ (read a) = A) (h2 : (2 : ZMod m) ≠ 0)
-    (fuel k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) :
-    (mulBits encode inverse read a fuel k p).isOnCurve = true :=
-  isOnCurve_mulBits_field hf ((hz 1).symm.trans Jacobian.toZ_one) hr.embedding
-    (read_inverse_field hz hr) hr.read_encode ((hz _).symm.trans ha) h2 fuel k hp
+    (k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) :
+    (mulNat encode inverse read a k p).isOnCurve = true :=
+  isOnCurve_mulNat_field hf ((hz 1).symm.trans Jacobian.toZ_one) hr.embedding
+    (read_inverse_field hz hr) hr.read_encode ((hz _).symm.trans ha) h2 k hp
 
-/-- Double and add computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
+/-- The scalar product computes `k P`. -/
+theorem toPoint_mulNat (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
     (hr : Representation encode inverse read) (ha : toZ (read a) = A) (h2 : (2 : ZMod m) ≠ 0)
-    (fuel k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint A B f (mulBits encode inverse read a fuel k p) = k • toPoint A B f p :=
-  toPoint_mulBits_field hf ((hz 1).symm.trans Jacobian.toZ_one) hr.embedding
-    (read_inverse_field hz hr) hr.read_encode ((hz _).symm.trans ha) h2 fuel k hp hk
+    (k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) :
+    toPoint A B f (mulNat encode inverse read a k p) = k • toPoint A B f p :=
+  toPoint_mulNat_field hf ((hz 1).symm.trans Jacobian.toZ_one) hr.embedding
+    (read_inverse_field hz hr) hr.read_encode ((hz _).symm.trans ha) h2 k hp
 
 end EthLib.Cryptography.ShortWeierstrass.Point

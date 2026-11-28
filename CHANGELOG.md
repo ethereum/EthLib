@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, from Glamsterdam the block access list rebuilds the state after a mainnet block in which no creation lands on an account with nonce 0, no code and storage ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Blocks.stateTransition_rebuild_of_wipeAllowed` and `Blocks.stateTransition_rebuild_nonce_of_wipeAllowed` (`Execution/Proofs/Blocks/BodyFollow.lean`) assume of the state before the block only that its codes match their hashes and that no account with nonce 0 has a delegation's code hash.
+  They assume that the body wipes no storage of an account that had nonce 0, no code and storage before the block (`Evm.WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`), which on mainnet excludes only a creation at one of the 28 accounts of EIP-8253.
+  The theorems from a rebuildable block keep their statements and follow from these.
+
 - In Lean, the refund counter that a transaction settles is at least zero ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
   `Transactions.processMessageCall_refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) shows that a message that succeeds settles the counter of the frame that ends it, with no clamp, from a state that `Transactions.TransactionRun.refundReady` gives.
   `Evm.processMessage_clearedRefund_le` and `Evm.processCreateMessage_clearedRefund_le` (`Execution/Proofs/Evm/Call/Refund.lean`) show that from Spurious Dragon a message that succeeds gains at least the refund of the slots that it leaves cleared.
@@ -136,6 +141,27 @@ Not yet released.
   Both assume delayed block admission, and that no block in the voter's store has a zero state root.
   They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
+
+- In Lean, `Execution.finalized_ancestor_of_heads_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean`) states the ancestry-or-evidence form of the safety of the fallback of the fast confirmation rule to the finalized block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+  Take an honest caller at the start of a slot, and an up-to-date honest receiver that reads its head at an event from the next slot's start through the limit.
+  Then the caller's finalized root is an ancestor of that head, or two honest stores collide by the limit, or cross-store direct-safety evidence holds.
+  It assumes synchrony, delayed block admission (`BlocksAdmitted`) and a delay that satisfies `DelayFits`.
+  It also assumes a run from genesis to the anchor state, the direct-safety preset parameters, honest store epochs bounded by the horizon, held states before the next upgrade, the run and terminal stake floors, and absence of the anchor parent from honest stores through the limit.
+  It assumes no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
+  The successor slot and both slot-start times are computed successfully, and the receiver's head read succeeds.
+  Honest participants start at the store initialized from the anchor state and block, which share a slot at the start of an epoch.
+  The slot duration is positive.
+  The result does not cover executions whose honest stores hold states past the next scheduled fork.
+  The evidence counts drift from the anchor, so with enough churn since the anchor it holds with no accountable key; it is not shown to be one third of slashable stake.
+  `Execution.finalized_ancestor_of_heads`, in the same file, proves the ancestry alone, with no evidence alternative and none of the run, direct-safety parameter, horizon, anchor-boundary, anchor-parent, pre-upgrade and stake hypotheses.
+  It assumes instead an invariant anchor state, nonempty epochs, two epochs of block-root history, block agreement and cross-store finality reads through the limit.
+  `Execution.carrier_delivered`, in the same file, is a new public theorem; it was private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
+  It concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
+  The sender and receiver are honest.
+  Both events are by the limit, with the receiver's at least a delay after the sender's.
+  The up-to-date receiver then holds that block and state.
+  It assumes synchrony, delayed admission, a nonempty epoch and at least two epochs of block-root history.
+  It also assumes an initialized invariant anchor with matching block and state slots at which all honest validators start, agreement of bounded honest stores on blocks at common roots, and nonzero state roots of their held blocks.
 
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
@@ -1352,19 +1378,53 @@ Not yet released.
   A caller that needs them states the subgroup membership of the embedded setup, or `TrustedSetup.LagrangeOfMonomial` of it, as a hypothesis, as the theorems on any setup do.
   `lake exe known-answers` checks both on compiled code, and CI runs it.
 
+- In Lean, the rebuild property of a transaction state no longer speaks of storage words ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Evm.RebuildEnd` (`Execution/Proofs/Evm/Call/Rebuild.lean`) loses `emptyStorage`; its `plain` field, moved from `Evm.RebuildState`, loses the balance, and its `clears`, like `RebuildState.created`, now says that the account had no nonce or code in the block state.
+  `Evm.RebuildState.ofBlock`, `Blocks.systemCall_rebuildState` and `Transactions.processTransaction_rebuildEnd` take the codes of the block state in place of `Rebuildable`, and `Evm.RebuildEnd.getStorage_of_slot_eq_none` and `Evm.RebuildEnd.followable` take an assumption on the wipes.
+  `Transactions.clearedSlots_eq_empty`, `Transactions.nonceOrCodeClearedSlots_eq_empty`, `Transactions.prepareFirstFrame_refundCounter_nonneg`, `Transactions.processMessageCall_refundCounter_nonneg` and `Transactions.runStack_refundCounter_nonneg` take `Rebuildable` of the block state as a separate hypothesis.
+  `Evm.PlainKept`, `Evm.RebuildReady`, `Evm.WipeAllowed`, `State.Rebuildable.wipeAllowed`, `Evm.RebuildReady.start`, `Evm.RebuildEnd.wipes_zero`, `Evm.RebuildEnd.rebuildReady`, `Blocks.keepsFollowable_rebuildReady`, `Blocks.withdrawalState_rebuildState` and `Blocks.exists_rebuildReady_systemCall` are new.
+  `Evm.RebuildEnd.toRebuildInvariant`, `Evm.RebuildState.blockStorage_of_not_hasNonceOrCode`, `Evm.RebuildEnd.rebuildableBlock`, `Blocks.keepsFollowable_rebuildableBlock`, `Blocks.exists_rebuildable_systemCall`, `Blocks.systemCall_followable`, `Blocks.systemCall_rebuildable`, `Blocks.systemCall_delegationsHaveNonce`, `Blocks.getStorage_withdrawalState`, `Blocks.withdrawalState_followable`, `Blocks.withdrawalState_rebuildable`, `Blocks.withdrawalState_delegationsHaveNonce`, `State.RebuildInvariant.getStorage_createEther`, `State.RebuildInvariant.createEther` and `State.RebuildInvariant.ofBlock_incorporateTxIntoBlock` are removed.
+
+- In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
+  The builder must follow a call only if `W` holds at each address whose storage the call wiped (`Blocks.KeepsIf`).
+  `Blocks.applyBody_tracks`, `Blocks.stateTransition_rebuild` and `Blocks.stateTransition_rebuild_nonce` take the hypothesis that `W` holds at each address whose storage the body wiped.
+  `Blocks.keepsFollowable_rebuildableBlock` (`Execution/Proofs/Blocks/BodyFollow.lean`) gives `KeepsFollowable` with `W` true everywhere, and each of its fields gives a `Blocks.KeepsIf` in place of a pair.
+  `Blocks.stateTransition_rebuild_of_rebuildableBlock` and `Blocks.stateTransition_rebuild_nonce_of_rebuildableBlock` keep their statements, with `W` true everywhere.
+
+- In Lean, the pairing check of BLS12-381 runs one Miller loop for all its pairs, which squares its accumulator once per bit ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.millerSteps` (`Cryptography/Bls/Pairing.lean`) now walks a list of `Bls.MillerState`, a new structure that holds a pair and its point `T`, and `Bls.millerLines` runs one bit for each pair.
+  `Bls.millerDouble` no longer squares `f`: the loop squares it once per bit.
+  `Bls.millerLoopAll` is the loop of a list of pairs, and `Bls.millerLoop` is its case of one pair, with an unchanged signature.
+  `Bls.pairingCheck` runs `Bls.millerLoopAll` on the pairs without a point at infinity, and `Bls.pairingCheck_eq_finalExp_prod` keeps its statement.
+  `Bls.millerSteps_eq_prod` and `Bls.millerLoopAll_eq_prod` (`Proofs/Bls/PairingCongr.lean`) prove that the joint loop is the product of the loops of its pairs.
+  `Bls.millerDouble_snd` and `Bls.finalExponentiation_millerDouble` (`Proofs/Bls/MillerLoop.lean`, `MillerChain.lean`) no longer include the square of `f`.
+  `Bls.millerSteps_succ` and `Bls.finalExponentiation_millerSteps` (`MillerChain.lean`) state the loop on a list of one pair, with the square first.
+  `Bls.map_millerSteps` (`Proofs/Bls/PairingMap.lean`) takes the list of pairs; `Bls.MillerState.map`, `Bls.map_millerLines` and `Bls.map_millerLoopAll` are new.
+
+- In Lean, every short Weierstrass curve computes `k P` with one scalar product, left to right on the non-adjacent form of `k` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  `ScalarProduct.naf` (`Cryptography/ScalarProduct.lean`) takes the doubling, the addition, the point at infinity, the point and its negation of a curve.
+  `ScalarProduct.nafSteps` runs its steps, and `ScalarProduct.naf_spec`, `ScalarProduct.valid_nafSteps`, `ScalarProduct.map_naf` and `ScalarProduct.map_nafSteps` (`Cryptography/Proofs/ScalarProduct.lean`) prove it once, from the group law of a curve or a change of representation.
+  `G1.mulNat` (`Cryptography/Bls/G1.lean`) and the checker's `G1.TorsionCheck.mulNat` on naturals (`Proofs/Bls/G1NatCheck.lean`) run it.
+  The fuel-based double and add of `Cryptography/Jacobian.lean` is removed: `Jacobian.Coords.mulBits`, `Jacobian.mulBits` and `ShortWeierstrass.Point.mulBits` become `Jacobian.Coords.mulNat`, `Jacobian.mulNat` and `ShortWeierstrass.Point.mulNat`, with no fuel argument.
+  So do the `mulBits` of alt_bn128 (`Point`, `Point2`), secp256k1 and secp256r1.
+  Every declaration whose name contains `mulBits` is renamed with `mulNat`, with no fuel argument and no hypothesis `k < 2 ^ fuel`: for instance `toPoint_mulBits`, `isOnCurve_mulBits_field`, `mulBits_eq_jacobian`, `mulBits_order_eq_infinity_iff`, `exists_eq_mulBits_generator` and `exists_mulBits_generator_of_decodePair`.
+  `Jacobian.Coords.mulBits_scalar_zero`, `Jacobian.Coords.mulBits_succ`, `Jacobian.mulBits_zero` and `Jacobian.mulBits_succ` are removed.
+  `Jacobian.Coords.neg`, `Jacobian.Coords.neg_spec`, `Jacobian.Coords.map_neg` and `Jacobian.Coords.mulNat_spec` are new.
+  The subgroup check of SEC 1 (`Sec1.validatePublicKey`) and the ECMUL and ECPAIRING precompiles return the same results.
+
 - In Lean, the KZG opening check multiplies the proof by `z` in `G1`, in place of the generator of `G2` ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Kzg.verifyKzgProofWith` (`Cryptography/Kzg/Core.lean`) checks `e(P - [y] + [z] proof, -[1]) * e(proof, [s]) = 1`, which is the former check by bilinearity.
   `Kzg.verifyKzgProofWith_iff` keeps its statement; a proof that unfolds the definition sees the new pairs.
 
 - In Lean, the scalar product of `G1` and `G2` runs left to right on the non-adjacent form of the scalar, so it adds about a third as often as the bits, and with the mixed formulas on a point with `Z = 1` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
-  `G1.mulNat` (`Cryptography/Bls/G1.lean`) runs the new `G1.mulNatSteps` by structural recursion, so the kernel evaluates it, and it gives the same points as before with other Jacobian coordinates.
-  `G1.mulNat_def`, `G1.mulNatAux`, `G1.mulNatAux_eq` and `G1.map_mulNatAux` (`Cryptography/Proofs/Bls/CurveMap.lean`), and their `G2` names, are removed; `G1.map_mulNatSteps` is new.
-  `G1.TorsionCheck.mulNatAux` and `coords_mulNatAux` become `mulNatSteps`, `mulNat`, `coords_mulNatSteps` and `coords_mulNat` (`Cryptography/Proofs/Bls/G1NatCheck.lean`, `G1TorsionCheck.lean`).
+  `G1.mulNat` (`Cryptography/Bls/G1.lean`) runs `ScalarProduct.naf` by structural recursion, so the kernel evaluates it, and it gives the same points as before with other Jacobian coordinates.
+  `G1.mulNat_def`, `G1.mulNatAux`, `G1.mulNatAux_eq` and `G1.map_mulNatAux` (`Cryptography/Proofs/Bls/CurveMap.lean`), and their `G2` names, are removed.
+  `G1.TorsionCheck.mulNatAux` and `coords_mulNatAux` become `mulNat` and `coords_mulNat` (`Cryptography/Proofs/Bls/G1NatCheck.lean`, `G1TorsionCheck.lean`).
   `CofactorCertificate.negXAux`, `clearAux`, `map_negXAux`, `map_clearAux`, `negXAux_eq` and `clearAux_eq` (`Cryptography/Proofs/Bls/CofactorCertificateHelpers.lean`) are removed: the kernel checks run `HashToCurve.clearCofactor` itself.
   The certificates `nsmul_zero_cert` (`G1Rotation.lean`, `CofactorCertificateHelpers.lean`), `nsmul_ne_cert` (`G1Rotation.lean`) and `not_nsmul_cert` (`CofactorIndependence.lean`) lose their fuel argument and its bound.
   The `*_clear_zero` witnesses (`CofactorPoints.lean`) and `cofactor_zero_cert` state their check on `HashToCurve.clearCofactor` in place of `clearAux`.
   `G1.Law.mulNat_one`, `G1.mul_one` and `G2.mul_one` (`Cryptography/Proofs/Kzg/CeremonyChecks.lean`) no longer assume a finite point.
-  `G1.Law.valid_mulNatSteps` is new.
 
 - In Lean, the endomorphisms `psi` and `psi2` of the twist read Jacobian coordinates, so the cofactor clearing of G2 and the subgroup check of G2 invert no element that depends on the point ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   `G2.psi` (`Cryptography/Bls/G2.lean`) maps a finite point `(X, Y, Z)` to `(c1 conj(X), c2 conj(Y), conj(Z))`, and `HashToCurve.psi2` (`Cryptography/Bls/HashToCurve.lean`) maps it to `(c1Psi2 X, -Y, Z)`, in place of affine points with `Z = 1`.
@@ -1717,6 +1777,8 @@ Not yet released.
   The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
   The roots are unchanged, but the three definitions unfold to the monadic forms.
   Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
+
+- In Lean, `ConfirmedCalls.anchorState_hash_nonzero` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `anchorState_hash_nonzero` in the namespace `EthLib.Consensus.Models.Network` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalStatements.lean`), with the same statement.
 
 - In Lean, `ConfirmedCalls.finalized_read` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `Store.Reachable.finalized_read` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`), with the same statement.
 

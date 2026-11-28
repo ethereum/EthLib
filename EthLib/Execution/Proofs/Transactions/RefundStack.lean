@@ -23,7 +23,7 @@ Source: [EIP-3529][eip3529], the refund to clear a slot from London.
 namespace EthLib.Execution.Evm
 
 open EthLib.Base (Address Fork)
-open EthLib.Execution.State (TransactionState)
+open EthLib.Execution.State (Rebuildable TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -331,7 +331,7 @@ end EthLib.Execution.Evm
 namespace EthLib.Execution.Transactions
 
 open EthLib.Base (Address Fork)
-open EthLib.Execution.State (TransactionState)
+open EthLib.Execution.State (Rebuildable TransactionState)
 open EthLib.Execution.Evm
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -344,6 +344,8 @@ The live frames are the frame that runs and the callers that wait for it.
 
 The state must have the rebuild property and no write of storage.
 
+No account with nonce 0 and no code may hold storage in its block state.
+
 The caller must have a nonce or code, and a call must run at its recipient.
 
 The substate must start with a counter of at least zero. -/
@@ -351,7 +353,7 @@ theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.Bloc
     {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     {callers : List (Evm fork Meter)} {reached : Evm fork Meter}
-    (valid : RebuildState block state) (hw : NoStorageWrite state)
+    (valid : RebuildState block state) (empty : Rebuildable block) (hw : NoStorageWrite state)
     (hcaller : HasNonceOrCode state message.caller)
     (htarget : ∀ target, message.target = some target → message.currentTarget = target)
     (hsub : 0 ≤ substate.refundCounter)
@@ -379,7 +381,7 @@ theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.Bloc
   obtain ⟨vfirst, -, hdep, hcode⟩ := prepareFirstFrame_rebuildState valid hcaller htarget h
   have hzero : clearedRefund fork first.state = 0 := by
     unfold clearedRefund
-    rw [nonceOrCodeClearedSlots_eq_empty vfirst (hw.prepareFirstFrame h)]
+    rw [nonceOrCodeClearedSlots_eq_empty vfirst empty (hw.prepareFirstFrame h)]
     simp
   have hclear : 0 ≤ clearedRefund fork reached.state :=
     Int.mul_nonneg (Int.natCast_nonneg _) (Int.natCast_nonneg _)

@@ -56,20 +56,20 @@ private theorem two_ne_zero' : (2 : Fp12) ≠ 0 := by
   rw [← map_ofNat fp2ToFp12 2]
   exact fp2ToFp12_ne_zero (by decide_eq_at_model [])
 
-/-- The doubling step multiplies `f^2` by the tangent at the untwist of `T`, times `c w^3`.
+/-- The doubling step multiplies `f` by the tangent at the untwist of `T`, times `c w^3`.
 
 Here `T = (X, Y, Z)` is a finite point with `Y ≠ 0`, and `c = 2 Y Z^3`. -/
 theorem millerDouble_snd {T : G2} (hz : T.z ≠ 0) (hy : T.y ≠ 0) (xp yp : Fp) (f : Fp12) :
     let X := (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).1
     let Y := (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).2
     (millerDouble T xp yp f).2 =
-      f * f * (fp2ToFp12 (2 * T.y * T.z ^ 3) * w ^ 3 * lineAt X Y (3 * X ^ 2 / (2 * Y)) xp yp) := by
+      f * (fp2ToFp12 (2 * T.y * T.z ^ 3) * w ^ 3 * lineAt X Y (3 * X ^ 2 / (2 * Y)) xp yp) := by
   intro X Y
   have hw := w_ne_zero
   have hz' := fp2ToFp12_ne_zero hz
   have hy' := fp2ToFp12_ne_zero hy
   have h2 := two_ne_zero'
-  simp only [X, Y, millerDouble, mulLine_eq, Fp12.square_eq, lineValue_eq, untwist, lineAt,
+  simp only [X, Y, millerDouble, mulLine_eq, lineValue_eq, untwist, lineAt,
     Cryptography.Fp2.fieldOps_square, Cryptography.Fp2.square_eq Fp.embedding,
     Cryptography.Fp2.mulFp_eq Fp.embedding, map_mul, map_add, map_sub, map_neg, map_div₀, map_pow,
     map_ofNat]

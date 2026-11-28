@@ -2,7 +2,8 @@ module
 
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
-public import Mathlib.Tactic
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.LinearCombination
 
 /-!
 # Proofs: polynomial long division
