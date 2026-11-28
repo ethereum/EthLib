@@ -360,7 +360,7 @@ def test_block_of_another_shape(block: tuple):
             b"",
             "voluntary_exit",
             [],
-            blocks=[block],  # ty: ignore[invalid-argument-type]
+            blocks=[block],
         )
     assert info.value.code == 0
 
