@@ -1373,10 +1373,11 @@ Not yet released.
 
 ### Changes that break callers
 
-- In Lean, the kernel checks of the embedded trusted setup are gone, with `Proofs/Kzg/SetupTorsion/`, `Proofs/Kzg/SetupLagrange/`, `Proofs/Bls/G1TorsionCheck.lean`, `Proofs/Bls/G1NatCheck.lean` and the executable `gen-setup-tables`.
-  `TrustedSetup.ofHex_torsion`, `TrustedSetup.ofHex_lagrangeTorsion`, `TrustedSetup.ofHex_lagrangeOfMonomial`, `TrustedSetup.ofHex_wellFormed`, `computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` no longer exist.
-  A caller that needs them states the subgroup membership of the embedded setup, or `TrustedSetup.LagrangeOfMonomial` of it, as a hypothesis, as the theorems on any setup do.
-  `lake exe known-answers` checks both on compiled code, and CI runs it.
+- In Lean, the final exponentiation of BLS12-381 runs its powers by `|x|` and `|x| + 1` on four of the six coefficients of each square ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.Fp12.compressedPow` (`Cryptography/Bls/Fp12.lean`) squares the coefficients of `w`, `w^2`, `w^4` and `w^5` only (`Bls.Fp12.Compressed`, `Bls.Fp12.compress`, `Bls.Fp12.Compressed.square`, `Bls.Fp12.Compressed.squares`).
+  It rebuilds the selected powers with one inversion for all (`Bls.Fp12.Compressed.numerators`, `Bls.Fp12.Compressed.decompress`, `Bls.Fp12.suffixProducts`, `Bls.Fp12.batchInverse`), and takes `Bls.Fp12.cyclotomicPow` when a denominator vanishes.
+  `Bls.finalExponentiation` unfolds to it; `Bls.finalExponentiation_eq_pow` keeps its statement.
+  `Bls.Fp12.compressedPow_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) and `Bls.Fp12.map_compressedPow` (`Proofs/Bls/BaseFieldMap.lean`) are new.
 
 - In Lean, the rebuild property of a transaction state no longer speaks of storage words ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Evm.RebuildEnd` (`Execution/Proofs/Evm/Call/Rebuild.lean`) loses `emptyStorage`; its `plain` field, moved from `Evm.RebuildState`, loses the balance, and its `clears`, like `RebuildState.created`, now says that the account had no nonce or code in the block state.
@@ -1384,6 +1385,19 @@ Not yet released.
   `Transactions.clearedSlots_eq_empty`, `Transactions.nonceOrCodeClearedSlots_eq_empty`, `Transactions.prepareFirstFrame_refundCounter_nonneg`, `Transactions.processMessageCall_refundCounter_nonneg` and `Transactions.runStack_refundCounter_nonneg` take `Rebuildable` of the block state as a separate hypothesis.
   `Evm.PlainKept`, `Evm.RebuildReady`, `Evm.WipeAllowed`, `State.Rebuildable.wipeAllowed`, `Evm.RebuildReady.start`, `Evm.RebuildEnd.wipes_zero`, `Evm.RebuildEnd.rebuildReady`, `Blocks.keepsFollowable_rebuildReady`, `Blocks.withdrawalState_rebuildState` and `Blocks.exists_rebuildReady_systemCall` are new.
   `Evm.RebuildEnd.toRebuildInvariant`, `Evm.RebuildState.blockStorage_of_not_hasNonceOrCode`, `Evm.RebuildEnd.rebuildableBlock`, `Blocks.keepsFollowable_rebuildableBlock`, `Blocks.exists_rebuildable_systemCall`, `Blocks.systemCall_followable`, `Blocks.systemCall_rebuildable`, `Blocks.systemCall_delegationsHaveNonce`, `Blocks.getStorage_withdrawalState`, `Blocks.withdrawalState_followable`, `Blocks.withdrawalState_rebuildable`, `Blocks.withdrawalState_delegationsHaveNonce`, `State.RebuildInvariant.getStorage_createEther`, `State.RebuildInvariant.createEther` and `State.RebuildInvariant.ofBlock_incorporateTxIntoBlock` are removed.
+
+- In Lean, the general case of `k P + l Q` runs one chain of doublings on the non-adjacent forms of both scalars, with no fuel, on every short Weierstrass curve ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `ScalarProduct.joint` (`Cryptography/ScalarProduct.lean`) runs `ScalarProduct.jointSteps`, and `ScalarProduct.naf` is now its case `l = 0`, with an unchanged signature.
+  The steps read the bits of the scalars from their limbs below `2^62` (`ScalarProduct.limbs`, `ScalarProduct.bit`, `ScalarProduct.addDigit`), with the same value on every input.
+  `ScalarProduct.joint_spec`, `ScalarProduct.map_joint`, `ScalarProduct.map_jointSteps`, `ScalarProduct.map_addDigit` and `ScalarProduct.bit_limbs` (`Cryptography/Proofs/ScalarProduct.lean`) are new; `ScalarProduct.naf_spec` and `ScalarProduct.map_naf` keep their statements.
+  `ScalarProduct.nafSteps`, `ScalarProduct.valid_nafSteps` and `ScalarProduct.map_nafSteps` are removed.
+  `Jacobian.Coords.mulAdd` and `Jacobian.mulAdd` (`Cryptography/Jacobian.lean`) take no fuel argument: `mulAdd a k p l q` in place of `mulAdd a fuel k p l q`.
+  `Jacobian.Coords.map_mulAdd`, `Jacobian.Coords.onCurve_mulAdd`, `Jacobian.Coords.toPoint_mulAdd`, `Jacobian.onCurve_mulAdd` and `Jacobian.toPoint_mulAdd` (`Cryptography/Proofs/Jacobian.lean`) take no fuel and no hypothesis `k, l < 2 ^ fuel`.
+  `Jacobian.Coords.mulAdd_spec` is new, and `Jacobian.map_mulAdd` is new in place of `Jacobian.map_mulAddAux`.
+  `Jacobian.Coords.mulAddBits`, `Jacobian.Coords.mulAddAux`, `Jacobian.mulAddAux`, `Jacobian.Coords.mulAddBits_succ_start`, `Jacobian.Coords.mulAddAux_succ`, `Jacobian.Coords.map_mulAddAux`, `Jacobian.Coords.onCurve_mulAddAux`, `Jacobian.Coords.toPoint_mulAddAux`, `Jacobian.mulAddAux_zero`, `Jacobian.mulAddAux_succ`, `Jacobian.map_mulAddAux`, `Jacobian.onCurve_mulAddAux`, `Jacobian.toPoint_mulAddAux` and `Jacobian.mulAdd_eq` are removed.
+  `Secp256k1.Point.mulAdd_eq_jacobian` and `Secp256r1.Point.mulAdd_eq_jacobian` state the chain without the fuel `256`.
+  `Word64.Raw.bit`, `Word64.Raw.bit_iff` and `Word64.Raw.bit_eq_testBit`, which only P-256 used, are removed.
+  `Bls.G1.mulAdd` (`Cryptography/Bls/G1.lean`) is new, with `G1.Law.valid_mulAdd`, `G1.Law.toPoint_mulAdd`, `G1.valid_mulAdd`, `G1.toPoint_mulAdd` and `G1.Represents.mulAdd`; `Kzg.verifyKzgProofWith` computes `[-y] g1 + [z] proof` with it.
 
 - In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
@@ -4648,6 +4662,11 @@ Not yet released.
   The SSZ, JSON and Python forms are those of the bytes, so no encoding changes.
   The C and Python function signatures stay the same.
   Migration: build a key with `BLSPubkey.mk`, and read its bytes with `.bytes`.
+
+- In Lean, the kernel checks of the embedded trusted setup are gone, with `Proofs/Kzg/SetupTorsion/`, `Proofs/Kzg/SetupLagrange/`, `Proofs/Bls/G1TorsionCheck.lean`, `Proofs/Bls/G1NatCheck.lean` and the executable `gen-setup-tables`.
+  `TrustedSetup.ofHex_torsion`, `TrustedSetup.ofHex_lagrangeTorsion`, `TrustedSetup.ofHex_lagrangeOfMonomial`, `TrustedSetup.ofHex_wellFormed`, `computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` no longer exist.
+  A caller that needs them states the subgroup membership of the embedded setup, or `TrustedSetup.LagrangeOfMonomial` of it, as a hypothesis, as the theorems on any setup do.
+  `lake exe known-answers` checks both on compiled code, and CI runs it.
 
 ## 0.3.0
 

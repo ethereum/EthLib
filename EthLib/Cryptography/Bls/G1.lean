@@ -199,6 +199,10 @@ Each addition adds `p` or `-p`, so it takes the shorter mixed formulas when `p` 
 
 @[inline] def mul (p : G1 F) (s : Fr) : G1 F := mulNat p s.val
 
+/-- `[k] p + [l] q`, with one chain of doublings for both products. -/
+@[specialize] def mulAdd (p : G1 F) (k : Fr) (q : G1 F) (l : Fr) : G1 F :=
+  ScalarProduct.joint double add zero p (neg p) q (neg q) k.val l.val
+
 /-- `[r] p`, computed as `[t^2] ([t^2] p - p) + p`, since `r = t^4 - t^2 + 1`.
 
 Here `t` is the BLS parameter, and `|t|` has 64 bits, six of them set.

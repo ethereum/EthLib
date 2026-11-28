@@ -4524,22 +4524,22 @@ private theorem splitScalarWords_smul_raw
 /-- The shared chain of doublings computes `k P + l G` on a form of `P`. -/
 private theorem fallback_represents (k l : Fn) {p : Coordinates} {P : curve.Point}
     (hp : Represents p P) :
-    Represents (Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator))
+    Represents (Coords.mulAdd 0 k.val p l.val (Point.toMontgomeryCoords .generator))
       (k.val • P + l.val • Point.toPoint .generator) := by
   have hg := point_spec Point.isOnCurve_generator
-  have hread : readCoords (Coords.mulAdd 0 256 k.val p l.val
-      (Point.toMontgomeryCoords .generator)) = Jacobian.mulAdd 0 256 k.val (readCoords p) l.val
+  have hread : readCoords (Coords.mulAdd 0 k.val p l.val
+      (Point.toMontgomeryCoords .generator)) = Jacobian.mulAdd 0 k.val (readCoords p) l.val
         (readCoords (Point.toMontgomeryCoords .generator)) := by
-    have h := Coords.map_mulAdd toFin_embedding (0 : Montgomery) 256 k.val p l.val
+    have h := Coords.map_mulAdd toFin_embedding (0 : Montgomery) k.val p l.val
       (Point.toMontgomeryCoords .generator)
     rw [toFin_embedding.map_zero] at h
     exact congrArg (Jacobian.ofCoords : Coords Fp → _) h
   unfold Represents OnCurve groupValue
   rw [hread]
-  refine ⟨Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero 256 k.val
-    l.val hp.1 hg.1, ?_⟩
-  rw [Jacobian.toPoint_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero 256 k.val l.val
-    hp.1 hg.1 (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
+  refine ⟨Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero k.val l.val
+    hp.1 hg.1, ?_⟩
+  rw [Jacobian.toPoint_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero k.val l.val
+    hp.1 hg.1]
   exact (congrArg₂ (k.val • · + l.val • ·) hp.2 hg.2 :)
 
 private theorem rawOfNat_val_of_lt (k : Fn) : (Montgomery.rawOfNat k.val).val = k.val :=
@@ -4678,15 +4678,15 @@ namespace Point
 
 /-- The shared chain of doublings, as a point. -/
 private abbrev sharedChain (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
-  ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q))
+  ofJacobian (Jacobian.mulAdd 0 k.val (toJacobian p) l.val (toJacobian q))
 
 /-- The shared chain on Montgomery form is the shared chain on `Fp`, for every input. -/
 private theorem general_eq (k : Fn) (p : Point) (l : Fn) (q : Point) :
     ofMontgomeryCoords
-        (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q)) =
+        (Jacobian.Coords.mulAdd 0 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q)) =
       sharedChain k p l q := by
   rw [ofMontgomeryCoords_eq]
-  have h := Jacobian.Coords.map_mulAdd toFin_embedding 0 256 k.val (toMontgomeryCoords p) l.val
+  have h := Jacobian.Coords.map_mulAdd toFin_embedding 0 k.val (toMontgomeryCoords p) l.val
     (toMontgomeryCoords q)
   rw [toFin_embedding.map_zero, map_toMontgomeryCoords, map_toMontgomeryCoords] at h
   exact congrArg (fun c => ofJacobian (Jacobian.ofCoords c)) h
@@ -4698,12 +4698,11 @@ private theorem sharedChain_spec (k l : Fn) {p q : Point} (hp : p.isOnCurve = tr
       toPoint (sharedChain k p l q) = k.val • toPoint p + l.val • toPoint q := by
   have hJp := toJacobian_spec hp
   have hJq := toJacobian_spec hq
-  have hon := Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) MulAdd.two_ne_zero 256
+  have hon := Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) MulAdd.two_ne_zero
     k.val l.val hJp.1 hJq.1
   refine ⟨(ofJacobian_spec hon).1, ?_⟩
   rw [(ofJacobian_spec hon).2, Jacobian.toPoint_mulAdd (Jacobian.toZ_zero (m := Fp.modulus))
-    MulAdd.two_ne_zero 256 k.val l.val hJp.1 hJq.1 (Nat.lt_trans k.isLt (by decide))
-    (Nat.lt_trans l.isLt (by decide))]
+    MulAdd.two_ne_zero k.val l.val hJp.1 hJq.1]
   exact congrArg₂ (k.val • · + l.val • ·) hJp.2 hJq.2
 
 /-- The joint chain, which the generator selects, gives the point of the shared chain. -/
@@ -4718,7 +4717,7 @@ private theorem mul_eq_chain (k l : Fn) {p : Point} (hp : p.isOnCurve = true) :
 The joint chain that the generator selects gives the same point, by the group law. -/
 theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
     mulAdd k p l q =
-      ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q)) := by
+      ofJacobian (Jacobian.mulAdd 0 k.val (toJacobian p) l.val (toJacobian q)) := by
   unfold mulAdd
   split
   · rename_i h
