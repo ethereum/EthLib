@@ -10,6 +10,7 @@ public import EthLib.Execution.Proofs.Trie.RangeComplete
 public import EthLib.Execution.Proofs.Trie.RandomOracle
 public import EthLib.Execution.Proofs.Trie.RangeRandomOracle
 public import EthLib.Execution.Proofs.Trie.Root
+public import EthLib.Execution.Proofs.Trie.Total
 
 /-!
 # `EthLib.Execution.Proofs.Trie`
