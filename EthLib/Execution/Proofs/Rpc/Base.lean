@@ -33,6 +33,13 @@ private theorem toDigits_byte (n : Nat) (hn : n < 256) :
   · rfl
   · rw [Nat.toDigits_of_lt_base (by omega)]; rfl
 
+/-- Each hex digit below sixteen is an ASCII character whose code decodes to its value. -/
+private theorem hex_digit_char : ∀ d, d < 16 →
+    (Nat.digitChar d).val ≤ 0x7F ∧
+      hexValue false (Nat.digitChar d).val.toUInt8 = some d.toUInt8 := by
+  simp only [Base.digitChar_eq]
+  decide
+
 /-- The hex digits of a byte are one or two ASCII characters, and they read back as the byte. -/
 private theorem byte_digits : ∀ n, n < 256 →
     (∀ c ∈ Nat.toDigits 16 n, c.val ≤ 0x7F) ∧
@@ -42,9 +49,41 @@ private theorem byte_digits : ∀ n, n < 256 →
         (fun a c => 16 * a + (hexValue false c).getD 0) (0 : UInt8) = n.toUInt8 := by
   intro n hn
   rw [toDigits_byte n hn]
-  revert n
-  simp only [Base.digitChar_eq]
-  decide +kernel
+  split
+  · rename_i hlt
+    obtain ⟨hascii, hhex⟩ := hex_digit_char n hlt
+    refine ⟨?_, by simp, ?_, ?_⟩
+    · intro c hc
+      simp only [List.mem_singleton] at hc
+      exact hc ▸ hascii
+    · intro c hc
+      simp only [List.map_cons, List.map_nil, List.mem_singleton] at hc
+      rw [hc, hhex]
+      rfl
+    · simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, hhex,
+        Option.getD_some]
+      apply UInt8.toNat_inj.mp
+      simp only [UInt8.toNat_add, UInt8.toNat_mul, UInt8.toNat_ofNat, UInt8.toNat_ofNat',
+        Nat.toUInt8_eq]
+      omega
+  · rename_i hge
+    obtain ⟨ha1, hh1⟩ := hex_digit_char (n / 16) (by omega)
+    obtain ⟨ha2, hh2⟩ := hex_digit_char (n % 16) (by omega)
+    refine ⟨?_, by simp, ?_, ?_⟩
+    · intro c hc
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      rcases hc with rfl | rfl <;> assumption
+    · intro c hc
+      simp only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false] at hc
+      rcases hc with rfl | rfl
+      · rw [hh1]; rfl
+      · rw [hh2]; rfl
+    · simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, hh1, hh2,
+        Option.getD_some]
+      apply UInt8.toNat_inj.mp
+      simp only [UInt8.toNat_add, UInt8.toNat_mul, UInt8.toNat_ofNat, UInt8.toNat_ofNat',
+        Nat.toUInt8_eq]
+      omega
 
 /-- A loop whose step multiplies by sixteen and adds the digit of a code computes the fold. -/
 private theorem forIn_byte {ds : List UInt8}
