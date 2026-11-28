@@ -14,6 +14,13 @@ Not yet released.
   They assume that the body wipes no storage of an account that had nonce 0, no code and storage before the block (`Evm.WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`), which on mainnet excludes only a creation at one of the 28 accounts of EIP-8253.
   The theorems from a rebuildable block keep their statements and follow from these.
 
+- In Lean, the refund counter that a transaction settles is at least zero on mainnet too, when the first frame of its message wipes no storage that holds a nonzero word ([#5017](https://github.com/ethereum/EthLib/issues/5017)).
+  `Transactions.prepareFirstFrame_refundCounter_nonneg_of_wipesHideZeros`, `Transactions.processMessageCall_refundCounter_nonneg_of_wipesHideZeros` (`Execution/Proofs/Transactions/Refund.lean`) and `Transactions.runStack_refundCounter_nonneg_of_wipesHideZeros` (`Execution/Proofs/Transactions/RefundStack.lean`) are new forms that do not assume that no account with nonce 0 and no code holds storage.
+  They assume that each wipe in the state of the first frame hid only zero words of the block state (`Transactions.WipesHideZeros`).
+  For a transaction, the first frame wipes only an authority with nonce 0, no code and no balance that an authorization to the zero address names.
+  The 28 accounts of EIP-8253 hold ether, so they are never wiped there.
+  The theorems from a rebuildable block keep their statements and follow from these through `Evm.RebuildEnd.wipesHideZeros`.
+
 - In Lean, the refund counter that a transaction settles is at least zero ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
   `Transactions.processMessageCall_refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) shows that a message that succeeds settles the counter of the frame that ends it, with no clamp, from a state that `Transactions.TransactionRun.refundReady` gives.
   `Evm.processMessage_clearedRefund_le` and `Evm.processCreateMessage_clearedRefund_le` (`Execution/Proofs/Evm/Call/Refund.lean`) show that from Spurious Dragon a message that succeeds gains at least the refund of the slots that it leaves cleared.
@@ -1377,6 +1384,10 @@ Not yet released.
   No statement changes.
 
 ### Changes that break callers
+
+- In Lean, the lemmas under the refund theorems assume only what they use of the block state ([#5017](https://github.com/ethereum/EthLib/issues/5017)).
+  `Transactions.clearedSlots_eq_empty` and `Transactions.nonceOrCodeClearedSlots_eq_empty` (`Execution/Proofs/Transactions/Refund.lean`) take `Transactions.WipesHideZeros` of the state in place of `Rebuildable` of the block state; `Evm.RebuildEnd.wipesHideZeros` gives it from `Rebuildable`.
+  `Transactions.buyGas_refundReady` and `Transactions.TransactionRun.refundReady` take the codes of the block state in place of `Rebuildable`; pass `valid.code` for a `valid : Rebuildable block`.
 
 - In Lean, the final exponentiation of BLS12-381 runs its powers by `|x|` and `|x| + 1` on four of the six coefficients of each square ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Bls.Fp12.compressedPow` (`Cryptography/Bls/Fp12.lean`) squares the coefficients of `w`, `w^2`, `w^4` and `w^5` only (`Bls.Fp12.Compressed`, `Bls.Fp12.compress`, `Bls.Fp12.Compressed.square`, `Bls.Fp12.Compressed.squares`).
