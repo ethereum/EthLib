@@ -746,6 +746,7 @@ In the random oracle model, `run_outputs_evalDistEq` (`Proofs/Vrf/OutputRandomOr
 It fixes the secret and the indices, and assumes that the initial cache holds no answer for any of their output inputs.
 `prEvent_outputs_pair_of_fresh` states the case of two different indices.
 Two events, one on each output, both hold with the product of their probabilities for two uniform values.
+Its proof applies `run_outputs_evalDistEq` at the two indices.
 `evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
 `prEvent_outputs_pair_keccak256With_le_add` (`Proofs/Vrf/OutputPermutation.lean`) states the case of two different indices with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
 The permutation is drawn after the secret, the indices and the events are fixed.
@@ -754,9 +755,17 @@ Over the permutation, the chance that both events hold is within `spongeIndiffBo
 That bound is `2^-1600 + 6 / 2^512`, below `2^-509`.
 It is the bound of `keccak256_indifferentiable` (`Proofs/Hash/Keccak/Sponge.lean`) at a cost of 2.
 An output input has 49 bytes (`size_outputInput`, `Proofs/Vrf/Hash.lean`), below the 136 bytes of one block, so each hash costs one block.
-The proof applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the two hash calls, then `prEvent_outputs_pair_of_fresh` with the empty cache.
-Over the permutation, no theorem covers more than two indices, or the two outputs together with other hashes, such as those of the tree.
-Carrying the permutation bound over to Keccak-f[1600] is an idealisation of A4, not a theorem.
+`prEvent_outputs_keccak256With_le_add` states the case of any list of distinct indices, with one event on the list of their outputs.
+With `n` indices, the chance of the event over the permutation is within `spongeIndiffBound (2 ^ 1600) (2 ^ 512) n` of its probability for `n` independent uniform values.
+That bound is `n (n - 1) / 2^1601 + (n^2 + n) / 2^512`, the bound of `keccak256_indifferentiable` at a cost of `n`.
+A list of distinct indices has at most `2^32` entries, since there are `2^32` indices.
+The bound grows with `n`, and at `n = 2^32` it is about `2^-448`, so it is below `2^-447` for every list.
+That figure is computed from the bound, and no theorem states it.
+The proof of `prEvent_outputs_keccak256With_le_add` applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the hash calls of the outputs, then `run_outputs_evalDistEq` with the empty cache.
+`isQueryBound_mapM_oracleHash` (`Proofs/Vrf/Oracle.lean`) bounds the cost of hash calls on a list of inputs by the sum of their costs, here `n` blocks.
+`prEvent_outputs_pair_keccak256With_le_add` follows from `prEvent_outputs_keccak256With_le_add` at the two indices, where two independent uniform values give the product of the two probabilities.
+Over the permutation, no theorem covers the outputs together with other hashes, such as those of the tree.
+Carrying these permutation bounds over to Keccak-f[1600] is an idealisation of A4, not a theorem.
 These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs, or after the permutation was drawn.
 Such a holder can grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
@@ -9031,12 +9040,12 @@ The codeword searches of each scheme share the bullet of that scheme:
   The oracle answers classical queries only, so the theorems say nothing about a holder that evaluates Keccak-256 in superposition.
   They say nothing either about an attack that uses the structure of Keccak.
 - VRF output independence over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once.
-  The Keccak-256 calls of both outputs use that permutation in place of Keccak-f[1600].
-  The secret, two different indices and an event on each output are fixed before the permutation is drawn.
-  No party evaluates the permutation beyond those two calls, and the events cannot depend on its other values, such as the root of the tree.
-  The theorem says nothing about a secret that depends on the permutation.
+  The Keccak-256 calls of the outputs use that permutation in place of Keccak-f[1600].
+  The secret, a list of distinct indices and an event on their outputs are fixed before the permutation is drawn.
+  No party evaluates the permutation beyond those calls, and the event cannot depend on its other values, such as the root of the tree.
+  The theorems say nothing about a secret that depends on the permutation.
   A secret chosen after the permutation was drawn, or hashed from a seed, is such a secret.
-  It says nothing either about an attack that uses the structure of Keccak-f[1600].
+  They say nothing either about an attack that uses the structure of Keccak-f[1600].
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.

@@ -153,23 +153,3 @@ theorem prEvent_mapM_forall₂ {α γ : Type} (m : α → ProbComp γ) (P : α �
   | cons x L ih =>
     rw [List.mapM_cons, List.map_cons, List.prod_cons, ← ih]
     simp [List.forall₂_cons]
-
-/-- Two events, one on each answer at two distinct uncached inputs, hold with the product chance.
-
-The factors are the chances of the two events for two uniform answers. -/
-theorem prEvent_run'_query_pair_of_fresh {D R : Type} [DecidableEq D] [SampleableType R]
-    (x y : D) (different : x ≠ y) (cache : (D →ₒ R).QueryCache)
-    (leftFresh : cache x = none) (rightFresh : cache y = none) (P Q : R → Prop) :
-    Pr{let z ← (simulateQ (D →ₒ R).randomOracle (do
-      let left ← liftM ((D →ₒ R).query x)
-      let right ← liftM ((D →ₒ R).query y)
-      pure (left, right))).run' cache}[P z.1 ∧ Q z.2] =
-      Pr{let u ← $ᵗ R}[P u] * Pr{let u ← $ᵗ R}[Q u] := by
-  -- Caching the first answer leaves the second input, which differs, without an answer.
-  have after (u : R) : (cache.cacheQuery x u) y = none := by
-    rw [QueryCache.cacheQuery_of_ne _ _ different.symm, rightFresh]
-  simp only [simulateQ_bind, simulateQ_pure, simulateQ_spec_query, StateT.run'_eq,
-    StateT.run_bind, StateT.run_pure, randomOracle.run_eq, leftFresh, after, bind_assoc,
-    pure_bind, map_bind, map_pure]
-  simpa only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_def] using
-    prEvent_bind_bind_and ($ᵗ R) ($ᵗ R) P Q
