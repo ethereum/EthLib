@@ -1352,6 +1352,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the square root in `Fp2` from a root of the norm no longer inverts an element of the base field that depends on its input ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  The base-field operation `BaseField.sqrtCandidate` (`Cryptography/BaseField.lean`) becomes `BaseField.invSqrtCandidate`, the power `r = a^((q - 3) / 4)`, from which `a r` is a candidate root and `a r r^2` its inverse.
+  `Fp2.sqrtOfNormRoot` (`Cryptography/Fp2.lean`) reads it, and `HashToCurve.sqrtRatio` reads it in place of `BaseField.powNat` by the removed constant `HashToCurve.rootExponent`.
+  `Bls.Fp.sqrtExponent` becomes `Bls.Fp.invSqrtExponent`, and its lemma `val_sqrtExponent` becomes `val_invSqrtExponent`, which moves from `Cryptography/Bls/Fp.lean` to `Cryptography/Proofs/Bls/FpZMod.lean`.
+  `Bls.Fp.invSqrtCandidate` is new.
+  `Bls.Fp.sqrtCandidate` is now `a` times `Bls.Fp.invSqrtCandidate a`, with the same value.
+  `BaseField.Hom.map_sqrtCandidate` becomes `map_invSqrtCandidate`, `Fp.baseField_sqrtCandidate` becomes `Fp.baseField_invSqrtCandidate`, and `Fp.powLimbs_sqrtExponent` becomes `Fp.sqrtCandidate_eq_powNat` and `Fp.invSqrtCandidate_eq_powNat`.
+  `Fp2.sqrt_eq_some_cases` (`Cryptography/Proofs/Fp2.lean`) states the new steps, and `Fp.mul_invSqrtCandidate` and `Fp.inverse_two_mul_sqrtCandidate` are new.
+  Over `Fp` and its model, the roots, the hash to G2 and the decompression of G2 return the same values as before.
+
 - In Lean, the rules of a relation of frames see the refund counter ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
   `Evm.StaticStep` has a new field, `refund`: a static step keeps the refund counter, so an anonymous constructor needs one more argument.
   The rules split: `Evm.FrameStepRules` holds the rules of one frame, and `Evm.OrdinaryStepRules` extends it with the rule for a caller that takes in a child.

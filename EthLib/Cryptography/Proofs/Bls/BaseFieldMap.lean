@@ -87,7 +87,7 @@ theorem map_sqrtOfNormRoot (f : Hom F G) (a : Fp2 F) (s : F) :
       map f (Cryptography.Fp2.sqrtOfNormRoot a s) := by
   obtain ⟨a0, a1⟩ := a
   simp only [Cryptography.Fp2.sqrtOfNormRoot, map, f.map_isZero, ← f.map_add, ← f.map_ofNat,
-    ← f.map_inverse, ← f.map_mul, f.map_sqrtCandidate, f.map_beq]
+    ← f.map_inverse, ← f.map_mul, f.map_invSqrtCandidate, f.map_beq]
   cases BaseField.isZero a1
   · simp only [Bool.false_eq_true, ↓reduceIte]
     split <;> simp only [f.map_mul, f.map_inverse, f.map_ofNat]

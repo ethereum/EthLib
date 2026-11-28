@@ -56,7 +56,7 @@ theorem map_sqrtRatio (f : Hom F G) (u v : Fp2 F) :
     sqrtRatio (u.map f) (v.map f) = Prod.map id (Fp2.map f) (sqrtRatio u v) := by
   have h0 : ∀ a : Fp2 F, (a.map f).c0 = f a.c0 := fun _ => rfl
   have h1 : ∀ a : Fp2 F, (a.map f).c1 = f a.c1 := fun _ => rfl
-  simp only [sqrtRatio, h0, h1, ← f.map_mul, ← f.map_add, f.map_isZero, ← f.map_powNat,
+  simp only [sqrtRatio, h0, h1, ← f.map_mul, ← f.map_add, f.map_isZero, f.map_invSqrtCandidate,
     f.map_beq, ← f.map_one, ← Fp2.map_mul, ← map_Z f, ← map_sqrtNegNormZ f, Fp2.map_sqrtOfNormRoot,
     ← Fp2.map_conjugate, ← Fp2.map_mulFp, ← apply_ite (Fp2.map f)]
   split

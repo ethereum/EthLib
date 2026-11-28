@@ -438,12 +438,18 @@ private theorem sqrt_branch_neg_aux {a0 a1 s r t : Fp}
 /-- Given a square root of the norm of `a`, the complex method returns a square root of `a`. -/
 theorem sqrtOfNormRoot_mul_self {a : Fp2} {s : Fp} (hs : s * s = norm a) :
     Fp2.sqrtOfNormRoot a s * Fp2.sqrtOfNormRoot a s = a := by
-  simp only [Cryptography.Fp2.sqrtOfNormRoot, Fp.baseField_sqrtCandidate]
+  -- The root of the base field is `x r`, and its inverse is `x r r^2`, for `r` the candidate.
+  have hinv (x : Fp) : Fp.sqrtCandidate x * (Fp.invSqrtCandidate x * Fp.invSqrtCandidate x) *
+      BaseField.inverse (BaseField.ofNat 2 : Fp) =
+      BaseField.inverse (BaseField.ofNat 2 * Fp.sqrtCandidate x) :=
+    (Fp.inverse_two_mul_sqrtCandidate x).symm
+  simp only [Cryptography.Fp2.sqrtOfNormRoot, Fp.baseField_invSqrtCandidate,
+    Fp.mul_invSqrtCandidate, hinv]
   by_cases hz : BaseField.isZero a.c1 = true
   · -- The case `a1 = 0`: the candidate root of `a0` squares to `a0` or to `-a0`.
     have ha1 : a.c1 = 0 := Fp.isZero_iff.mp hz
     simp only [hz, ↓reduceIte]
-    split <;> rename_i hr
+    split_ifs with hr
     · have hs := Fp.beq_iff.mp hr
       apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;>
         push_toZMod <;> simp_all [← Fp.toZMod_mul]
@@ -459,7 +465,7 @@ theorem sqrtOfNormRoot_mul_self {a : Fp2} {s : Fp} (hs : s * s = norm a) :
       rw [Fp.baseField_isZero, Fp.isZero_iff.mpr h0] at hz
       exact hz rfl
     simp only [hz, Bool.false_eq_true, ↓reduceIte]
-    split <;> rename_i hr
+    split_ifs with hr
     · exact sqrt_branch_gen_aux (fun _ hx => fp_mul_inverse hx) ha1 hs two_mul_inverse
         (Fp.beq_iff.mp hr)
     · have hr' :

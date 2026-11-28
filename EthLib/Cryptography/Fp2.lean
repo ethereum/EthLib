@@ -139,17 +139,17 @@ def ofNats (c0 c1 : Nat) : Fp2 F :=
 
 It is the [complex method][source] of Adj and Rodríguez-Henríquez, Algorithm 8, past step 9.
 
-When the candidate root of the base field squares to its input or its negation, as over BLS12-381:
+When the candidate of the base field has its laws, as over BLS12-381:
 
 - a real input needs one exponentiation, and reads no `s`;
-- any other input needs one, and two inversions of the base field.
+- any other input needs one, and one inversion of the constant 2.
 
 [source]: https://eprint.iacr.org/2012/685
 -/
 def sqrtOfNormRoot (a : Fp2 F) (s : F) : Fp2 F :=
   -- The steps are those of Algorithm 8 of the source.
   --
-  -- The base-field candidate squares to its input or to the negation of its input.
+  -- The input times its candidate inverse root squares to the input or to its negation.
   --
   -- Step 1: the case `a1 = 0`.
   if BaseField.isZero a.c1 then
@@ -157,19 +157,25 @@ def sqrtOfNormRoot (a : Fp2 F) (s : F) : Fp2 F :=
     --
     -- That root exists only when `a0` is a square of the base field.
     --
+    -- The candidate `c = a0 r` squares to `a0` or `-a0`, with `r` the candidate inverse root.
+    --
     -- Otherwise the candidate `c` squares to `-a0`, and `c i` is a root, since `i^2 = -1`.
-    let c := BaseField.sqrtCandidate a.c0
+    let c := a.c0 * BaseField.invSqrtCandidate a.c0
     if BaseField.beq (c * c) a.c0 then ⟨c, BaseField.zero⟩
     else ⟨BaseField.zero, c⟩
   else
     -- Step 10: `delta <- (a0 + alpha) / 2`, with `alpha = s` the root of the norm.
-    let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
+    let half := BaseField.inverse (BaseField.ofNat 2 : F)
+    let u := (a.c0 + s) * half
     -- Steps 11 to 15 test `delta` and take `x0 <- SQRT_q(delta)`.
     --
-    -- Here the candidate `c` of `delta` squares to `delta` or to `-delta`, with no test first.
-    let c := BaseField.sqrtCandidate u
+    -- Here the candidate `c = delta r` squares to `delta` or to `-delta`, with no test first.
+    let r := BaseField.invSqrtCandidate u
+    let c := u * r
     -- Step 16: `x1 <- a1 / (2 x0)`, with `x0 = c`.
-    let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c)
+    --
+    -- The inverse of `c` is `c r^2`, so the only inversion is that of the constant 2.
+    let d := a.c1 * (c * (r * r) * half)
     -- Step 17: `x <- x0 + x1 y`, with `y = i`, when `c^2 = delta`.
     --
     -- When `c^2 = -delta`, `x0 = d` is the root of step 13's `(a0 - alpha) / 2`, and `x1 = c`.

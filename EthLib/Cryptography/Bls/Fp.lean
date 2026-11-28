@@ -213,17 +213,23 @@ The inverse of `0` is `0`. -/
 instance : Div Fp := ⟨fun a b => a * b.inverse⟩
 
 open Montgomery in
-/-- The exponent `(p + 1) / 4` of the square root, as twelve 32-bit limbs, two to a word. -/
-@[inline] def sqrtExponent : Limbs.T 12 :=
-  ⟨0xee7fbfffffffeaab, 0x07aaffffac54ffff, 0xd9cc34a83dac3d89, 0xd91dd2e13ce144af,
+/-- The exponent `c1 = (p - 3) / 4` of [RFC 9380 Appendix F.2.1.2][ratio], as twelve 32-bit limbs.
+
+The limbs go two to a word.
+
+[ratio]: https://www.rfc-editor.org/rfc/rfc9380#appendix-F.2.1.2
+-/
+@[inline] def invSqrtExponent : Limbs.T 12 :=
+  ⟨0xee7fbfffffffeaaa, 0x07aaffffac54ffff, 0xd9cc34a83dac3d89, 0xd91dd2e13ce144af,
     0x92c6e9ed90d2eb35, 0x0680447a8e5ff9a6⟩
 
-open Montgomery in
-/-- The limbs of the exponent write `(p + 1) / 4`. -/
-theorem val_sqrtExponent : Limbs.val sqrtExponent = (modulus + 1) / 4 := by decide
+/-- The power `r = a^((p - 3) / 4)`: `a r` is a candidate root, and `a r r^2` is its inverse. -/
+@[inline] def invSqrtCandidate (a : Fp) : Fp := Montgomery.powLimbs a invSqrtExponent
 
 /-- The power `a^((p + 1) / 4)` of RFC 9380, Appendix I.1, before checking its square. -/
-@[inline] def sqrtCandidate (a : Fp) : Fp := Montgomery.powLimbs a sqrtExponent
+@[inline] def sqrtCandidate (a : Fp) : Fp :=
+  -- The power `(p + 1) / 4` is the power `(p - 3) / 4` times `a`.
+  a * invSqrtCandidate a
 
 /-- Square root, valid since `p = 3 mod 4`.
 
@@ -248,7 +254,7 @@ instance : BaseField Fp where
   inverse := inverse
   powNat := powNat
   sqrt a := (Fp.sqrt a).toOption
-  sqrtCandidate := Fp.sqrtCandidate
+  invSqrtCandidate := Fp.invSqrtCandidate
   sgn0 a := a.val % 2 == 1
 
 /-- Decode a 48-byte big-endian integer as an element of `Fp`.
