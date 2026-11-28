@@ -2932,7 +2932,7 @@ private theorem eb_le_min_band (b' cap K band EB : ℕ) (hcap : K ≤ cap)
 private theorem big_arith (c K band X φt φt1 : ℕ) (hc : c ≤ K) (hφ : φt1 ≤ φt) :
     (c + band) * φt1 ≤ (K + band) * φt + (K + band) + X * φt := by
   have := Nat.mul_le_mul (Nat.add_le_add_right hc band) hφ
-  nlinarith
+  omega
 
 /-- One epoch of a key keeps the fraction of its potential that the floor keeps. -/
 private theorem step_arith (b' b cap K band pass X φt φt1 pen EB : ℕ)
@@ -2958,7 +2958,7 @@ private theorem step_arith (b' b cap K band pass X φt φt1 pen EB : ℕ)
     have h1 : C * φt ≤ (b + pass + X) * φt := Nat.mul_le_mul_right _ seg
     have h2 : pass * φt ≤ (C + band) * (pen + 1) :=
       pr.trans (Nat.mul_le_mul_right _ hEB)
-    nlinarith
+    linarith only [h1, h2]
   by_cases big : K ≤ b
   · rw [min_eq_right big]
     exact big_arith _ _ _ _ _ _ (min_le_right _ _) (by omega)
@@ -2975,7 +2975,7 @@ private theorem step_arith (b' b cap K band pass X φt φt1 pen EB : ℕ)
     have e2 : C * φt = C * φt1 + C * pen := by rw [ph]; ring
     have lower : (C + band) * φt1 ≤ (b + band) * φt + (C + band) + X * φt := by
       rw [ph] at key ⊢
-      nlinarith
+      linarith only [key]
     -- replace C by c: C could exceed K, then use the shape of the loss
     by_cases cK : C ≤ K
     · have hcC : c = C := le_antisymm hcle (le_min (min_le_left _ _) cK)
@@ -2984,8 +2984,8 @@ private theorem step_arith (b' b cap K band pass X φt φt1 pen EB : ℕ)
       omega
     · have above : K < C := Nat.lt_of_not_ge cK
       have h3 : C * φt1 ≤ b * φt + C + band * (pen + 1) + X * φt := by
-        rw [ph] at key
-        nlinarith
+        rw [ph] at key ⊢
+        linarith only [key]
       have h4 : K * φt1 + C ≤ C * φt1 + K := by
         have : K * (φt1 - 1) ≤ C * (φt1 - 1) := Nat.mul_le_mul_right _ above.le
         have e1 : K * (φt1 - 1) + K = K * φt1 := by
@@ -2996,8 +2996,8 @@ private theorem step_arith (b' b cap K band pass X φt φt1 pen EB : ℕ)
           rw [Nat.mul_sub]; omega
         omega
       have h5 : (c + band) * φt1 ≤ (K + band) * φt1 := Nat.mul_le_mul_right _ (by omega)
-      rw [ph]
-      nlinarith
+      rw [ph] at h3 ⊢
+      linarith only [h3, h4, h5]
 
 /-- One epoch of a key, with the initial penalty of a slashing in it.
 
@@ -3040,8 +3040,9 @@ private theorem step_arith_slash (b' b cap K band pass X sl Q Bq φt φt1 pen EB
         have hc : min b' K ≤ K := min_le_right _ _
         obtain ⟨h, hh⟩ : ∃ h, Q * φt1 = h + Q + φt := by
           refine ⟨Q * φt1 - Q - φt, ?_⟩
-          have : 3 * (Q * φt1) ≥ 2 * Q * φt := by nlinarith
-          have : Q * φt1 ≥ Q + φt := by nlinarith
+          have hm1 : 2 * φt1 ≤ Q * φt1 := Nat.mul_le_mul_right φt1 hQ
+          have hm2 : Q * 6 ≤ Q * φt1 := Nat.mul_le_mul_left Q (by omega)
+          have : Q * φt1 ≥ Q + φt := by linarith only [hQ, hφ, hband, hm1, hm2]
           omega
         have h1 : Q * C * φt ≤ Q * b * φt + Q * (C + band) * (pen + 1) + Q * X * φt +
             (C + band) * φt := by
@@ -3714,16 +3715,20 @@ private theorem final_arith (K band Bq B S C φ0 φk J J' T : ℕ)
     (h2 : 2 * φ0 ≤ 3 * φk) (hJ : J ≤ J') (room : 400 * J' ≤ φ0) (pos : 0 < φ0)
     (hC : C ≤ S + Bq)
     (margin : 2400 * T + 2400 * band + 2400 * Bq ≤ 1591 * (K + band)) : T ≤ B + S := by
-  have a1 : 6 * (K + band) * φk ≤ 6 * (B + band + C) * φ0 + 9 * (K + band) * J := by nlinarith
-  have a2 : 4 * (K + band) * φ0 ≤ 6 * (K + band) * φk := by nlinarith
+  have a1 : 6 * (K + band) * φk ≤ 6 * (B + band + C) * φ0 + 9 * (K + band) * J := by
+    linarith only [h1]
+  have a2 : 4 * (K + band) * φ0 ≤ 6 * (K + band) * φk := by
+    have := Nat.mul_le_mul_left (2 * (K + band)) h2
+    linarith only [this]
   have a3 : 9 * (K + band) * J * 400 ≤ 9 * (K + band) * φ0 := by
-    have : J * 400 ≤ φ0 := by omega
-    nlinarith
+    have h400 : J * 400 ≤ φ0 := by omega
+    have := Nat.mul_le_mul_left (9 * (K + band)) h400
+    linarith only [this]
   have a4 : 1600 * (K + band) * φ0 ≤ 2400 * (B + band + C) * φ0 + 9 * (K + band) * φ0 := by
-    nlinarith
+    linarith only [a1, a2, a3]
   have a5 : 1600 * (K + band) ≤ 2400 * (B + band + C) + 9 * (K + band) := by
     have := Nat.le_of_mul_le_mul_right (a := 1600 * (K + band))
-      (b := 2400 * (B + band + C) + 9 * (K + band)) (c := φ0) (by nlinarith) pos
+      (b := 2400 * (B + band + C) + 9 * (K + band)) (c := φ0) (by linarith only [a4]) pos
     exact this
   omega
 
@@ -3864,7 +3869,7 @@ private theorem Ctx.advance {g x z m p n : ForkedBeaconState preset} {high : ℕ
         some w ∧ w.slashed = true then newBq preset else 0)))
     (preset.MAX_EFFECTIVE_BALANCE.toNat + preset.downwardBand)
     ((getCurrentEpoch m.state).toNat - (getCurrentEpoch z.state).toNat) pos hanti band ih
-    (by nlinarith [crossed', mono])
+    (by linarith only [crossed', mono])
   have e2 : (getCurrentEpoch n.state).toNat - (getCurrentEpoch z.state).toNat =
       (getCurrentEpoch m.state).toNat - (getCurrentEpoch z.state).toNat + 1 := by omega
   rw [e2]
