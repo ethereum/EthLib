@@ -4568,7 +4568,7 @@ Both lemmas take an honest sender and an up-to-date honest receiver at least a d
 The delivery lemma also takes the sender's time bound explicitly; for epoch order it follows from the receiver's bound.
 For `Execution.carrier_delivered`, the sender holds a block and its state and reads the receiver's finalized checkpoint on that block's chain at the checkpoint's epoch.
 The receiver then holds the same block and state at that root.
-`Execution.finalized_epoch_le_justified_of_late` also requires positive slot duration and cross-store finality reads through the limit.
+The epoch-order lemma, which only the fallback theorem reads, also requires positive slot duration and cross-store finality reads through the limit.
 Whenever one honest store's finalized epoch is at most another's justified epoch, the latter's justified root reads the former's finalized checkpoint at that epoch.
 The receiver's justified epoch is at least the sender's finalized epoch; this does not say that the sender's epoch itself is justified.
 
