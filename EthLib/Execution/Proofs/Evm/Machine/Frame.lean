@@ -75,6 +75,12 @@ theorem chargeGas_eq_ok_iff {evm after : Evm fork Nat} {amount : Nat} :
       exact ⟨by omega, h⟩
     · exact And.right
 
+/-- With the meter of state gas, a refill of nothing keeps the gas left. -/
+theorem gasLeft_refill_zero_stateGas (meter : StateGasMeter) :
+    GasMeter.gasLeft (GasMeter.refill meter 0) = GasMeter.gasLeft meter := by
+  simp only [GasMeter.gasLeft, GasMeter.refill, StateGasMeter.refill, Nat.zero_min,
+    Nat.add_zero]
+
 /-- From Glamsterdam, a call whose message never runs leaves the meter of the caller as before.
 
 The caller passes on its reservoir, then gets it back with the execution gas of the message. -/
