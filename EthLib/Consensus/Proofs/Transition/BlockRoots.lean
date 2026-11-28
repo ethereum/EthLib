@@ -110,11 +110,8 @@ theorem processSlot_latestBlockHeader {cached : BeaconState preset fork}
   simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
   obtain ⟨root, hashed, _, _, _, _, _, _, computed⟩ := computed
   refine ⟨root, hashed, ?_⟩
-  split at computed
-  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    rfl
-  · cases computed
-    rfl
+  obtain ⟨_, rfl⟩ := processNextPayloadAvailability_ok computed
+  rfl
 
 /-- After one slot, the latest block header is the one before, with its state root filled if zero.
 

@@ -1334,6 +1334,16 @@ Not yet released.
   A step that a fork adds at the end of the attestation step, and that changes no field, then breaks only its own proof file.
   In an experiment, a step at the end that writes one more field broke 3 proofs outside that file, although none of them reads that field.
 
+- In Lean, the Gloas step of the caching of a slot is its own function, `processNextPayloadAvailability` (`Consensus/Transition/StateTransition.lean`).
+  Before Gloas it returns the state, and from Gloas it marks the payload of the next slot as not yet available.
+  `processNextPayloadAvailability_ok` states that it changes only the availability bits, and `processNextPayloadAvailability_total` that it succeeds when a next slot exists.
+  Three proofs that read the body of `processSlot` use the first lemma instead of a case split on the fork.
+  The totality of `processSlot` uses the second.
+  `builderFrame_processSlot` now cites `processSlot_latestBlockHeader` and no longer reads the body.
+  A later step of a fork, written as its own function, then costs each proof that reads the body one binder and one line.
+  It no longer adds a branch to them ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  No statement changes.
+
 ### Changes that break callers
 
 - In Lean, the MODEXP output (`Evm.Precompiles.Modexp.compute`) reads the modulus first, and reads the base and the exponent only for a modulus other than 0 ([#4950](https://github.com/ethereum/EthLib/issues/4950)).
