@@ -104,26 +104,26 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus}
       toPoint (ofJacobian p) = Jacobian.toPoint (Fp.toZMod a) (Fp.toZMod b) p :=
   ShortWeierstrass.Point.ofJacobian_spec embedding toZ_eq hp
 
-theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  ShortWeierstrass.Point.isOnCurve_mulBits embedding toZ_eq
+theorem isOnCurve_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    (mulNat k p).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_mulNat embedding toZ_eq
     ShortWeierstrass.Point.Representation.fin
-    toZ_a two_ne_zero' fuel k hp
+    toZ_a two_ne_zero' k hp
 
-/-- Double and add computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p :=
-  ShortWeierstrass.Point.toPoint_mulBits embedding toZ_eq
+/-- The scalar product computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    toPoint (mulNat k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulNat embedding toZ_eq
     ShortWeierstrass.Point.Representation.fin
-    toZ_a two_ne_zero' fuel k hp hk
+    toZ_a two_ne_zero' k hp
 
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=
-  isOnCurve_mulBits 256 k.val hp
+  isOnCurve_mulNat k.val hp
 
 /-- Scalar multiplication computes `k P`, with the value of `k` below `n`. -/
 theorem toPoint_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = k.val • toPoint p :=
-  toPoint_mulBits 256 k.val hp (Nat.lt_trans k.isLt (by decide))
+  toPoint_mulNat k.val hp
 
 /-! ## Points and group elements correspond -/
 

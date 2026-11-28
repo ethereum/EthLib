@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.CurveMap
 public import EthLib.Cryptography.Proofs.BaseField
 public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
-public import Mathlib.Tactic.Module
+public import EthLib.Cryptography.Proofs.ScalarProduct
 
 /-!
 # Proofs: the group law of the Jacobian formulas, over any field
@@ -493,79 +493,23 @@ theorem toPoint_add [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Vali
 
 /-! ## Scalar multiplication -/
 
-/-- The steps of the scalar multiplication keep a valid accumulator valid. -/
-theorem valid_mulNatSteps (h2 : (2 : K) ≠ 0) {P : G1 F} (hP : Valid e b P) (k h n : Nat)
-    {Q : G1 F} (hQ : Valid e b Q) : Valid e b (mulNatSteps P k h n Q) := by
-  induction n generalizing Q with
-  | zero => exact hQ
-  | succ n ih =>
-    rw [mulNatSteps]
-    apply ih
-    have hd := valid_double e b hQ
-    cases h.testBit (n + 1) <;> cases k.testBit (n + 1)
-    · exact hd
-    · exact valid_add e b h2 hd (valid_neg e b hP)
-    · exact valid_add e b h2 hd hP
-    · exact hd
+/-- The scalar multiplication keeps validity, and it is the action of `ℕ` on the group. -/
+private theorem mulNat_spec [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P)
+    (k : Nat) : Valid e b (mulNat P k) ∧ toPoint e b (mulNat P k) = k • toPoint e b P :=
+  ScalarProduct.naf_spec (Valid e b) (toPoint e b)
+    (fun _ hQ => ⟨valid_double e b hQ, toPoint_double e b hQ⟩)
+    (fun _ _ hQ hR => ⟨valid_add e b h2 hQ hR, toPoint_add e b h2 hQ hR⟩)
+    (valid_zero e b) (toPoint_zero e b) h (valid_neg e b h) (toPoint_neg e b h) k
 
 theorem valid_mulNat (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
-    Valid e b (mulNat P k) :=
-  valid_mulNatSteps e b h2 h k _ _ (valid_zero e b)
-
-/-- The difference of the quotients of `h` and `k` by `2^i`, as an integer. -/
-private def quotDiff (k h i : Nat) : ℤ := ((h / 2 ^ i : Nat) : ℤ) - ((k / 2 ^ i : Nat) : ℤ)
-
-/-- The quotient by `2^i` is twice the quotient by `2^(i+1)`, plus bit `i`. -/
-private theorem div_two_pow_eq (x i : Nat) :
-    ((x / 2 ^ i : Nat) : ℤ) = 2 * ((x / 2 ^ (i + 1) : Nat) : ℤ) + ((x.testBit i).toNat : ℤ) := by
-  have h1 : x / 2 ^ (i + 1) = x / 2 ^ i / 2 := by rw [Nat.pow_succ, Nat.div_div_eq_div_mul]
-  rw [h1, Nat.toNat_testBit]
-  omega
-
-/-- The steps from `Q` give `2^n Q` plus the digits read so far, times `P`. -/
-private theorem toPoint_mulNatSteps [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F}
-    (hP : Valid e b P) (k h n : Nat) {Q : G1 F} (hQ : Valid e b Q) :
-    toPoint e b (mulNatSteps P k h n Q) = (2 ^ n : ℤ) • toPoint e b Q +
-      (quotDiff k h 1 - 2 ^ n * quotDiff k h (n + 1)) • toPoint e b P := by
-  induction n generalizing Q with
-  | zero => simp [mulNatSteps]
-  | succ n ih =>
-    rw [mulNatSteps]
-    have hd := valid_double e b hQ
-    have hq : quotDiff k h (n + 1) = 2 * quotDiff k h (n + 1 + 1) +
-        (((h.testBit (n + 1)).toNat : ℤ) - ((k.testBit (n + 1)).toNat : ℤ)) := by
-      simp only [quotDiff, div_two_pow_eq h (n + 1), div_two_pow_eq k (n + 1)]
-      ring
-    cases hh : h.testBit (n + 1) <;> cases hk : k.testBit (n + 1)
-    · rw [ih hd, hq, hh, hk, toPoint_double e b hQ, pow_succ]
-      simp only [Bool.toNat_false, Nat.cast_zero, sub_zero, add_zero]
-      module
-    · rw [ih (valid_add e b h2 hd (valid_neg e b hP)), toPoint_add e b h2 hd (valid_neg e b hP),
-        hq, hh, hk, toPoint_neg e b hP, toPoint_double e b hQ, pow_succ]
-      simp only [Bool.toNat_false, Bool.toNat_true, Nat.cast_zero, Nat.cast_one]
-      module
-    · rw [ih (valid_add e b h2 hd hP), toPoint_add e b h2 hd hP, hq, hh, hk,
-        toPoint_double e b hQ, pow_succ]
-      simp only [Bool.toNat_false, Bool.toNat_true, Nat.cast_zero, Nat.cast_one]
-      module
-    · rw [ih hd, hq, hh, hk, toPoint_double e b hQ, pow_succ]
-      simp only [Bool.toNat_true, Nat.cast_one, sub_self, add_zero]
-      module
+    Valid e b (mulNat P k) := by
+  classical
+  exact (mulNat_spec e b h2 h k).1
 
 /-- The scalar multiplication is the action of `ℕ` on the group. -/
 theorem toPoint_mulNat [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
-    toPoint e b (mulNat P k) = k • toPoint e b P := by
-  rw [mulNat, toPoint_mulNatSteps e b h2 h _ _ _ (valid_zero e b), toPoint_zero, smul_zero,
-    zero_add]
-  -- Above the top bit of `3k`, both quotients vanish.
-  have hlt : 3 * k < 2 ^ ((3 * k).log2 + 1) := Nat.lt_log2_self
-  have htop : quotDiff k (3 * k) ((3 * k).log2 + 1) = 0 := by
-    rw [quotDiff, Nat.div_eq_of_lt hlt, Nat.div_eq_of_lt (by omega : k < 2 ^ ((3 * k).log2 + 1))]
-    simp
-  have hone : quotDiff k (3 * k) 1 = k := by
-    simp only [quotDiff, pow_one]
-    omega
-  rw [htop, hone, mul_zero, sub_zero, natCast_zsmul]
+    toPoint e b (mulNat P k) = k • toPoint e b P :=
+  (mulNat_spec e b h2 h k).2
 
 /-! ## Special values -/
 
@@ -589,13 +533,14 @@ theorem add_zero {P : G1 F} (hP : P.isInfinity = false) : add P zero = P := by
 
 /-- The product by zero is the point at infinity. -/
 theorem mulNat_zero (P : G1 F) : mulNat P 0 = zero := by
-  rw [mulNat, show Nat.log2 (3 * 0) = 0 by decide, mulNatSteps]
+  rw [mulNat, ScalarProduct.naf, show Nat.log2 (3 * 0) = 0 by decide, ScalarProduct.nafSteps]
 
 include e in
 /-- The product of a triple by one is the triple. -/
 theorem mulNat_one (P : G1 F) : mulNat P 1 = P := by
   have hd : double (zero : G1 F) = zero := ite_eq_left ((e.isZero_iff _).mpr e.map_zero)
-  rw [mulNat, show Nat.log2 (3 * 1) = 1 by decide, mulNatSteps, mulNatSteps, hd,
+  rw [mulNat, ScalarProduct.naf, show Nat.log2 (3 * 1) = 1 by decide, ScalarProduct.nafSteps,
+    ScalarProduct.nafSteps, hd,
     show Nat.testBit (3 * 1) (0 + 1) = true by decide, show Nat.testBit 1 (0 + 1) = false by decide]
   exact zero_add e P
 

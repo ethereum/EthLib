@@ -173,8 +173,8 @@ def validatePublicKey (n h : Nat) (Q : Point (Fin p)) : Except Sec1Error (Point 
   -- Step 4: `n Q = O`.
   --
   -- When `h = 1`, every point of the curve satisfies it, as SEC 1 notes, so the check is skipped.
-  else if h ≠ 1 ∧ Q.mulBits id ShortWeierstrass.Params.inv id ShortWeierstrass.Params.a
-      (n.log2 + 1) n ≠ .infinity then .error .notInSubgroup
+  else if h ≠ 1 ∧ Q.mulNat id ShortWeierstrass.Params.inv id ShortWeierstrass.Params.a
+      n ≠ .infinity then .error .notInSubgroup
   else .ok Q
 
 end Curve

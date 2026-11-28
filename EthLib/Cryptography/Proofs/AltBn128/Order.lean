@@ -29,8 +29,8 @@ namespace Point
 /-- The generator is on the curve. -/
 theorem isOnCurve_generator : generator.isOnCurve = true := by decide +kernel
 
-/-- `q P1 = O`, as the kernel computes it by double and add. -/
-theorem mulBits_order_generator : mulBits 256 Fr.modulus generator = infinity := by decide +kernel
+/-- `q P1 = O`, as the kernel computes it by the scalar product. -/
+theorem mulNat_order_generator : mulNat Fr.modulus generator = infinity := by decide +kernel
 
 /-- `P1` is not the point at infinity. -/
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := fun h =>
@@ -39,7 +39,7 @@ theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := fun h =>
 /-- `P1` has order `q`, a prime. -/
 theorem addOrderOf_generator : addOrderOf (toPoint generator) = Fr.modulus := by
   refine addOrderOf_eq_prime ?_ toPoint_generator_ne_zero
-  rw [← toPoint_mulBits 256 _ isOnCurve_generator (by decide), mulBits_order_generator]
+  rw [← toPoint_mulNat _ isOnCurve_generator, mulNat_order_generator]
   rfl
 
 end Point
@@ -178,21 +178,21 @@ namespace Point
 /-- `q P = O` for every point on the curve.
 
 So the curve equation is enough for a point of `G_1`, as EIP-197 says. -/
-theorem mulBits_order {p : Point} (hp : p.isOnCurve = true) : mulBits 256 Fr.modulus p = infinity := by
-  rw [← toPoint_eq_zero (isOnCurve_mulBits _ _ hp), toPoint_mulBits _ _ hp (by decide)]
+theorem mulNat_order {p : Point} (hp : p.isOnCurve = true) : mulNat Fr.modulus p = infinity := by
+  rw [← toPoint_eq_zero (isOnCurve_mulNat _ hp), toPoint_mulNat _ hp]
   exact nsmul_order _
 
 /-- Every point on the curve is `k P1` for one `k < q`. -/
-theorem exists_eq_mulBits_generator {p : Point} (hp : p.isOnCurve = true) :
-    ∃ k < Fr.modulus, p = mulBits 256 k generator := by
+theorem exists_eq_mulNat_generator {p : Point} (hp : p.isOnCurve = true) :
+    ∃ k < Fr.modulus, p = mulNat k generator := by
   -- `P1` has order `q`, the size of the group, so its multiples are the whole group.
   have htop : AddSubgroup.zmultiples (toPoint generator) = ⊤ :=
     AddSubgroup.eq_top_of_card_eq _ (by rw [Nat.card_zmultiples, addOrderOf_generator, card_point])
   obtain ⟨k, hk⟩ := AddSubgroup.mem_zmultiples_iff.mp (htop ▸ AddSubgroup.mem_top (toPoint p))
   have hlt : (k : ZMod Fr.modulus).val < Fr.modulus := ZMod.val_lt _
   refine ⟨(k : ZMod Fr.modulus).val, hlt, ?_⟩
-  refine ((toPoint_inj hp (isOnCurve_mulBits _ _ isOnCurve_generator)).mp ?_)
-  rw [toPoint_mulBits _ _ isOnCurve_generator (lt_trans hlt (by decide)), ← smul_eq_val_nsmul, ← hk]
+  refine ((toPoint_inj hp (isOnCurve_mulNat _ isOnCurve_generator)).mp ?_)
+  rw [toPoint_mulNat _ isOnCurve_generator, ← smul_eq_val_nsmul, ← hk]
   exact (Int.cast_smul_eq_zsmul (ZMod Fr.modulus) k _).symm
 
 end Point

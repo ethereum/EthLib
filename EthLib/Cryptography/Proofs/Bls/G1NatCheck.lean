@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls.Constants
+public import EthLib.Cryptography.ScalarProduct
 
 /-!
 # Proofs: the torsion check of `G1`, on naturals
@@ -113,19 +114,8 @@ def add (p q : Coords) : Coords :=
 /-- Negation `(x, p - y, z)` mod `p`, as the negation of `G1` computes it. -/
 def neg (q : Coords) : Coords := (q.1, (Fp.modulus - q.2.1) % Fp.modulus, q.2.2)
 
-/-- The steps of the scalar product, as the scalar product of `G1` runs them. -/
-def mulNatSteps (p : Coords) (k h : Nat) : Nat → Coords → Coords
-  | 0, q => q
-  | i + 1, q =>
-    let q := double q
-    let q := match h.testBit (i + 1), k.testBit (i + 1) with
-      | true, false => add q p
-      | false, true => add q (neg p)
-      | _, _ => q
-    mulNatSteps p k h i q
-
 /-- The scalar product, as the scalar product of `G1` runs it. -/
-def mulNat (p : Coords) (k : Nat) : Coords := mulNatSteps p k (3 * k) (3 * k).log2 zero
+def mulNat (p : Coords) (k : Nat) : Coords := ScalarProduct.naf double add zero p (neg p) k
 
 /-! ## The check -/
 

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Inverse
+public import EthLib.Cryptography.ScalarProduct
 
 /-!
 # Jacobian coordinates
@@ -144,19 +145,12 @@ When `Q` has `Z = 1`, the products by its `Z` are skipped. -/
       -- `Y3 = r*(V-X3)-S1*HHH` and `Z3 = Z1*Z2*H`.
       ⟨x3, r * (v - x3) - s1 * hhh, z1z2 * h⟩
 
-/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
+/-- `-P`, which has the opposite `y`. -/
+@[inline] def neg (p : Coords F) : Coords F := ⟨p.x, 0 - p.y, p.z⟩
 
-It recurses on `fuel`, so the kernel can run it.
-
-It stops once no bit of `k` is left, so a small scalar costs only its own bits. -/
-@[specialize] def mulBits (a : F) : Nat → Nat → Coords F → Coords F
-  | 0, _, _ => infinity
-  | fuel + 1, k, p =>
-    -- `0 P = O`, and the doublings that would follow add no point.
-    if k = 0 then infinity else
-    -- `k P = (k mod 2) P + (k / 2) (2 P)`.
-    let rest := mulBits a fuel (k / 2) (double a p)
-    if k % 2 = 1 then add a p rest else rest
+/-- `k P`, left to right on the non-adjacent form of `k`, with the curve's `a`. -/
+@[specialize] def mulNat (a : F) (k : Nat) (p : Coords F) : Coords F :=
+  ScalarProduct.naf (double a) (add a) infinity p (neg p) k
 
 /-- One chain of doublings for two products, high bits first, from bit `s` of each scalar.
 
@@ -220,9 +214,9 @@ At a point with `y = 0`, the result has `Z = 0`, the point at infinity. -/
 @[inline] def add (a : Fin m) (p q : Jacobian m) : Jacobian m :=
   ofCoords (Coords.add a p.toCoords q.toCoords)
 
-/-- `k P` on the integers mod `m`, for `k < 2^fuel`, by double and add on the bits of `k`. -/
-@[inline] def mulBits (a : Fin m) (fuel k : Nat) (p : Jacobian m) : Jacobian m :=
-  ofCoords (Coords.mulBits a fuel k p.toCoords)
+/-- `k P` on the integers mod `m`, with the curve's `a`. -/
+@[inline] def mulNat (a : Fin m) (k : Nat) (p : Jacobian m) : Jacobian m :=
+  ofCoords (Coords.mulNat a k p.toCoords)
 
 /-- `k P + l Q` on the integers mod `m`, for `k, l < 2^fuel`, with `pq = P + Q`. -/
 @[inline] def mulAddAux (a : Fin m) (p q pq : Jacobian m) (fuel k l : Nat) :

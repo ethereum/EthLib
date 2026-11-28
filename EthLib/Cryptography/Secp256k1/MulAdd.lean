@@ -126,7 +126,7 @@ def generatedMultiples (count : Nat) (p : Point) : Vector Coordinates count :=
   ⟨table.val.toArray, List.size_toArray.trans (table.property.trans raw.property)⟩
 
 /-- The generator multiplied by `2^128`. -/
-def generatorHighPoint : Point := Point.mulBits 129 (2^128) Point.generator
+def generatorHighPoint : Point := Point.mulNat (2^128) Point.generator
 
 /-- The generator's odd multiples for fourteen-bit windows. -/
 def generatorTable14 : Vector Coordinates 4096 := generatedMultiples 4096 Point.generator

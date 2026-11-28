@@ -120,8 +120,8 @@ theorem isOnCurve_torsionWitness : torsionWitness.isOnCurve = true := by decide 
 
 theorem torsionWitness_ne_infinity : torsionWitness ≠ infinity := by decide
 
-/-- `10069` times the witness is `O`, as the kernel computes it by double and add. -/
-theorem mulBits_torsionWitness : mulBits 14 10069 torsionWitness = infinity := by
+/-- `10069` times the witness is `O`, as the kernel computes it by the scalar product. -/
+theorem mulNat_torsionWitness : mulNat 10069 torsionWitness = infinity := by
   decide +kernel
 
 private theorem prime_10069 : Nat.Prime 10069 := by norm_num
@@ -131,7 +131,7 @@ theorem addOrderOf_torsionWitness : addOrderOf (toPoint torsionWitness) = 10069 
   have : Fact (Nat.Prime 10069) := ⟨prime_10069⟩
   refine addOrderOf_eq_prime ?_ fun h =>
     torsionWitness_ne_infinity ((toPoint_eq_zero isOnCurve_torsionWitness).mp h)
-  rw [← toPoint_mulBits 14 _ isOnCurve_torsionWitness (by decide), mulBits_torsionWitness]
+  rw [← toPoint_mulNat _ isOnCurve_torsionWitness, mulNat_torsionWitness]
   rfl
 
 /-! ## The points killed by `q` -/
@@ -214,21 +214,21 @@ theorem eq_zmultiples_generator_of_card_eq (H : AddSubgroup twist.Point)
 /-- A point on the twist passes the subgroup check of ECPAIRING exactly when it is `k P2`, `k < q`.
 
 So the check accepts exactly the points of `G_2`. -/
-theorem mulBits_order_eq_infinity_iff_exists {p : Point2} (hp : p.isOnCurve = true) :
-    mulBits 256 Fr.modulus p = infinity ↔ ∃ k < Fr.modulus, p = mulBits 256 k generator := by
-  rw [mulBits_order_eq_infinity_iff hp, nsmul_order_eq_zero_iff]
+theorem mulNat_order_eq_infinity_iff_exists {p : Point2} (hp : p.isOnCurve = true) :
+    mulNat Fr.modulus p = infinity ↔ ∃ k < Fr.modulus, p = mulNat k generator := by
+  rw [mulNat_order_eq_infinity_iff hp, nsmul_order_eq_zero_iff]
   constructor
   · intro hmem
     -- An integer multiple of `P2` is a natural multiple, and the scalar reduces mod `q`.
     obtain ⟨n, hn⟩ := (isOfFinAddOrder_of_finite _).mem_multiples_iff_mem_zmultiples.mpr hmem
     have hpos : 0 < Fr.modulus := Fr.modulus_prime.pos
     have hlt : n % Fr.modulus < Fr.modulus := Nat.mod_lt _ hpos
-    refine ⟨n % Fr.modulus, hlt, (toPoint_inj hp (isOnCurve_mulBits _ _ isOnCurve_generator)).mp ?_⟩
-    rw [toPoint_mulBits _ _ isOnCurve_generator (lt_trans hlt (by decide)), ← addOrderOf_generator,
+    refine ⟨n % Fr.modulus, hlt, (toPoint_inj hp (isOnCurve_mulNat _ isOnCurve_generator)).mp ?_⟩
+    rw [toPoint_mulNat _ isOnCurve_generator, ← addOrderOf_generator,
       mod_addOrderOf_nsmul]
     exact hn.symm
   · rintro ⟨k, hk, rfl⟩
-    rw [toPoint_mulBits _ _ isOnCurve_generator (lt_trans hk (by decide))]
+    rw [toPoint_mulNat _ isOnCurve_generator]
     exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) k
 
 end Point2

@@ -37,7 +37,7 @@ open EthLib.Execution.Evm (bufferRead)
 theorem exists_represents_of_decodePair {data : ByteArray} {index : Nat} {p : Point} {Q : Point2}
     (h : decodePair data index = .ok (p, Q)) :
     (∃ a, p.Represents a) ∧ ∃ b, Q.Represents b := by
-  obtain ⟨⟨a, ha, hp⟩, b, hb, hQ⟩ := exists_mulBits_generator_of_decodePair h
+  obtain ⟨⟨a, ha, hp⟩, b, hb, hQ⟩ := exists_mulNat_generator_of_decodePair h
   exact ⟨⟨a, by rw [Point.Represents, ZMod.val_cast_of_lt ha]; exact hp⟩,
     ⟨b, by rw [Point2.Represents, ZMod.val_cast_of_lt hb]; exact hQ⟩⟩
 
@@ -361,7 +361,7 @@ private theorem bufferRead_encodePairs {pairs : List (Point × Point2)} {i : Nat
 /-- The decoder reads back each pair of points on their curves from its 192 bytes. -/
 private theorem decodePair_encodePair {pair : Point × Point2}
     (hp : pair.1.isOnCurve = true) (hq : pair.2.isOnCurve = true)
-    (hord : Point2.mulBits 256 Fr.modulus pair.2 = .infinity) {data : ByteArray} {index : Nat}
+    (hord : Point2.mulNat Fr.modulus pair.2 = .infinity) {data : ByteArray} {index : Nat}
     (hread : bufferRead data (192 * index) 192 = encodePair pair) :
     decodePair data index = .ok pair := by
   obtain ⟨p, q⟩ := pair
@@ -402,12 +402,12 @@ theorem ecpairing_encodePairs {pairs : List (Point × Point2)}
     obtain ⟨hP, hQ⟩ := hrep i hi'
     have hon1 : (pairs[i]).1.isOnCurve = true := by
       rw [Point.Represents] at hP
-      exact hP ▸ Point.isOnCurve_mulBits _ _ Point.isOnCurve_generator
+      exact hP ▸ Point.isOnCurve_mulNat _ Point.isOnCurve_generator
     have hon2 : (pairs[i]).2.isOnCurve = true := by
       rw [Point2.Represents] at hQ
-      exact hQ ▸ Point2.isOnCurve_mulBits _ _ Point2.isOnCurve_generator
-    have hord : Point2.mulBits 256 Fr.modulus (pairs[i]).2 = .infinity :=
-      (Point2.mulBits_order_eq_infinity_iff_exists hon2).mpr ⟨_, ZMod.val_lt _, hQ⟩
+      exact hQ ▸ Point2.isOnCurve_mulNat _ Point2.isOnCurve_generator
+    have hord : Point2.mulNat Fr.modulus (pairs[i]).2 = .infinity :=
+      (Point2.mulNat_order_eq_infinity_iff_exists hon2).mpr ⟨_, ZMod.val_lt _, hQ⟩
     exact decodePair_encodePair hon1 hon2 hord hread
   have hcheck : pairingCheck pairs = decide ((List.zipWith (· * ·) a b).sum = 0) := by
     rw [Bool.eq_iff_iff, decide_eq_true_iff]

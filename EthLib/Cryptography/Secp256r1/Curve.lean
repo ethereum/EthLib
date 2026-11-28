@@ -53,16 +53,14 @@ def generator : Point :=
   affine 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
     0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
 
-/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
+/-- `k P`, left to right on the non-adjacent form of `k`.
 
 The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
-def mulBits (fuel k : Nat) (p : Point) : Point :=
-  ShortWeierstrass.Point.mulBits id Fin.inverse id a fuel k p
+def mulNat (k : Nat) (p : Point) : Point :=
+  ShortWeierstrass.Point.mulNat id Fin.inverse id a k p
 
-/-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`.
-
-`n` has 256 bits, so 256 steps cover every scalar. -/
-def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
+/-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`. -/
+def mul (k : Fn) (p : Point) : Point := mulNat k.val p
 
 /-- `a` in Montgomery form. -/
 def aMontgomery : Montgomery := Montgomery.ofFin a

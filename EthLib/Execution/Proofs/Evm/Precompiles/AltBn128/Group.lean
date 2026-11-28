@@ -40,14 +40,10 @@ theorem ecmul_toPoint {fork : EthLib.Base.Fork} {data : ByteArray} {gas : Nat} {
     (h : ecmul fork data gas = .ok out) :
     let n := Base.ByteOrder.ofBE (bufferRead data 64 32)
     ∃ p0, bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
-      out = ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩ ∧
-      (Point.mulBits 256 n p0).toPoint = n • p0.toPoint := by
+      out = ⟨(g1ToBytes (Point.mulNat n p0)).toArray⟩ ∧
+      (Point.mulNat n p0).toPoint = n • p0.toPoint := by
   obtain ⟨-, p0, h0, hout⟩ := (ecmul_eq_ok_iff fork data gas out).mp h
-  refine ⟨p0, h0, hout, Point.toPoint_mulBits 256 _ (bytesToG1_isOnCurve h0) ?_⟩
-  -- A 32-byte scalar is below `256 ^ 32 = 2 ^ 256`.
-  have hlt := Base.ByteOrder.ofBE_lt (bufferRead data 64 32)
-  rw [bufferRead_length] at hlt
-  simpa using hlt
+  exact ⟨p0, h0, hout, Point.toPoint_mulNat _ (bytesToG1_isOnCurve h0)⟩
 
 /-! ## Each output is a point of `G_1` -/
 
@@ -76,14 +72,14 @@ theorem bytesToG1_ecmul {fork : EthLib.Base.Fork} {data : ByteArray} {gas : Nat}
     {p0 : Point} (h : ecmul fork data gas = .ok out)
     (h0 : bytesToG1 (bufferRead data 0 64) = .ok p0) :
     bytesToG1 (bufferRead out 0 64) =
-      .ok (Point.mulBits 256 (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0) := by
+      .ok (Point.mulNat (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0) := by
   obtain ⟨-, p0', h0', rfl⟩ := (ecmul_eq_ok_iff fork data gas out).mp h
   -- The decoder is a function, so the point of the call is the named one.
   obtain rfl : p0' = p0 := Except.ok.inj (h0'.symm.trans h0)
   have hread := bufferRead_toArray
-    (g1ToBytes (Point.mulBits 256 (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0'))
+    (g1ToBytes (Point.mulNat (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0'))
   rw [length_g1ToBytes] at hread
   rw [hread]
-  exact bytesToG1_g1ToBytes (Point.isOnCurve_mulBits _ _ (bytesToG1_isOnCurve h0))
+  exact bytesToG1_g1ToBytes (Point.isOnCurve_mulNat _ (bytesToG1_isOnCurve h0))
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

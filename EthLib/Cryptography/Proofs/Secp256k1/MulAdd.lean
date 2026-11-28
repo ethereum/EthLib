@@ -154,7 +154,7 @@ private theorem scale_generator :
   let y : Fp := 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
   have hs : (Point.affine (beta * x) y).isOnCurve = true := by decide +kernel
   have he : Point.mul lambda .generator = Point.affine (beta * x) y := by
-    rw [Point.mul, Point.mulBits_eq_jacobian]
+    rw [Point.mul, Point.mulNat_eq_jacobian]
     decide +kernel
   rw [← Point.toPoint_mul lambda Point.isOnCurve_generator, he, Point.toPoint_affine hs]
   change scale (Point.toPoint (.affine x y)) = _
@@ -1726,8 +1726,8 @@ private theorem generatorTable_spec : TableSpec generatorTable14 (Point.toPoint 
 private theorem generatorHighTable_spec :
     TableSpec generatorHighTable14 ((2^128 : Nat) • Point.toPoint .generator) := by
   have h := generatedMultiples_spec 4096
-    (Point.isOnCurve_mulBits 129 (2^128) Point.isOnCurve_generator)
-  rw [Point.toPoint_mulBits 129 (2^128) Point.isOnCurve_generator (by decide)] at h
+    (Point.isOnCurve_mulNat (2^128) Point.isOnCurve_generator)
+  rw [Point.toPoint_mulNat (2^128) Point.isOnCurve_generator] at h
   exact h
 
 private theorem endomorphismTable_spec
