@@ -202,21 +202,26 @@ def computeKzgProof (setup : TrustedSetup) (blob : Blob) (zBytes : Bytes32) :
 
 /-- Verify a KZG proof that `p(z) = y`, given only the setup point `[s]_2`.
 
-It checks `e(P - [y], -[1]) * e(proof, [s] - [z]) = 1`, where `P` commits to `p`.
+It checks `e(P - [y] + [z] proof, -[1]) * e(proof, [s]) = 1`, where `P` commits to `p`.
+
+By bilinearity this is the check `e(P - [y], -[1]) * e(proof, [s] - [z]) = 1`.
 
 A caller that holds only `[s]_2`, such as the point evaluation precompile, can use it. -/
 def verifyKzgProofWith (s : G2)
     (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
-  -- `[s - z]_2 = [s]_2 + (-z) [1]_2`.
+  -- `e(proof, [s - z]_2) = e(proof, [s]_2) * e([z] proof, -[1]_2)`.
   --
-  -- Here `[s]_2` is entry 1 of the monomial form of the `G2` setup, which the caller passes.
-  let X_minus_z : G2 := Bls.G2.add s (Bls.G2.mul Bls.G2.generator (-z))
-  -- `P - [y]_1 = P + (-y) [1]_1`, on decoded points.
+  -- So the product by `z` runs in `G1`, over `Fp`, and not in `G2`, over `Fp2`.
+  --
+  -- `P - [y]_1 + [z] proof = P + (-y) [1]_1 + [z] proof`, on decoded points.
   let P_minus_y : G1 := Bls.G1.add commitmentG1 (Bls.G1.mul Bls.G1.generator (-y))
-  -- The proof is valid when `e(P - [y]_1, -[1]_2) * e(proof, [s - z]_2) = 1`.
+  let lhs : G1 := Bls.G1.add P_minus_y (Bls.G1.mul proofG1 z)
+  -- Here `[s]_2` is entry 1 of the monomial form of the `G2` setup, which the caller passes.
+  --
+  -- The proof is valid when `e(P - [y]_1 + [z] proof, -[1]_2) * e(proof, [s]_2) = 1`.
   let pairs : Array (G1 × G2) := #[
-    (P_minus_y, Bls.G2.neg Bls.G2.generator),
-    (proofG1, X_minus_z)
+    (lhs, Bls.G2.neg Bls.G2.generator),
+    (proofG1, s)
   ]
   Bls.pairingCheck pairs
 

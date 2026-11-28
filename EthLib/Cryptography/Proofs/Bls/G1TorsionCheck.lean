@@ -11,7 +11,7 @@ public import EthLib.Cryptography.Proofs.Bls.G1NatCheck
 
 A point `P` of `G1` lies in the subgroup of order `r` when `[r] P` is the point at infinity.
 
-The kernel can check this for a concrete point by running double and add.
+The kernel can check this for a concrete point by running the scalar product.
 
 The BLS parameter is `t = -0xd201000000010000`, and `r = t^4 - t^2 + 1`.
 
@@ -134,29 +134,16 @@ theorem coords_zero : coords (G1.zero : G1) = zero := by
   rw [coords_eq, G1.map_zero]
   rfl
 
-theorem coords_mulNatAux (fuel : Nat) (q : G1) (k : Nat) :
-    coords (G1.mulNatAux fuel q k) = mulNatAux fuel (coords q) k := by
-  induction fuel generalizing q k with
-  | zero => exact coords_zero
-  | succ fuel ih =>
-    rw [G1.mulNatAux, mulNatAux]
-    simp only [beq_eq, Bool.cond_eq_ite, beq_iff_eq]
-    by_cases h0 : k = 0
-    · simp only [h0, ↓reduceIte]
-      exact coords_zero
-    simp only [h0, ↓reduceIte]
-    by_cases h1 : k % 2 = 1
-    · simp only [h1, ↓reduceIte, coords_add, ih, coords_double]
-    · simp only [h1, ↓reduceIte, ih, coords_double]
+theorem coords_mulNat (q : G1) (k : Nat) : coords (G1.mulNat q k) = mulNat (coords q) k := by
+  rw [G1.mulNat, mulNat, ScalarProduct.map_naf coords coords_double coords_add, coords_zero,
+    coords_neg]
 
 /-! ## The check -/
 
 /-- The check computes the coordinates of the chain `G1.mulModulus`, step for step. -/
 private theorem coords_mulModulus (q : G1) :
     coords (G1.mulModulus q) = mulModulus (coords q) := by
-  have hz (p : G1) : G1.mulNat p blsX = G1.mulNatAux 64 p blsX :=
-    (mulNatAux_eq 64 p blsX (by decide)).symm
-  simp only [G1.mulModulus, mulModulus, hz, coords_add, coords_mulNatAux, coords_neg]
+  simp only [G1.mulModulus, mulModulus, coords_add, coords_mulNat, coords_neg]
 
 /-- A point `(x, y, 1)` of the curve whose `x` passes the check has order dividing `r`. -/
 theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)

@@ -1,7 +1,10 @@
 module
 
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Basic
-public import Mathlib.Tactic
+public import Mathlib.Basic.Finite.Defs
+import Mathlib.Data.Fintype.Pi
+import Mathlib.Data.Fintype.Card
+import Mathlib.Tactic.FinCases
 
 /-!
 # Proofs: Keccak-f[1600] is a permutation
@@ -211,8 +214,12 @@ theorem columnStep_columnStep (α β : Fin 5) (s : UInt64) (hs : s.toNat ≤ 32)
     columnStep α β s (columnStep α β s c) = columnStep (α + α) (β + β) (s + s) c := by
   funext x
   simp only [columnStep]
+  have hadd (a b d : Fin 5) : a + b + d = a + (b + d) :=
+    Fin.ext (by simp only [Fin.val_add]; omega)
+  have hrc (a b d : Fin 5) : a + b + d = a + d + b :=
+    Fin.ext (by simp only [Fin.val_add]; omega)
   rw [rotl_xor _ _ _ (by omega), rotl_xor _ _ _ (by omega), rotl_rotl _ _ hs,
-    add_assoc x α α, add_assoc x β β, add_right_comm x β α]
+    hadd x α α, hadd x β β, hrc x β α]
   exact xor_three_pairs _ _ _ _ _ _
 
 /-- If the square of the map is injective, so is the map. -/
@@ -312,7 +319,11 @@ theorem keccakF_injective : Function.Injective keccakF :=
   roundsFrom_injective 0
 
 instance : Finite State :=
-  have : Finite UInt64 := Finite.of_injective UInt64.toFin fun _ _ => UInt64.toFin_inj.mp
+  have : Fintype UInt64 := Fintype.ofEquiv (Fin UInt64.size)
+    { toFun := UInt64.ofFin
+      invFun := UInt64.toFin
+      left_inv := fun _ => rfl
+      right_inv := fun _ => rfl }
   Finite.of_injective State.lane fun _ _ h => State.ext_lane fun x y => congrFun (congrFun h x) y
 
 /-- Keccak-f[1600] is a permutation of the 2^1600 states, as FIPS 202 §3 states. -/

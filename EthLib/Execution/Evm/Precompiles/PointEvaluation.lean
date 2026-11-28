@@ -118,7 +118,7 @@ def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
   let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof proof
   -- `[tau]_2`, point 1 of the G2 monomial setup, the only point of the setup that the check reads.
   let tau ← (TrustedSetup.g2MonomialOfHex 1).mapError fun _ => .invalidTrustedSetup
-  -- The KZG check: `e(P - [y]_1, -[1]_2) * e(proof, [tau - z]_2) = 1`, for the commitment `P`.
+  -- The KZG check: `e(P - [y]_1 + [z] proof, -[1]_2) * e(proof, [tau]_2) = 1`, for the commitment `P`.
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
 /-- The output of every successful call: two 32-byte big-endian words.

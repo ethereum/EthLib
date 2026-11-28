@@ -1,11 +1,12 @@
 module
 
 public import EthLib.Cryptography.Bls.Constants
+public import EthLib.Cryptography.ScalarProduct
 
 /-!
 # Proofs: the torsion check of `G1`, on naturals
 
-These definitions run double and add on Jacobian coordinates held as naturals below `p`.
+These definitions run the scalar product on Jacobian coordinates held as naturals below `p`.
 
 They read only the modulus `p` and the BLS parameter, so their kernel checks import nothing else.
 
@@ -113,14 +114,8 @@ def add (p q : Coords) : Coords :=
 /-- Negation `(x, p - y, z)` mod `p`, as the negation of `G1` computes it. -/
 def neg (q : Coords) : Coords := (q.1, (Fp.modulus - q.2.1) % Fp.modulus, q.2.2)
 
-/-- Double and add with fuel, as the scalar product of `G1` runs it. -/
-def mulNatAux : Nat → Coords → Nat → Coords
-  | 0, _, _ => zero
-  | fuel + 1, p, k =>
-    bif Nat.beq k 0 then zero
-    else
-      let half := mulNatAux fuel (double p) (k / 2)
-      bif Nat.beq (k % 2) 1 then add p half else half
+/-- The scalar product, as the scalar product of `G1` runs it. -/
+def mulNat (p : Coords) (k : Nat) : Coords := ScalarProduct.naf double add zero p (neg p) k
 
 /-! ## The check -/
 
@@ -139,17 +134,21 @@ def mulModulus (q : Coords) : Coords :=
   --
   -- These take about as many doublings as one product by `r`, but far fewer additions.
   --
-  -- Double and add takes at most one doubling for each bit of the scalar.
+  -- The scalar product first doubles the point at infinity and adds to it, which costs nothing.
   --
-  -- It takes at most one addition for each set bit.
+  -- After that it takes at most one doubling for each bit of the scalar.
   --
-  -- `|t|` has 64 bits, six of them set, so the four products by `|t|` take at most 256 doublings.
+  -- It takes one addition for each nonzero digit of the non-adjacent form of the scalar.
   --
-  -- The four products take at most 24 additions, and the chain adds two more.
+  -- `|t|` has 64 bits, so the four products by `|t|` take at most 256 doublings.
   --
-  -- One product by `r` would take up to 255 doublings and 134 additions.
-  let a := mulNatAux 64 (mulNatAux 64 q blsX) blsX
-  add (mulNatAux 64 (mulNatAux 64 (add a (neg q)) blsX) blsX) q
+  -- Its non-adjacent form has six nonzero digits, so the four products take at most 24 additions.
+  --
+  -- The chain adds two more.
+  --
+  -- One product by `r` would take at most 255 doublings and 60 additions.
+  let a := mulNat (mulNat q blsX) blsX
+  add (mulNat (mulNat (add a (neg q)) blsX) blsX) q
 
 /-- The candidate root of `x^3 + 4`, as `Fp.sqrt` computes it. -/
 def rootCandidate (x : Nat) : Nat :=

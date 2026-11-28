@@ -1352,6 +1352,47 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
+  The builder must follow a call only if `W` holds at each address whose storage the call wiped (`Blocks.KeepsIf`).
+  `Blocks.applyBody_tracks`, `Blocks.stateTransition_rebuild` and `Blocks.stateTransition_rebuild_nonce` take the hypothesis that `W` holds at each address whose storage the body wiped.
+  `Blocks.keepsFollowable_rebuildableBlock` (`Execution/Proofs/Blocks/BodyFollow.lean`) gives `KeepsFollowable` with `W` true everywhere, and each of its fields gives a `Blocks.KeepsIf` in place of a pair.
+  `Blocks.stateTransition_rebuild_of_rebuildableBlock` and `Blocks.stateTransition_rebuild_nonce_of_rebuildableBlock` keep their statements, with `W` true everywhere.
+
+- In Lean, the pairing check of BLS12-381 runs one Miller loop for all its pairs, which squares its accumulator once per bit ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.millerSteps` (`Cryptography/Bls/Pairing.lean`) now walks a list of `Bls.MillerState`, a new structure that holds a pair and its point `T`, and `Bls.millerLines` runs one bit for each pair.
+  `Bls.millerDouble` no longer squares `f`: the loop squares it once per bit.
+  `Bls.millerLoopAll` is the loop of a list of pairs, and `Bls.millerLoop` is its case of one pair, with an unchanged signature.
+  `Bls.pairingCheck` runs `Bls.millerLoopAll` on the pairs without a point at infinity, and `Bls.pairingCheck_eq_finalExp_prod` keeps its statement.
+  `Bls.millerSteps_eq_prod` and `Bls.millerLoopAll_eq_prod` (`Proofs/Bls/PairingCongr.lean`) prove that the joint loop is the product of the loops of its pairs.
+  `Bls.millerDouble_snd` and `Bls.finalExponentiation_millerDouble` (`Proofs/Bls/MillerLoop.lean`, `MillerChain.lean`) no longer include the square of `f`.
+  `Bls.millerSteps_succ` and `Bls.finalExponentiation_millerSteps` (`MillerChain.lean`) state the loop on a list of one pair, with the square first.
+  `Bls.map_millerSteps` (`Proofs/Bls/PairingMap.lean`) takes the list of pairs; `Bls.MillerState.map`, `Bls.map_millerLines` and `Bls.map_millerLoopAll` are new.
+
+- In Lean, every short Weierstrass curve computes `k P` with one scalar product, left to right on the non-adjacent form of `k` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  `ScalarProduct.naf` (`Cryptography/ScalarProduct.lean`) takes the doubling, the addition, the point at infinity, the point and its negation of a curve.
+  `ScalarProduct.nafSteps` runs its steps, and `ScalarProduct.naf_spec`, `ScalarProduct.valid_nafSteps`, `ScalarProduct.map_naf` and `ScalarProduct.map_nafSteps` (`Cryptography/Proofs/ScalarProduct.lean`) prove it once, from the group law of a curve or a change of representation.
+  `G1.mulNat` (`Cryptography/Bls/G1.lean`) and the checker's `G1.TorsionCheck.mulNat` on naturals (`Proofs/Bls/G1NatCheck.lean`) run it.
+  The fuel-based double and add of `Cryptography/Jacobian.lean` is removed: `Jacobian.Coords.mulBits`, `Jacobian.mulBits` and `ShortWeierstrass.Point.mulBits` become `Jacobian.Coords.mulNat`, `Jacobian.mulNat` and `ShortWeierstrass.Point.mulNat`, with no fuel argument.
+  So do the `mulBits` of alt_bn128 (`Point`, `Point2`), secp256k1 and secp256r1.
+  Every declaration whose name contains `mulBits` is renamed with `mulNat`, with no fuel argument and no hypothesis `k < 2 ^ fuel`: for instance `toPoint_mulBits`, `isOnCurve_mulBits_field`, `mulBits_eq_jacobian`, `mulBits_order_eq_infinity_iff`, `exists_eq_mulBits_generator` and `exists_mulBits_generator_of_decodePair`.
+  `Jacobian.Coords.mulBits_scalar_zero`, `Jacobian.Coords.mulBits_succ`, `Jacobian.mulBits_zero` and `Jacobian.mulBits_succ` are removed.
+  `Jacobian.Coords.neg`, `Jacobian.Coords.neg_spec`, `Jacobian.Coords.map_neg` and `Jacobian.Coords.mulNat_spec` are new.
+  The subgroup check of SEC 1 (`Sec1.validatePublicKey`) and the ECMUL and ECPAIRING precompiles return the same results.
+
+- In Lean, the KZG opening check multiplies the proof by `z` in `G1`, in place of the generator of `G2` ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Kzg.verifyKzgProofWith` (`Cryptography/Kzg/Core.lean`) checks `e(P - [y] + [z] proof, -[1]) * e(proof, [s]) = 1`, which is the former check by bilinearity.
+  `Kzg.verifyKzgProofWith_iff` keeps its statement; a proof that unfolds the definition sees the new pairs.
+
+- In Lean, the scalar product of `G1` and `G2` runs left to right on the non-adjacent form of the scalar, so it adds about a third as often as the bits, and with the mixed formulas on a point with `Z = 1` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  `G1.mulNat` (`Cryptography/Bls/G1.lean`) runs `ScalarProduct.naf` by structural recursion, so the kernel evaluates it, and it gives the same points as before with other Jacobian coordinates.
+  `G1.mulNat_def`, `G1.mulNatAux`, `G1.mulNatAux_eq` and `G1.map_mulNatAux` (`Cryptography/Proofs/Bls/CurveMap.lean`), and their `G2` names, are removed.
+  `G1.TorsionCheck.mulNatAux` and `coords_mulNatAux` become `mulNat` and `coords_mulNat` (`Cryptography/Proofs/Bls/G1NatCheck.lean`, `G1TorsionCheck.lean`).
+  `CofactorCertificate.negXAux`, `clearAux`, `map_negXAux`, `map_clearAux`, `negXAux_eq` and `clearAux_eq` (`Cryptography/Proofs/Bls/CofactorCertificateHelpers.lean`) are removed: the kernel checks run `HashToCurve.clearCofactor` itself.
+  The certificates `nsmul_zero_cert` (`G1Rotation.lean`, `CofactorCertificateHelpers.lean`), `nsmul_ne_cert` (`G1Rotation.lean`) and `not_nsmul_cert` (`CofactorIndependence.lean`) lose their fuel argument and its bound.
+  The `*_clear_zero` witnesses (`CofactorPoints.lean`) and `cofactor_zero_cert` state their check on `HashToCurve.clearCofactor` in place of `clearAux`.
+  `G1.Law.mulNat_one`, `G1.mul_one` and `G2.mul_one` (`Cryptography/Proofs/Kzg/CeremonyChecks.lean`) no longer assume a finite point.
+
 - In Lean, the endomorphisms `psi` and `psi2` of the twist read Jacobian coordinates, so the cofactor clearing of G2 and the subgroup check of G2 invert no element that depends on the point ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   `G2.psi` (`Cryptography/Bls/G2.lean`) maps a finite point `(X, Y, Z)` to `(c1 conj(X), c2 conj(Y), conj(Z))`, and `HashToCurve.psi2` (`Cryptography/Bls/HashToCurve.lean`) maps it to `(c1Psi2 X, -Y, Z)`, in place of affine points with `Z = 1`.
   They give the same points of the curve as before, with other Jacobian coordinates.

@@ -108,16 +108,16 @@ theorem toPoint_add {p q : Point2} (hp : p.isOnCurve = true) (hq : q.isOnCurve =
 
 /-! ## Scalar multiplication -/
 
-theorem isOnCurve_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  ShortWeierstrass.Point.isOnCurve_mulBits_field embedding rfl Jacobian.Coords.Embedding.id
-    (fun _ => rfl) (fun _ => rfl) rfl fp2_two_ne_zero fuel k hp
+theorem isOnCurve_mulNat (k : Nat) {p : Point2} (hp : p.isOnCurve = true) :
+    (mulNat k p).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_mulNat_field embedding rfl Jacobian.Coords.Embedding.id
+    (fun _ => rfl) (fun _ => rfl) rfl fp2_two_ne_zero k hp
 
-/-- Double and add computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p :=
-  ShortWeierstrass.Point.toPoint_mulBits_field embedding rfl Jacobian.Coords.Embedding.id
-    (fun _ => rfl) (fun _ => rfl) rfl fp2_two_ne_zero fuel k hp hk
+/-- The scalar product computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Point2} (hp : p.isOnCurve = true) :
+    toPoint (mulNat k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulNat_field embedding rfl Jacobian.Coords.Embedding.id
+    (fun _ => rfl) (fun _ => rfl) rfl fp2_two_ne_zero k hp
 
 /-! ## Points and group elements correspond -/
 
@@ -137,17 +137,17 @@ theorem toPoint_surjective (P : twist.Point) :
 
 /-! ## The subgroup check of ECPAIRING -/
 
-/-- On the twist, `q Q = O` by double and add exactly when `q` kills the group element of `Q`.
+/-- On the twist, `q Q = O` by the scalar product exactly when `q` kills the group element of `Q`.
 
 So the subgroup check of ECPAIRING accepts exactly the points whose order divides `q`. -/
-theorem mulBits_order_eq_infinity_iff {p : Point2} (hp : p.isOnCurve = true) :
-    mulBits 256 Fr.modulus p = infinity ↔ Fr.modulus • toPoint p = 0 := by
-  rw [← toPoint_eq_zero (isOnCurve_mulBits _ _ hp), toPoint_mulBits _ _ hp (by decide)]
+theorem mulNat_order_eq_infinity_iff {p : Point2} (hp : p.isOnCurve = true) :
+    mulNat Fr.modulus p = infinity ↔ Fr.modulus • toPoint p = 0 := by
+  rw [← toPoint_eq_zero (isOnCurve_mulNat _ hp), toPoint_mulNat _ hp]
 
 /-- The same check, as a divisibility of the order. -/
-theorem mulBits_order_eq_infinity_iff_addOrderOf_dvd {p : Point2} (hp : p.isOnCurve = true) :
-    mulBits 256 Fr.modulus p = infinity ↔ addOrderOf (toPoint p) ∣ Fr.modulus := by
-  rw [mulBits_order_eq_infinity_iff hp, addOrderOf_dvd_iff_nsmul_eq_zero]
+theorem mulNat_order_eq_infinity_iff_addOrderOf_dvd {p : Point2} (hp : p.isOnCurve = true) :
+    mulNat Fr.modulus p = infinity ↔ addOrderOf (toPoint p) ∣ Fr.modulus := by
+  rw [mulNat_order_eq_infinity_iff hp, addOrderOf_dvd_iff_nsmul_eq_zero]
 
 end Point2
 

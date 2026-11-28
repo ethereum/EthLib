@@ -137,25 +137,22 @@ theorem eq_root_of_dvd {q l1 l2 : Nat} (hq : q.Prime) (hsum : (l1 + l2 + 1) % q 
 /-! ## Computations on points -/
 
 /-- A computation of `[n] P = 0` gives the same fact in the curve group. -/
-theorem nsmul_zero_cert {P : G1} (hp : Valid P) (n fuel : Nat) (hn : n < 2 ^ fuel)
-    (hc : (mulNatAux fuel P n).isInfinity = true) : n • toPoint P = 0 := by
+theorem nsmul_zero_cert {P : G1} (hp : Valid P) (n : Nat)
+    (hc : (mulNat P n).isInfinity = true) : n • toPoint P = 0 := by
   rw [← toPoint_mulNat hp]
-  apply (isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulNat hp n)).mp
-  rwa [← mulNatAux_eq fuel P n hn]
+  exact (isInfinity_eq_true_iff_toPoint_eq_zero (valid_mulNat hp n)).mp hc
 
 /-- A computation of `Q - [n] P ≠ 0` gives `Q ≠ [n] P` in the curve group. -/
-theorem nsmul_ne_cert {P Q : G1} (hp : Valid P) (hq : Valid Q) (n fuel : Nat)
-    (hn : n < 2 ^ fuel) (hc : (add Q (neg (mulNatAux fuel P n))).isInfinity = false) :
+theorem nsmul_ne_cert {P Q : G1} (hp : Valid P) (hq : Valid Q) (n : Nat)
+    (hc : (add Q (neg (mulNat P n))).isInfinity = false) :
     toPoint Q ≠ n • toPoint P := by
   intro he
-  rw [mulNatAux_eq fuel P n hn] at hc
   have hv := valid_add hq (valid_neg (valid_mulNat hp n))
-  have hz : (add Q (neg (mulNatAux fuel P n))).isInfinity = true := by
-    rw [mulNatAux_eq fuel P n hn]
+  have hz : (add Q (neg (mulNat P n))).isInfinity = true := by
     apply (isInfinity_eq_true_iff_toPoint_eq_zero hv).mpr
     rw [toPoint_add hq (valid_neg (valid_mulNat hp n)), toPoint_neg (valid_mulNat hp n),
       toPoint_mulNat hp, he, add_neg_cancel]
-  rw [mulNatAux_eq fuel P n hn, hc] at hz
+  rw [hc] at hz
   exact Bool.noConfusion hz
 
 /-- A computation of `P + Q + R = 0` gives the same fact in the curve group. -/

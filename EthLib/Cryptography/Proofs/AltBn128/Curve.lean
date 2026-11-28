@@ -16,7 +16,7 @@ The addition rule of SEC 1 v2 §2.2.1 is that group law.
 
 Points on the curve and group elements correspond one to one.
 
-Addition, negation and double and add map to the group operations.
+Addition, negation and the scalar product map to the group operations.
 
 The proofs are those of every short Weierstrass curve, for the map of `Fp` into `ZMod p`.
 -/
@@ -115,18 +115,18 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve (0) (3)
     (ofJacobian p).isOnCurve = true ∧ toPoint (ofJacobian p) = Jacobian.toPoint (0) (3) p :=
   ShortWeierstrass.Point.ofJacobian_spec embedding toZ_eq hp
 
-theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  ShortWeierstrass.Point.isOnCurve_mulBits embedding toZ_eq
+theorem isOnCurve_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    (mulNat k p).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_mulNat embedding toZ_eq
     ShortWeierstrass.Point.Representation.fin
-    toZ_a two_ne_zero' fuel k hp
+    toZ_a two_ne_zero' k hp
 
-/-- Double and add computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p :=
-  ShortWeierstrass.Point.toPoint_mulBits embedding toZ_eq
+/-- The scalar product computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    toPoint (mulNat k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulNat embedding toZ_eq
     ShortWeierstrass.Point.Representation.fin
-    toZ_a two_ne_zero' fuel k hp hk
+    toZ_a two_ne_zero' k hp
 
 /-! ## Points and group elements correspond -/
 

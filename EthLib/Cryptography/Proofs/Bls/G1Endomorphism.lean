@@ -206,9 +206,8 @@ theorem map_sigma {K L : Type} [BaseField K] [BaseField L] (f : BaseField.Hom K 
 /-- `σ(g_1) = [-t^2] g_1`, checked by the kernel in the model of `Fp`. -/
 theorem projectiveEq_sigma_generator :
     projectiveEq (sigma (generator : G1)) (neg (mulNat (mulNat generator blsX) blsX)) = true := by
-  rw [← mulNatAux_eq 64 generator blsX (by decide),
-    ← mulNatAux_eq 64 _ blsX (by decide), ← map_projectiveEq Fp.toModel.toHom, map_sigma,
-    map_neg_fn, map_mulNatAux, map_mulNatAux, map_generator]
+  rw [← map_projectiveEq Fp.toModel.toHom, map_sigma, map_neg_fn, map_mulNat, map_mulNat,
+    map_generator]
   decide +kernel
 
 theorem sigmaHom_generator :

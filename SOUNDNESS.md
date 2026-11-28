@@ -1111,11 +1111,11 @@ So an IPv6 endpoint without `quic6` has no QUIC port, as `quic_of_endpoints` sta
 
 The alt_bn128 theorems check the constants and the group law of `G_1`, which the ECADD, ECMUL and ECPAIRING precompiles use.
 `modulus_prime` (`Proofs/AltBn128/Field.lean`) proves that the base field modulus `p` and the group order `q` are prime.
-`toPoint_add` and `toPoint_mulBits` (`Proofs/AltBn128/Curve.lean`) prove that addition and double and add agree with the group law of `y^2 = x^3 + 3` over `ZMod p`.
+`toPoint_add` and `toPoint_mulNat` (`Proofs/AltBn128/Curve.lean`) prove that addition and the scalar product agree with the group law of `y^2 = x^3 + 3` over `ZMod p`.
 `card_point` (`Proofs/AltBn128/Order.lean`) proves that this group has `q` points, so the cofactor is 1.
 
 `instField` (`Proofs/AltBn128/Fp2.lean`) proves that `Fp2` is a field, and `toPoint_add` (`Proofs/AltBn128/Twist.lean`) proves the group law of the twist that holds `G_2`.
-`mulBits_order_eq_infinity_iff` proves that the `G_2` subgroup check of ECPAIRING accepts exactly the points `Q` on the twist with `q Q = O`.
+`mulNat_order_eq_infinity_iff` proves that the `G_2` subgroup check of ECPAIRING accepts exactly the points `Q` on the twist with `q Q = O`.
 `addOrderOf_generator` (`Proofs/AltBn128/G2Order.lean`) proves that the generator `P2` of EIP-197 lies on the twist and has order `q`.
 `instField` (`Proofs/AltBn128/Fp12.lean`) proves that `Fp12`, where the pairing lands, is a field with the product of the specification.
 `card_eq` proves that it has `p^12` elements, and `irreducible_poly` that `X^12 - 18 X^6 + 82` is irreducible over `ZMod p`.
@@ -1144,8 +1144,8 @@ It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `
 `Ate.ateValue_add_right` proves that they are linear in `Q'` on the untwist of `G_2`.
 `Ate.pairing_eq_ateValue` proves that the pairing of a finite `P` on the curve and a `Q` on the twist whose untwist lies in `G_2` is that value.
 `Point2.nsmul_order_eq_zero_iff` (`Proofs/AltBn128/G2Torsion.lean`) proves that every point `Q` with `q Q = O` on the twist is a multiple of `P2`, as EIP-197 says.
-`Point2.mulBits_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulBits_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
-`exists_mulBits_generator_of_decodePair` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) combines them: every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
+`Point2.mulNat_order_eq_infinity_iff_exists` restates it for the subgroup check of ECPAIRING, and `Point.exists_eq_mulNat_generator` (`Proofs/AltBn128/Order.lean`) does the same for `P1`.
+`exists_mulNat_generator_of_decodePair` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) combines them: every pair that ECPAIRING decodes is a pair of multiples of the generators, where the law above holds.
 `exists_represents_of_decodePairs` and `exists_represents_of_ecpairing` (`Execution/Proofs/Evm/Precompiles/AltBn128/PairingProduct.lean`) lift this to lists of scalars `a_i` and `b_i` in `ZMod q`, for every successful decoding and every successful call.
 `ecpairing_eq_one_iff` and `ecpairing_eq_zero_iff` apply `AltBn128.pairingLaws`, with no hypothesis on the pairing.
 On a successful call, they prove that ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`, and the word 0 otherwise.
@@ -1159,7 +1159,7 @@ So each point that ECPAIRING decodes has one encoding.
 `bytesToG1_ecadd` and `bytesToG1_ecmul` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) prove that the output of a call of ECADD or ECMUL that succeeds decodes to that sum or that product.
 
 `decodePair_eq_ok_iff` (`Execution/Proofs/Evm/Precompiles/AltBn128/Pairing.lean`) proves that a pair of ECPAIRING decodes exactly when its two points decode and `q Q = O` holds for its point `Q` of the twist.
-`Point.mulBits_order` (`Proofs/AltBn128/Order.lean`) proves `q P = O` for every point `P` on the curve.
+`Point.mulNat_order` (`Proofs/AltBn128/Order.lean`) proves `q P = O` for every point `P` on the curve.
 So the curve equation is enough for `G_1`, as EIP-197 says, and the decoder checks the order of the point of the twist only.
 
 ### secp256r1

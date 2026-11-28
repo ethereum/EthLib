@@ -76,11 +76,11 @@ abbrev neg (p : Point) : Point := ShortWeierstrass.Point.neg p
 /-- The generator `P1 = (1, 2)` of `G_1`, from EIP-197. -/
 def generator : Point := affine 1 2
 
-/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
+/-- `k P`, left to right on the non-adjacent form of `k`.
 
 The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
-def mulBits (fuel k : Nat) (p : Point) : Point :=
-  ShortWeierstrass.Point.mulBits id Fin.inverse id 0 fuel k p
+def mulNat (k : Nat) (p : Point) : Point :=
+  ShortWeierstrass.Point.mulNat id Fin.inverse id 0 k p
 
 end Point
 

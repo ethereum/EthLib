@@ -32,8 +32,8 @@ namespace Point
 /-- The base point is on the curve. -/
 theorem isOnCurve_generator : generator.isOnCurve = true := by decide +kernel
 
-/-- `n G = O`, as the kernel computes it by double and add. -/
-theorem mulBits_order_generator : mulBits 256 Fn.modulus generator = infinity := by decide +kernel
+/-- `n G = O`, as the kernel computes it by the scalar product. -/
+theorem mulNat_order_generator : mulNat Fn.modulus generator = infinity := by decide +kernel
 
 /-- `G` is not the point at infinity. -/
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := fun h =>
@@ -42,7 +42,7 @@ theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := fun h =>
 /-- `G` has order `n`, a prime. -/
 theorem addOrderOf_generator : addOrderOf (toPoint generator) = Fn.modulus := by
   refine addOrderOf_eq_prime ?_ toPoint_generator_ne_zero
-  rw [← toPoint_mulBits 256 _ isOnCurve_generator (by decide), mulBits_order_generator]
+  rw [← toPoint_mulNat _ isOnCurve_generator, mulNat_order_generator]
   rfl
 
 end Point

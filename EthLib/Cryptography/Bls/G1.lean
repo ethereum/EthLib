@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Fp
 public import EthLib.Cryptography.Bls.Fr
+public import EthLib.Cryptography.ScalarProduct
 
 /-!
 # `G1`
@@ -190,14 +191,11 @@ def toAffine (p : G1 F) : F × F :=
     let zinv3 := zinv2 * zinv
     (p.x * zinv2, p.y * zinv3)
 
-/-- Scalar multiplication via double-and-add. -/
-def mulNat (p : G1 F) (k : Nat) : G1 F :=
-  if k = 0 then zero
-  else
-    let half := mulNat (double p) (k / 2)
-    if k % 2 = 1 then add p half else half
-termination_by k
-decreasing_by omega
+/-- Scalar multiplication, left to right on the non-adjacent form of `k`.
+
+Each addition adds `p` or `-p`, so it takes the shorter mixed formulas when `p` has `z = 1`. -/
+@[specialize] def mulNat (p : G1 F) (k : Nat) : G1 F :=
+  ScalarProduct.naf double add zero p (neg p) k
 
 @[inline] def mul (p : G1 F) (s : Fr) : G1 F := mulNat p s.val
 
@@ -207,7 +205,7 @@ Here `t` is the BLS parameter, and `|t|` has 64 bits, six of them set.
 
 So the four products by `|t|` take at most 256 doublings and 24 additions.
 
-One product by `r` would take up to 255 doublings and 134 additions. -/
+One product by `r` would take at most 255 doublings and 60 additions. -/
 def mulModulus (p : G1 F) : G1 F :=
   let a := mulNat (mulNat p blsX) blsX
   add (mulNat (mulNat (add a (neg p)) blsX) blsX) p

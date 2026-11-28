@@ -34,7 +34,7 @@ set_option maxRecDepth 8000 in
 /-- The kernel computes `pi(P2) = p P2` on the twist, with `p` reduced modulo `q`. -/
 theorem frobenius_generator :
     AltBn128.frobenius Point2.generator =
-      Point2.mulBits 256 (Fp.modulus % Fr.modulus) Point2.generator := by
+      Point2.mulNat (Fp.modulus % Fr.modulus) Point2.generator := by
   decide +kernel
 
 /-- The `p`-th power map fixes the coefficients of `y^2 = x^3 + 3` over `Fp12`. -/
@@ -87,7 +87,7 @@ theorem zsmul_ne_zero_of_mem {R : ambientCurve.Point} (hR : R ∈ g2Subgroup) (h
 /-- On the untwist of `P2`, the Frobenius map acts as `p`. -/
 theorem frobenius_g2Point : frobenius g2Point = (Fp.modulus : ℤ) • g2Point := by
   rw [frobenius_eq_frobeniusHom, g2Point, ← (untwist_frobenius Point2.isOnCurve_generator).2,
-    frobenius_generator, Point2.toPoint_mulBits 256 _ Point2.isOnCurve_generator (by decide),
+    frobenius_generator, Point2.toPoint_mulNat _ Point2.isOnCurve_generator,
     map_nsmul, ← g2Point, ← natCast_zsmul]
   exact zsmul_eq_of_modEq (AddSubgroup.mem_zmultiples _) (by decide +kernel)
 
@@ -336,10 +336,9 @@ theorem finalExponentiation_line_neg_of_mem {R : ambientCurve.Point} (hR : R ∈
     rw [← natCast_zsmul, hnk]
     exact zsmul_eq_of_modEq (AddSubgroup.mem_zmultiples _) (Int.mod_modEq k _).symm
   rw [hkn] at h0 ⊢
-  have hT := Point2.isOnCurve_mulBits 256 n Point2.isOnCurve_generator
-  have hTp := Point2.toPoint_mulBits 256 n Point2.isOnCurve_generator
-    (lt_trans hn' (by decide))
-  have he : n • g2Point = untwist (Point2.mulBits 256 n Point2.generator).toPoint := by
+  have hT := Point2.isOnCurve_mulNat n Point2.isOnCurve_generator
+  have hTp := Point2.toPoint_mulNat n Point2.isOnCurve_generator
+  have he : n • g2Point = untwist (Point2.mulNat n Point2.generator).toPoint := by
     rw [hTp, map_nsmul]
     rfl
   rw [he] at h0 ⊢
@@ -412,30 +411,30 @@ theorem pairingBilinear : PairingBilinear := by
     have h' := addOrderOf_g2Point
     rw [h, addOrderOf_zero] at h'
     exact absurd h' (by decide)
-  have hPc := Point.isOnCurve_mulBits 256 a.val hg1
-  have hPp := Point.toPoint_mulBits 256 a.val hg1 (lt_trans (ZMod.val_lt a) (by decide))
-  have hQc := Point2.isOnCurve_mulBits 256 b.val hg2
-  have hQp := Point2.toPoint_mulBits 256 b.val hg2 (lt_trans (ZMod.val_lt b) (by decide))
+  have hPc := Point.isOnCurve_mulNat a.val hg1
+  have hPp := Point.toPoint_mulNat a.val hg1
+  have hQc := Point2.isOnCurve_mulNat b.val hg2
+  have hQp := Point2.toPoint_mulNat b.val hg2
   by_cases ha : a = 0
   · subst ha
-    have hi : Point.mulBits 256 (0 : ZMod Fr.modulus).val Point.generator = .infinity := by
+    have hi : Point.mulNat (0 : ZMod Fr.modulus).val Point.generator = .infinity := by
       rw [← Point.toPoint_eq_zero hPc, hPp, ZMod.val_zero, zero_nsmul]
     rw [hi, ZMod.val_zero, zero_mul, pow_zero]
     rfl
   by_cases hb : b = 0
   · subst hb
-    have hi : Point2.mulBits 256 (0 : ZMod Fr.modulus).val Point2.generator = .infinity := by
+    have hi : Point2.mulNat (0 : ZMod Fr.modulus).val Point2.generator = .infinity := by
       rw [← Point2.toPoint_eq_zero hQc, hQp, ZMod.val_zero, zero_nsmul]
     rw [hi, ZMod.val_zero, mul_zero, pow_zero]
-    cases Point.mulBits 256 a.val Point.generator <;> rfl
-  obtain ⟨xp, yp, hxy⟩ : ∃ xp yp, Point.mulBits 256 a.val Point.generator = .affine xp yp := by
-    cases h : Point.mulBits 256 a.val Point.generator with
+    cases Point.mulNat a.val Point.generator <;> rfl
+  obtain ⟨xp, yp, hxy⟩ : ∃ xp yp, Point.mulNat a.val Point.generator = .affine xp yp := by
+    cases h : Point.mulNat a.val Point.generator with
     | infinity =>
       refine absurd (val_eq_zero_of_nsmul Point.addOrderOf_generator a ?_) ha
       rw [← hPp, h]
       rfl
     | affine x y => exact ⟨x, y, rfl⟩
-  have hQ' : untwist (Point2.mulBits 256 b.val Point2.generator).toPoint = b.val • g2Point := by
+  have hQ' : untwist (Point2.mulNat b.val Point2.generator).toPoint = b.val • g2Point := by
     rw [hQp, map_nsmul]
     rfl
   have hQ0 : b.val • g2Point ≠ 0 := fun h =>
