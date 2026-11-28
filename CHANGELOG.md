@@ -1359,6 +1359,16 @@ Not yet released.
   `Blocks.keepsFollowable_rebuildableBlock` (`Execution/Proofs/Blocks/BodyFollow.lean`) gives `KeepsFollowable` with `W` true everywhere, and each of its fields gives a `Blocks.KeepsIf` in place of a pair.
   `Blocks.stateTransition_rebuild_of_rebuildableBlock` and `Blocks.stateTransition_rebuild_nonce_of_rebuildableBlock` keep their statements, with `W` true everywhere.
 
+- In Lean, the pairing check of BLS12-381 runs one Miller loop for all its pairs, which squares its accumulator once per bit ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.millerSteps` (`Cryptography/Bls/Pairing.lean`) now walks a list of `Bls.MillerState`, a new structure that holds a pair and its point `T`, and `Bls.millerLines` runs one bit for each pair.
+  `Bls.millerDouble` no longer squares `f`: the loop squares it once per bit.
+  `Bls.millerLoopAll` is the loop of a list of pairs, and `Bls.millerLoop` is its case of one pair, with an unchanged signature.
+  `Bls.pairingCheck` runs `Bls.millerLoopAll` on the pairs without a point at infinity, and `Bls.pairingCheck_eq_finalExp_prod` keeps its statement.
+  `Bls.millerSteps_eq_prod` and `Bls.millerLoopAll_eq_prod` (`Proofs/Bls/PairingCongr.lean`) prove that the joint loop is the product of the loops of its pairs.
+  `Bls.millerDouble_snd` and `Bls.finalExponentiation_millerDouble` (`Proofs/Bls/MillerLoop.lean`, `MillerChain.lean`) no longer include the square of `f`.
+  `Bls.millerSteps_succ` and `Bls.finalExponentiation_millerSteps` (`MillerChain.lean`) state the loop on a list of one pair, with the square first.
+  `Bls.map_millerSteps` (`Proofs/Bls/PairingMap.lean`) takes the list of pairs; `Bls.MillerState.map`, `Bls.map_millerLines` and `Bls.map_millerLoopAll` are new.
+
 - In Lean, every short Weierstrass curve computes `k P` with one scalar product, left to right on the non-adjacent form of `k` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   `ScalarProduct.naf` (`Cryptography/ScalarProduct.lean`) takes the doubling, the addition, the point at infinity, the point and its negation of a curve.
   `ScalarProduct.nafSteps` runs its steps, and `ScalarProduct.naf_spec`, `ScalarProduct.valid_nafSteps`, `ScalarProduct.map_naf` and `ScalarProduct.map_nafSteps` (`Cryptography/Proofs/ScalarProduct.lean`) prove it once, from the group law of a curve or a change of representation.

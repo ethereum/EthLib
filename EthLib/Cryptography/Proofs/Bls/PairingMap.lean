@@ -29,7 +29,7 @@ theorem map_mulLine (f : Hom F G) (g : Fp12 F) (c0 c2 c3 : Fp2 F) :
 theorem map_millerDouble (f : Hom F G) (T : G2 F) (xp yp : F) (g : Fp12 F) :
     Prod.map (G2.map f) (Fp12.map f) (millerDouble T xp yp g)
       = millerDouble (T.map f) (f xp) (f yp) (g.map f) := by
-  simp only [millerDouble, Prod.map, G2.map_double, Fp12.map_square, map_mulLine,
+  simp only [millerDouble, Prod.map, G2.map_double, map_mulLine,
     Fp2.map_add, Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_square, Fp2.map_mulFp]
   rfl
 
@@ -40,30 +40,55 @@ theorem map_millerAdd (f : Hom F G) (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (g : 
     Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_square, Fp2.map_mulFp]
   simp only [G2.map, G1.map, Fp2.hom, Fp2.map_one]
 
-theorem map_millerSteps (f : Hom F G) (s : Nat) (xq yq : Fp2 F) (xp yp : F) (n : Nat)
-    (T : G2 F) (g : Fp12 F) :
-    (millerSteps s xq yq xp yp n T g).map f
-      = millerSteps s (xq.map f) (yq.map f) (f xp) (f yp) n (T.map f) (g.map f) := by
-  induction n generalizing T g with
-  | zero => rfl
-  | succ n ih =>
-    simp only [millerSteps]
+/-- A pair of the Miller loop, with each coordinate mapped. -/
+def MillerState.map (f : Hom F G) (x : MillerState F) : MillerState G :=
+  ⟨Prod.map (Fp2.map f) (Fp2.map f) x.q, Prod.map f f x.p, x.t.map f⟩
+
+theorem map_millerLines (f : Hom F G) (b : Bool) (xs : List (MillerState F)) (g : Fp12 F) :
+    Prod.map (List.map (MillerState.map f)) (Fp12.map f) (millerLines b xs g)
+      = millerLines b (xs.map (MillerState.map f)) (g.map f) := by
+  induction xs generalizing g with
+  | nil => rfl
+  | cons x xs ih =>
+    obtain ⟨⟨xq, yq⟩, ⟨xp, yp⟩, T⟩ := x
+    simp only [millerLines, List.map_cons, MillerState.map, Prod.map]
     rw [← map_millerDouble]
     obtain ⟨T1, g1⟩ := millerDouble T xp yp g
     dsimp only [Prod.map]
-    by_cases hb : (s >>> n) &&& 1 = 1
-    · simp only [hb, ↓reduceIte]
+    cases b
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      rw [← ih g1]
+      rfl
+    · simp only [↓reduceIte]
       rw [← map_millerAdd]
       obtain ⟨T2, g2⟩ := millerAdd T1 xq yq xp yp g1
-      exact ih T2 g2
-    · simp only [hb, ↓reduceIte]
-      exact ih T1 g1
+      dsimp only [Prod.map]
+      rw [← ih g2]
+      rfl
+
+theorem map_millerSteps (f : Hom F G) (s n : Nat) (xs : List (MillerState F)) (g : Fp12 F) :
+    (millerSteps s n xs g).map f = millerSteps s n (xs.map (MillerState.map f)) (g.map f) := by
+  induction n generalizing xs g with
+  | zero => rfl
+  | succ n ih =>
+    simp only [millerSteps]
+    rw [← Fp12.map_square, ← map_millerLines]
+    exact ih _ _
+
+theorem map_millerLoopAll (f : Hom F G) (s : Nat) (pairs : List ((Fp2 F × Fp2 F) × (F × F))) :
+    (millerLoopAll s pairs).map f
+      = millerLoopAll s
+        (pairs.map (Prod.map (Prod.map (Fp2.map f) (Fp2.map f)) (Prod.map f f))) := by
+  simp only [millerLoopAll, map_millerSteps, Fp12.map_one, List.map_map]
+  congr 2
+  funext qp
+  simp only [Function.comp, MillerState.map, G2.map, G1.map, Fp2.hom, Fp2.map_one, Prod.map]
 
 theorem map_millerLoop (f : Hom F G) (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) :
     (millerLoop s q p).map f
       = millerLoop s (Prod.map (Fp2.map f) (Fp2.map f) q) (Prod.map f f p) := by
-  simp only [millerLoop, map_millerSteps, Fp12.map_one, G2.map, G1.map, Fp2.hom, Fp2.map_one,
-    Prod.map]
+  simp only [millerLoop, map_millerLoopAll, List.map_cons, List.map_nil]
+  rfl
 
 theorem map_finalExponentiation (f : Hom F G) (g : Fp12 F) :
     (finalExponentiation g).map f = finalExponentiation (g.map f) := by
@@ -90,24 +115,31 @@ theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
   | none => exact Fp12.map_one f
   | some x => exact map_finalExponentiation f x
 
-/-- The product of the factors commutes with the map. -/
-private theorem map_foldl_pairFactor (f : Hom F G) (l : List (G1 F × G2 F)) (acc : Fp12 F) :
-    ((l.filterMap pairFactor).foldl (· * ·) acc).map f =
-      ((l.map (Prod.map (G1.map f.toHom) (G2.map f))).filterMap pairFactor).foldl (· * ·)
-        (acc.map f) := by
-  induction l generalizing acc with
+/-- The affine coordinates of the finite pairs commute with the map. -/
+private theorem map_filterMap_finite (f : Hom F G) (l : List (G1 F × G2 F)) :
+    (l.map (Prod.map (G1.map f.toHom) (G2.map f))).filterMap (fun pq =>
+        if pq.1.isInfinity || pq.2.isInfinity then none else some (pq.2.toAffine, pq.1.toAffine))
+      = (l.filterMap fun pq =>
+          if pq.1.isInfinity || pq.2.isInfinity then none
+          else some (pq.2.toAffine, pq.1.toAffine)).map
+        (Prod.map (Prod.map (Fp2.map f) (Fp2.map f)) (Prod.map f f)) := by
+  induction l with
   | nil => rfl
   | cons pq l ih =>
-    rw [List.map_cons, List.filterMap_cons, List.filterMap_cons, ← map_pairFactor]
-    cases pairFactor pq with
-    | none => exact ih acc
-    | some x => rw [Option.map_some, List.foldl_cons, List.foldl_cons, ih, Fp12.map_mul]
+    obtain ⟨p, q⟩ := pq
+    simp only [List.map_cons, List.filterMap_cons, Prod.map, G1.map_isInfinity,
+      G2.map_isInfinity]
+    by_cases h : (p.isInfinity || q.isInfinity) = true
+    · simp only [h, ↓reduceIte, ih]
+    · simp only [h, Bool.false_eq_true, ↓reduceIte, ih, List.map_cons, ← G1.map_toAffine,
+        ← G2.map_toAffine]
+      rfl
 
 theorem map_pairingCheck (f : Hom F G) (pairs : Array (G1 F × G2 F)) :
     pairingCheck (pairs.map (Prod.map (G1.map f.toHom) (G2.map f))) = pairingCheck pairs := by
   unfold pairingCheck
-  rw [← Array.foldl_toList, Array.toList_filterMap, ← Array.foldl_toList, Array.toList_filterMap,
-    Array.toList_map, ← Fp12.map_one f, ← map_foldl_pairFactor, ← map_finalExponentiation,
-    Fp12.map_isOne]
+  dsimp only
+  rw [Array.toList_map, map_filterMap_finite, ← Fp12.map_isOne f (finalExponentiation _),
+    map_finalExponentiation, Fp12.map_conjugate, map_millerLoopAll]
 
 end EthLib.Cryptography.Bls
