@@ -170,7 +170,7 @@ private theorem quadratic_comp {K : Type} [Field K]
   · linear_combination a1 * hd
   · linear_combination a5 * hd
 
-private theorem square_coordinates {K : Type} [Field K]
+private theorem coordinate_relations {K : Type} [Field K]
     (d u a0 a1 a2 a3 a4 a5 : K) (hd : d ^ 2 - d + 1 = 0)
     (h0 : ((-a2 * d + a4 * (d - 1)) * (a2 + a4) - -a2 * d * a2 - a4 * (d - 1) * a4) * u + a0 * a0 +
       ((a1 * (d - 1) + -a5 * d) * (a1 + a5) - a1 * (d - 1) * a1 - -a5 * d * a5 + a3 * a3) * u =
@@ -202,7 +202,39 @@ private theorem square_coordinates {K : Type} [Field K]
           (-a2 * d + a3) * (a2 + a3) -
         ((a0 + a4 * (d - 1)) * (a0 + a4) - a0 * a0 - a4 * (d - 1) * a4 + -a2 * d * a2) -
       ((a1 * (d - 1) + -a5 * d) * (a1 + a5) - a1 * (d - 1) * a1 - -a5 * d * a5 + a3 * a3) =
-    a5 * (1 - d))
+    a5 * (1 - d)) :
+    a0 * a0 + u * a3 * a3 - a0 - u * a1 * a5 - u * a2 * a4 = 0 ∧
+      a0 * a1 - 2 * u * a2 * a5 + u * a3 * a4 - a1 = 0 ∧
+      -a0 * a2 + a1 * a1 - u * a3 * a5 + u * a4 * a4 - a2 = 0 ∧
+      2 * a0 * a3 - a1 * a2 - u * a4 * a5 + a3 = 0 ∧
+      a0 * a4 + a1 * a3 - a2 * a2 - u * a5 * a5 + a4 = 0 ∧
+      -a0 * a5 + 2 * a1 * a4 - a2 * a3 + a5 = 0 := by
+  have r0 : a0 * a0 + u * a3 * a3 - a0 - u * a1 * a5 -
+      u * a2 * a4 = 0 := by linear_combination h0
+  have r3 : 2 * a0 * a3 - a1 * a2 - u * a4 * a5 + a3 = 0 := by
+    linear_combination h3
+  have r1 : d * (a0 * a1 - 2 * u * a2 * a5 + u * a3 * a4 - a1) = 0 := by
+    linear_combination h1
+  have r4 : d * (a0 * a4 + a1 * a3 - a2 * a2 - u * a5 * a5 + a4) = 0 := by
+    linear_combination h4
+  have r2 : (d - 1) * (-a0 * a2 + a1 * a1 - u * a3 * a5 +
+      u * a4 * a4 - a2) = 0 := by linear_combination h2
+  have r5 : (d - 1) * (-a0 * a5 + 2 * a1 * a4 - a2 * a3 + a5) = 0 := by
+    linear_combination h5
+  obtain ⟨hd0, hd1⟩ := quadratic_nonzero d hd
+  replace r1 := (mul_eq_zero.mp r1).resolve_left hd0
+  replace r4 := (mul_eq_zero.mp r4).resolve_left hd0
+  replace r2 := (mul_eq_zero.mp r2).resolve_left hd1
+  replace r5 := (mul_eq_zero.mp r5).resolve_left hd1
+  exact ⟨r0, r1, r2, r3, r4, r5⟩
+
+private theorem square_coordinates {K : Type} [Field K] (u a0 a1 a2 a3 a4 a5 : K)
+    (r0 : a0 * a0 + u * a3 * a3 - a0 - u * a1 * a5 - u * a2 * a4 = 0)
+    (r1 : a0 * a1 - 2 * u * a2 * a5 + u * a3 * a4 - a1 = 0)
+    (r2 : -a0 * a2 + a1 * a1 - u * a3 * a5 + u * a4 * a4 - a2 = 0)
+    (r3 : 2 * a0 * a3 - a1 * a2 - u * a4 * a5 + a3 = 0)
+    (r4 : a0 * a4 + a1 * a3 - a2 * a2 - u * a5 * a5 + a4 = 0)
+    (r5 : -a0 * a5 + 2 * a1 * a4 - a2 * a3 + a5 = 0)
     : ((a0 + a3 * u) * (a0 + a3) - a0 * a3 - a0 * a3 * u - a0 +
         ((a0 + a3 * u) * (a0 + a3) - a0 * a3 - a0 * a3 * u - a0) +
       ((a0 + a3 * u) * (a0 + a3) - a0 * a3 - a0 * a3 * u) =
@@ -234,23 +266,6 @@ private theorem square_coordinates {K : Type} [Field K]
           (a2 + a3) * (a2 + a3) -
         ((a0 + a4) * (a0 + a4) - a0 * a0 - a4 * a4 + a2 * a2) -
       ((a1 + a5) * (a1 + a5) - a1 * a1 - a5 * a5 + a3 * a3)) := by
-  have r0 : a0 * a0 + u * a3 * a3 - a0 - u * a1 * a5 -
-      u * a2 * a4 = 0 := by linear_combination h0
-  have r3 : 2 * a0 * a3 - a1 * a2 - u * a4 * a5 + a3 = 0 := by
-    linear_combination h3
-  have r1 : d * (a0 * a1 - 2 * u * a2 * a5 + u * a3 * a4 - a1) = 0 := by
-    linear_combination h1
-  have r4 : d * (a0 * a4 + a1 * a3 - a2 * a2 - u * a5 * a5 + a4) = 0 := by
-    linear_combination h4
-  have r2 : (d - 1) * (-a0 * a2 + a1 * a1 - u * a3 * a5 +
-      u * a4 * a4 - a2) = 0 := by linear_combination h2
-  have r5 : (d - 1) * (-a0 * a5 + 2 * a1 * a4 - a2 * a3 + a5) = 0 := by
-    linear_combination h5
-  obtain ⟨hd0, hd1⟩ := quadratic_nonzero d hd
-  replace r1 := (mul_eq_zero.mp r1).resolve_left hd0
-  replace r4 := (mul_eq_zero.mp r4).resolve_left hd0
-  replace r2 := (mul_eq_zero.mp r2).resolve_left hd1
-  replace r5 := (mul_eq_zero.mp r5).resolve_left hd1
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · linear_combination 2 * r0
   · linear_combination 2 * r2
@@ -278,11 +293,17 @@ private theorem frobenius2Form_comp (d : Fp2) (hd : d ^ 2 - d + 1 = 0) (a : Fp12
   · exact neg_neg a3
   · exact hc.2.2.2
 
-private theorem cyclotomicSquare_of_coordinate_relation (d : Fp2)
-    (hd : d ^ 2 - d + 1 = 0) (a : Fp12)
-    (h : frobenius4Form d a * a = frobenius2Form d a) :
-    a.cyclotomicSquare = a * a := by
-  obtain ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩ := a
+/-- The six relations between the coordinates, from the coordinate form of the relation. -/
+private theorem relations_of_coordinate_relation (d : Fp2) (hd : d ^ 2 - d + 1 = 0)
+    {a0 a1 a2 a3 a4 a5 : Fp2}
+    (h : frobenius4Form d ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩ * ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩ =
+      frobenius2Form d ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩) :
+    a0 * a0 + Fp2.xi * a3 * a3 - a0 - Fp2.xi * a1 * a5 - Fp2.xi * a2 * a4 = 0 ∧
+      a0 * a1 - 2 * Fp2.xi * a2 * a5 + Fp2.xi * a3 * a4 - a1 = 0 ∧
+      -a0 * a2 + a1 * a1 - Fp2.xi * a3 * a5 + Fp2.xi * a4 * a4 - a2 = 0 ∧
+      2 * a0 * a3 - a1 * a2 - Fp2.xi * a4 * a5 + a3 = 0 ∧
+      a0 * a4 + a1 * a3 - a2 * a2 - Fp2.xi * a5 * a5 + a4 = 0 ∧
+      -a0 * a5 + 2 * a1 * a4 - a2 * a3 + a5 = 0 := by
   have h0 := congrArg (fun z : Fp12 => z.c0.c0) h
   have h1 := congrArg (fun z : Fp12 => z.c1.c0) h
   have h2 := congrArg (fun z : Fp12 => z.c0.c1) h
@@ -293,7 +314,15 @@ private theorem cyclotomicSquare_of_coordinate_relation (d : Fp2)
     Fp6.mul_c0, Fp6.mul_c1, Fp6.mul_c2, Fp6.mulByV,
     Fp6.add_c0, Fp6.add_c1, Fp6.add_c2, Fp6.sub_c0, Fp6.sub_c1, Fp6.sub_c2,
     Fp2.mulByOnePlusI_eq] at h0 h1 h2 h3 h4 h5
-  have hc := square_coordinates d Fp2.xi a0 a1 a2 a3 a4 a5 hd h0 h1 h2 h3 h4 h5
+  exact coordinate_relations d Fp2.xi a0 a1 a2 a3 a4 a5 hd h0 h1 h2 h3 h4 h5
+
+private theorem cyclotomicSquare_of_coordinate_relation (d : Fp2)
+    (hd : d ^ 2 - d + 1 = 0) (a : Fp12)
+    (h : frobenius4Form d a * a = frobenius2Form d a) :
+    a.cyclotomicSquare = a * a := by
+  obtain ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩ := a
+  obtain ⟨r0, r1, r2, r3, r4, r5⟩ := relations_of_coordinate_relation d hd h
+  have hc := square_coordinates Fp2.xi a0 a1 a2 a3 a4 a5 r0 r1 r2 r3 r4 r5
   apply Fp12.ext <;> apply Fp6.ext <;>
     simp only [cyclotomicSquare, mul_c0, mul_c1, Fp6.mul_c0, Fp6.mul_c1, Fp6.mul_c2,
       Fp6.mulByV, Fp6.add_c0, Fp6.add_c1, Fp6.add_c2, Fp6.sub_c0, Fp6.sub_c1,
@@ -324,13 +353,13 @@ private theorem frobenius2Form_of_powers (d : Fp2) (hd : d ^ 2 - d + 1 = 0) (a :
     (congrArg₂ (fun x y => Fp6.mk a.c0.c0 x y) hc.1 hc.2.1)
     (congrArg₂ (fun x y => Fp6.mk (a.c1.c0 * d) x y) hc.2.2.1 hc.2.2.2)
 
-private theorem square_correct_of_coefficients (d : Fp2) (hd : d ^ 2 - d + 1 = 0)
+private theorem coordinate_relation_of_coefficients (d : Fp2) (hd : d ^ 2 - d + 1 = 0)
     (coordinates : ∀ a : Fp12,
       a ^ (Fp.modulus ^ 2) =
         ⟨⟨a.c0.c0, a.c0.c1 * d ^ 2, a.c0.c2 * d ^ 4⟩,
           ⟨a.c1.c0 * d, a.c1.c1 * d ^ 3, a.c1.c2 * d ^ 5⟩⟩)
     (a : Fp12) (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) :
-    a.cyclotomicSquare = a * a := by
+    frobenius4Form d a * a = frobenius2Form d a := by
   have h2 (x : Fp12) : x ^ (Fp.modulus ^ 2) = frobenius2Form d x :=
     (coordinates x).trans (frobenius2Form_of_powers d hd x)
   have h4 : a ^ (Fp.modulus ^ 4) = frobenius4Form d a := by
@@ -339,7 +368,6 @@ private theorem square_correct_of_coefficients (d : Fp2) (hd : d ^ 2 - d + 1 = 0
         rw [← pow_mul, show Fp.modulus ^ 2 * Fp.modulus ^ 2 = Fp.modulus ^ 4 by ring]
       _ = frobenius2Form d (frobenius2Form d a) := by rw [h2, h2]
       _ = frobenius4Form d a := frobenius2Form_comp d hd a
-  apply cyclotomicSquare_of_coordinate_relation d hd a
   rw [← h4, ← h2]
   exact ha
 
@@ -347,8 +375,9 @@ private theorem square_correct_of_coefficients (d : Fp2) (hd : d ^ 2 - d + 1 = 0
 theorem cyclotomicSquare_eq_mul_self {a : Fp12}
     (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) :
     a.cyclotomicSquare = a * a :=
-  square_correct_of_coefficients cyclotomicCoeff cyclotomicCoeff_quadratic
-    frobenius2_power_coordinates a ha
+  cyclotomicSquare_of_coordinate_relation cyclotomicCoeff cyclotomicCoeff_quadratic a
+    (coordinate_relation_of_coefficients cyclotomicCoeff cyclotomicCoeff_quadratic
+      frobenius2_power_coordinates a ha)
 
 /-- Elements of order dividing `p^4 - p^2 + 1` satisfy the cyclotomic square formula. -/
 theorem cyclotomicSquare_eq_mul_self_of_order {a : Fp12}
@@ -400,6 +429,152 @@ theorem cyclotomicPow_eq_pow
       · rw [ite_eq_right h2, ← pow_two, ← pow_mul]
         congr 1
         omega
+
+/-! ## Exponentiation with compressed squares -/
+
+/-- The kept coefficients of the cyclotomic square are the square of the kept coefficients. -/
+private theorem compress_cyclotomicSquare (a : Fp12) :
+    compress a.cyclotomicSquare = (compress a).square := by
+  obtain ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩ := a
+  simp only [compress, cyclotomicSquare, Compressed.square,
+    Cryptography.Fp2.square_eq Fp.embedding, Fp2.mulByOnePlusI_eq, Compressed.mk.injEq]
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> ring
+
+/-- Under the relation, the numerators and the inverse of `D` give the element back. -/
+private theorem decompress_compress {a : Fp12}
+    (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2))
+    (hD : (compress a).numerators.2.2 ≠ 0) :
+    (compress a).decompress (compress a).numerators (compress a).numerators.2.2⁻¹ = a := by
+  obtain ⟨⟨a0, a2, a4⟩, ⟨a1, a3, a5⟩⟩ := a
+  obtain ⟨-, -, r2, -, -, r5⟩ := relations_of_coordinate_relation cyclotomicCoeff
+    cyclotomicCoeff_quadratic (coordinate_relation_of_coefficients cyclotomicCoeff
+      cyclotomicCoeff_quadratic frobenius2_power_coordinates _ ha)
+  simp only [compress, Compressed.numerators, Compressed.decompress,
+    Cryptography.Fp2.square_eq Fp.embedding, Fp2.mulByOnePlusI_eq] at hD ⊢
+  rw [Fp12.mk.injEq, Fp6.mk.injEq, Fp6.mk.injEq, mul_inv_eq_iff_eq_mul₀ hD,
+    mul_inv_eq_iff_eq_mul₀ hD]
+  refine ⟨⟨?_, rfl, rfl⟩, rfl, ?_, rfl⟩
+  · linear_combination a2 * r2 - Fp2.xi * a5 * r5
+  · linear_combination a2 * r5 - a5 * r2
+
+/-- The last component of the suffix products is the product of the list. -/
+private theorem suffixProducts_snd (xs : List Fp2) : (suffixProducts xs).2 = xs.prod := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [List.prod_cons, ← ih]
+    rfl
+
+/-- Montgomery's trick inverts each element of a list of nonzero product. -/
+private theorem batchInverse_suffixProducts (xs : List Fp2) (h : xs.prod ≠ 0) :
+    batchInverse (suffixProducts xs).1 xs.prod⁻¹ = xs.map (·⁻¹) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [List.prod_cons] at h
+    obtain ⟨hx, hxs⟩ := mul_ne_zero_iff.mp h
+    have hstep : suffixProducts (x :: xs) =
+        ((x, (suffixProducts xs).2) :: (suffixProducts xs).1, x * (suffixProducts xs).2) := rfl
+    rw [hstep, List.prod_cons, List.map_cons, batchInverse, suffixProducts_snd, mul_inv,
+      inv_mul_cancel_right₀ hxs, mul_comm, mul_inv_cancel_left₀ hx, ih hxs]
+
+/-- The kept coefficients of the squares that the bits of `n` select, as compressed powers.
+
+Their product is `b^n`. -/
+private theorem squares_eq {b : Fp12} (hb : b ^ (Fp.modulus ^ 4) * b = b ^ (Fp.modulus ^ 2))
+    (n : Nat) :
+    ∃ L : List Fp12, (∀ x ∈ L, x ^ (Fp.modulus ^ 4) * x = x ^ (Fp.modulus ^ 2)) ∧
+      (compress b).squares n = L.map compress ∧ L.prod = b ^ n := by
+  induction n using Nat.strongRecOn generalizing b with
+  | _ n ih =>
+    rw [Compressed.squares]
+    by_cases h0 : n = 0
+    · subst h0
+      exact ⟨[], fun _ hx => absurd hx List.not_mem_nil, rfl, by rw [List.prod_nil, pow_zero]⟩
+    rw [ite_eq_right h0]
+    by_cases h1 : n = 1
+    · subst h1
+      refine ⟨[b], fun x hx => ?_, rfl, by rw [List.prod_singleton, pow_one]⟩
+      rw [List.mem_singleton.mp hx]
+      exact hb
+    rw [ite_eq_right h1]
+    obtain ⟨L, hL, hsq, hprod⟩ := ih (n / 2) (by omega) (cyclotomic_relation_mul hb hb)
+    rw [← cyclotomicSquare_eq_mul_self hb, compress_cyclotomicSquare] at hsq
+    rw [← pow_two, ← pow_mul] at hprod
+    by_cases h2 : n % 2 = 1
+    · refine ⟨b :: L, fun x hx => ?_, ?_, ?_⟩
+      · rcases List.mem_cons.mp hx with rfl | hx
+        · exact hb
+        · exact hL x hx
+      · rw [ite_eq_left h2, hsq, List.map_cons]
+      · rw [List.prod_cons, hprod, ← pow_succ']
+        congr 1
+        omega
+    · refine ⟨L, hL, ?_, ?_⟩
+      · rw [ite_eq_right h2, hsq]
+      · rw [hprod]
+        congr 1
+        omega
+
+/-- Each element of the list decompresses from its kept coefficients and its inverse of `D`. -/
+private theorem zipWith_decompress {L : List Fp12}
+    (hL : ∀ x ∈ L, x ^ (Fp.modulus ^ 4) * x = x ^ (Fp.modulus ^ 2))
+    (hD : ∀ x ∈ L, (compress x).numerators.2.2 ≠ 0) :
+    List.zipWith (fun x d => x.1.decompress x.2 d)
+      ((L.map compress).zip ((L.map compress).map Compressed.numerators))
+      ((((L.map compress).map Compressed.numerators).map fun n => n.2.2).map (·⁻¹)) = L := by
+  induction L with
+  | nil => rfl
+  | cons x L ih =>
+    simp only [List.map_cons, List.zip_cons_cons, List.zipWith_cons_cons]
+    rw [decompress_compress (hL x List.mem_cons_self) (hD x List.mem_cons_self),
+      ih (fun y hy => hL y (List.mem_cons_of_mem x hy))
+        (fun y hy => hD y (List.mem_cons_of_mem x hy))]
+
+/-- A left fold by the product is the product of the start and of the list. -/
+private theorem foldl_mul (x : Fp12) (l : List Fp12) : l.foldl (· * ·) x = x * l.prod := by
+  induction l generalizing x with
+  | nil => rw [List.foldl_nil, List.prod_nil, mul_one]
+  | cons y l ih => rw [List.foldl_cons, ih, List.prod_cons, mul_assoc]
+
+/-- The power with compressed squares is exponentiation under the `p^2`-power relation. -/
+theorem compressedPow_eq_pow
+    {a : Fp12} (ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2)) (e : Nat) :
+    compressedPow a e = a ^ e := by
+  obtain ⟨L, hL, hsq, hprod⟩ := squares_eq (cyclotomic_relation_mul ha ha) (e / 2)
+  rw [← cyclotomicSquare_eq_mul_self ha, compress_cyclotomicSquare] at hsq
+  unfold compressedPow
+  dsimp only
+  rw [hsq, suffixProducts_snd]
+  by_cases hz : Fp2.isZero (((L.map compress).map Compressed.numerators).map fun n => n.2.2).prod
+  · rw [ite_eq_left hz]
+    exact cyclotomicPow_eq_pow ha e
+  rw [ite_eq_right hz]
+  have hne : (((L.map compress).map Compressed.numerators).map fun n => n.2.2).prod ≠ 0 :=
+    fun h => hz (Fp2.isZero_iff.mpr h)
+  have hD : ∀ x ∈ L, (compress x).numerators.2.2 ≠ 0 := fun x hx h0 =>
+    hne (List.prod_eq_zero (List.mem_map.mpr
+      ⟨_, List.mem_map.mpr ⟨_, List.mem_map.mpr ⟨x, hx, rfl⟩, rfl⟩, h0⟩))
+  rw [show ∀ x : Fp2, x.inverse = x⁻¹ from fun _ => rfl, batchInverse_suffixProducts _ hne,
+    zipWith_decompress hL hD]
+  have hpow : (a * a) ^ (e / 2) = a ^ (2 * (e / 2)) := by rw [← pow_two, ← pow_mul]
+  by_cases h2 : e % 2 = 1
+  · rw [ite_eq_left h2, foldl_mul, hprod, hpow, ← pow_succ']
+    congr 1
+    omega
+  rw [ite_eq_right h2]
+  cases L with
+  | nil =>
+    dsimp only
+    rw [List.prod_nil, hpow] at hprod
+    rw [one_eq_one, hprod]
+    congr 1
+    omega
+  | cons p rest =>
+    dsimp only
+    rw [foldl_mul, ← List.prod_cons, hprod, hpow]
+    congr 1
+    omega
 
 /-- In a finite field the inverse is the power by the order minus two. -/
 private theorem inverse_eq_pow (f : Fp12) : f.inverse = f ^ (Fp.modulus ^ 12 - 2) := by
@@ -456,20 +631,20 @@ theorem finalExponentiation_eq_pow (f : Fp12) : finalExponentiation f = f ^ fina
   have haEq : a = (m ^ ((blsX + 1) / 3)) ^ (blsX + 1) := by
     dsimp only [a]
     rw [Fp12.cyclotomicPow_eq_pow hm,
-      Fp12.cyclotomicPow_eq_pow (Fp12.cyclotomic_relation_pow hm _)]
+      Fp12.compressedPow_eq_pow (Fp12.cyclotomic_relation_pow hm _)]
   have ha : a ^ (Fp.modulus ^ 4) * a = a ^ (Fp.modulus ^ 2) := by
     rw [haEq]
     exact Fp12.cyclotomic_relation_pow (Fp12.cyclotomic_relation_pow hm _) _
   have hbEq : b = a.frobenius * (a ^ blsX).conjugate := by
     dsimp only [b]
-    rw [Fp12.cyclotomicPow_eq_pow ha]
+    rw [Fp12.compressedPow_eq_pow ha]
   have hb : b ^ (Fp.modulus ^ 4) * b = b ^ (Fp.modulus ^ 2) := by
     rw [hbEq]
     exact Fp12.cyclotomic_relation_mul (Fp12.cyclotomic_relation_frobenius ha)
       (Fp12.cyclotomic_relation_conjugate (Fp12.cyclotomic_relation_pow ha _))
   dsimp only [c]
-  rw [Fp12.cyclotomicPow_eq_pow hb,
-    Fp12.cyclotomicPow_eq_pow (Fp12.cyclotomic_relation_pow hb _), hbEq, haEq]
+  rw [Fp12.compressedPow_eq_pow hb,
+    Fp12.compressedPow_eq_pow (Fp12.cyclotomic_relation_pow hb _), hbEq, haEq]
   dsimp only [m, t]
   simp only [Fp12.inverse_eq_pow, Fp12.conjugate_eq_pow, Fp12.frobenius_eq_pow,
     ← pow_mul, ← pow_add]
