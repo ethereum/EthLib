@@ -975,9 +975,18 @@ private theorem unless_ok_iff {ε : Type} {test : Except ε Bool} {e : ε} :
   | ok b => cases b <;> simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
       Except.pure]
 
+/-- From Gloas every sidecar belongs to the block of any root, since it carries no header. -/
+@[simp] theorem isDataColumnSidecarOfBlock_of_gloas (gloas : .glamsterdam ≤ fork)
+    {sidecar : DataColumnSidecar preset fork} {root : Root} :
+    isDataColumnSidecarOfBlock preset sidecar root = true := by
+  unfold isDataColumnSidecarOfBlock
+  split
+  · exact absurd gloas (not_glamsterdam_le ‹_›)
+  · rfl
+
 /-- The columns are available exactly when the source returns columns, each of them valid.
 
-Each column must have a valid shape, and the proofs of its cells must match the commitments.
+Each column must belong to the block, have a valid shape, and match the commitments by its proofs.
 
 The source must return every column that the node samples.
 
@@ -987,6 +996,7 @@ theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Roo
     {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)} :
     columnsAvailable config sources root bidCommitments = .ok true ↔
       ∃ sidecars, sources.columns root = some sidecars ∧ ∀ sidecar ∈ sidecars,
+        isDataColumnSidecarOfBlock preset sidecar root = true ∧
         verifyDataColumnSidecar preset config sidecar bidCommitments = true ∧
           verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments = .ok true := by
   unfold columnsAvailable
@@ -994,12 +1004,14 @@ theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Roo
   | none => simp [throw, throwThe, MonadExceptOf.throw]
   | some sidecars =>
     simp only [Option.some.injEq, exists_eq_left', ← Array.allM_toList]
-    -- One column passes exactly when its shape is valid and its proofs match.
+    -- One column passes exactly when it belongs, its shape is valid and its proofs match.
     have each : ∀ sidecar : DataColumnSidecar preset fork,
-        (if verifyDataColumnSidecar preset config sidecar bidCommitments then
+        (if isDataColumnSidecarOfBlock preset sidecar root &&
+            verifyDataColumnSidecar preset config sidecar bidCommitments then
           (verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments).mapError
             ForkChoiceError.kzg
         else pure false) = .ok true ↔
+        isDataColumnSidecarOfBlock preset sidecar root = true ∧
         verifyDataColumnSidecar preset config sidecar bidCommitments = true ∧
           verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments = .ok true := by
       intro sidecar
@@ -1013,7 +1025,9 @@ theorem columnsAvailable_ok_iff {sources : BlockSources preset fork} {root : Roo
 
 /-- At Fulu, the check passes exactly when the source returns columns, each of them valid.
 
-Each column must have a valid shape, and the proofs of its cells must match its commitments.
+Each column must carry the header of the block, and a branch from its commitments to the body.
+
+It must also have a valid shape, and the proofs of its cells must match its commitments.
 
 The source must return every column that the node samples.
 
@@ -1024,6 +1038,7 @@ theorem validateDataAvailability_ok_of_fulu {sources : BlockSources preset fork}
     (fulu : .fusaka ≤ fork) (before : fork < .glamsterdam) :
     validateDataAvailability config sources block blockRoot = .ok () ↔
       ∃ sidecars, sources.columns blockRoot = some sidecars ∧ ∀ sidecar ∈ sidecars,
+        isDataColumnSidecarOfBlock preset sidecar blockRoot = true ∧
         verifyDataColumnSidecar preset config sidecar
             (fun gloas => absurd gloas (not_glamsterdam_le before)) = true ∧
           verifyDataColumnSidecarKzgProofs sources.setup sidecar
@@ -1047,6 +1062,7 @@ theorem validatePayloadData_ok_iff {sources : BlockSources preset fork} {root : 
     {bid : ExecutionPayloadBid preset fork} :
     validatePayloadData config sources root bid = .ok () ↔
       ∃ sidecars, sources.columns root = some sidecars ∧ ∀ sidecar ∈ sidecars,
+        isDataColumnSidecarOfBlock preset sidecar root = true ∧
         verifyDataColumnSidecar preset config sidecar (fun _ => bid.blobKzgCommitments) = true ∧
           verifyDataColumnSidecarKzgProofs sources.setup sidecar
             (fun _ => bid.blobKzgCommitments) = .ok true := by

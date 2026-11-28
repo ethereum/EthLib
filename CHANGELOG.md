@@ -1351,6 +1351,8 @@ Not yet released.
   The new field `Config.MIN_TRANSACTION_GAS`, 4096 in both configurations, is a lower bound on the gas of one transaction from Gloas, and the Beacon API lists it.
   The upgrade to Gloas clears the availability bit of the payload of the fork slot ([#3515](https://github.com/ethereum/EthLib/issues/3515)).
   `upgradeToGloas_executionPayloadAvailability` (`Consensus/Proofs/Transition/Upgrade.lean`) shows that every other bit is set.
+  At Fulu, the data of a block is available only when each sampled column carries its header and an inclusion proof to its body.
+  `columnsAvailable_ok_iff`, `validateDataAvailability_ok_of_fulu` and `validatePayloadData_ok_iff` (`Consensus/Proofs/ForkChoice/Handlers.lean`) state the new check.
 
 - In Lean, the MODEXP output (`Evm.Precompiles.Modexp.compute`) reads the modulus first, and reads the base and the exponent only for a modulus other than 0 ([#4950](https://github.com/ethereum/EthLib/issues/4950)).
   Its value is unchanged, and `compute_data` keeps its statement, but a proof that unfolds the definition sees the new order.
