@@ -1449,6 +1449,7 @@ private theorem credit_band_bounds (h : Setting config checks g split fin pulled
     · exact .inr (band_of_consolidation h fromFin replayedF tailC highC endEpochC h.near replayedC
         small (by omega))
 
+/-- The rounding bound of one newly slashed key, with each term a plain natural. -/
 private theorem newlySlashed_key_round_arith
     (Q pC dC wC sC cC dF dR bC bXC bR uK ind sW eS eC eX eU eT dT pP wP sP wP' bP SB : ℕ)
     (hQ : 30 ≤ Q) (hSW : sW ≤ uK)
@@ -1761,77 +1762,14 @@ private theorem newlySlashed_key_round (h : Setting config checks g split fin pu
         hD0]
       have hds0 : Internal.syncD eventsF i + Internal.syncD events i = 0 := hbR0.1
       omega
-  have hE' : ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-        (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
-          fin high i +
-          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) =
-      (11 * ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          Internal.syncCr eventsF i else 0) +
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          Internal.consAmt eventsF i else 0)) + 9) / 10 +
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          Internal.bandX fin high i else 0) +
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0)) ∨
-      ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          Internal.syncCr eventsF i else 0) = 0 ∧
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          Internal.consAmt eventsF i else 0) = 0 ∧
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          Internal.bandX fin high i else 0) = 0 ∧
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) = 0 ∧
-        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
-            fin high i +
-            (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) = 0) := by
-    rcases hE with ⟨h1, h2, h3, h4, h5⟩ | h0
-    · exact .inl (by rw [h1, h2, h3, h4, h5])
-    · exact .inr h0
-  have hD' : ((if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
-          ¬ PinTerms.exitedSlashable anc pulled i = true ∧
-          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
-        Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
-          = Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i ∧
-        (if ∃ c ∈ tailC.departureCharges, c.index = i then Internal.whistC pre highC i else 0) =
-          Internal.whistC pre highC i) ∨
-      (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
-          ¬ PinTerms.exitedSlashable anc pulled i = true ∧
-          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
-        Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
-          = 0 :=
-    hD.imp (fun ⟨h1, h2, _⟩ => ⟨h1, h2⟩) id
-  exact newlySlashed_key_round_arith Q
-    (Internal.propN tailC highC i) (Internal.depPre eventsC i) (Internal.whistC tailC highC i)
-    (Internal.syncCr eventsC i) (Internal.consAmt eventsC i) (Internal.syncD eventsF i)
-    (Internal.syncD events i) (Internal.bandC tailC highC i) (Internal.bandX fin highC i)
-    (Internal.bandR (eventsF ++ events) i)
-    (Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i)
-    (Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i)
-    (if 0 < Internal.slashW (pinTerms config pulled anc fin) i then
-      (pinTerms config pulled anc fin).unitGain else 0)
-    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-      Internal.syncCr eventsF i else 0)
-    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-      Internal.consAmt eventsF i else 0)
-    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-      Internal.bandX fin high i else 0)
-    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-      (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0)
-    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-      (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
-        fin high i +
-        (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0)
-    (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
-        ¬ PinTerms.exitedSlashable anc pulled i = true ∧
-        ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
-      Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
-    (Internal.propN pre highC i) (Internal.whistC pre highC i) (Internal.syncCr eventsP i)
-    (if ∃ c ∈ tailC.departureCharges, c.index = i then Internal.whistC pre highC i else 0)
-    (if ∃ c ∈ tailC.departureCharges, c.index = i then
-      (if 0 < Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i
-        then preset.upwardBand else 0) else 0)
-    SB quotient hSW hSB hE' hD' big
+  -- The helper's variables are read off the goal and the hypotheses above.
+  exact newlySlashed_key_round_arith Q _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+    SB quotient hSW hSB
+    (by
+      rcases hE with ⟨h1, h2, h3, h4, h5⟩ | h0
+      · exact .inl (by rw [h1, h2, h3, h4, h5])
+      · exact .inr h0)
+    (hD.imp (fun ⟨h1, h2, _⟩ => ⟨h1, h2⟩) id) big
 
 /-- The newly slashed keys' shares pay the slack and the rounding of their rewards. -/
 private theorem whistle_slack_newlySlashed

@@ -679,9 +679,9 @@ private theorem leak_arith (dF P X Q D inc A F S R SL Sig : ℕ) (hinc : 1 < inc
   have rounded : F ≤ 2 * D * X / Q := floors.trans (Nat.div_le_div_right (by
     calc inc * A * X ≤ D * X := Nat.mul_le_mul_right _ debits
       _ ≤ 2 * D * X := Nat.mul_le_mul_right _ (by omega)))
-  have hmul1 := Nat.mul_le_mul_left dF (Nat.add_le_add_right (Nat.add_le_add three rounded) 1)
-  have hmul2 := Nat.mul_le_mul_right SL count
-  linarith only [hmul1, hmul2, keys]
+  have := Nat.mul_le_mul_left dF (Nat.add_le_add_right (Nat.add_le_add three rounded) 1)
+  have := Nat.mul_le_mul_right SL count
+  nlinarith
 
 /-- A key's penalty on R's branch is at most one increment, and only a slashed key has one. -/
 private theorem slashW_le (h : Setting config checks g split fin pulled anc counted V) (i : ℕ) :
@@ -838,17 +838,11 @@ private theorem flow_gain_slack {I WD F P D Z0 W U : ℕ} (hI : 0 < I)
       exact Nat.div_mul_le_self _ _
     have h3 : 11 * D * (P * F) + 1 ≤ WD * I := key
     have h4 : 11 * (D * q * WD) ≤ 11 * (D * (x * P * F)) :=
-      Nat.mul_le_mul_left _ (by
-        have := Nat.mul_le_mul_left D h1
-        linarith only [this])
-    have h5 : 11 * (D * (x * P * F)) * 10 ≤ WD * (x * (10 * I)) := by
-      have := Nat.mul_le_mul_left (10 * x) h3
-      linarith only [this]
-    have h6 : 11 * (10 * (D * q)) * WD ≤ 11 * Z * WD := by
-      have := Nat.mul_le_mul_left WD h2
-      linarith only [h4, h5, this]
+      Nat.mul_le_mul_left _ (by nlinarith)
+    have h5 : 11 * (D * (x * P * F)) * 10 ≤ WD * (x * (10 * I)) := by nlinarith
+    have h6 : 11 * (10 * (D * q)) * WD ≤ 11 * Z * WD := by nlinarith
     exact Nat.le_of_mul_le_mul_right
-      (Nat.le_of_mul_le_mul_left (by linarith only [h6]) (by norm_num : 0 < 11)) hWD
+      (Nat.le_of_mul_le_mul_left (by nlinarith) (by norm_num : 0 < 11)) hWD
   have g0 := base Z0
   by_cases w : 0 < W
   · simp only [w, ↓reduceIte]

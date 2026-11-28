@@ -576,7 +576,7 @@ private theorem propN_arith {inc c pi pq a b total T : ℕ} (incPos : 0 < inc)
   have h1 := Nat.div_mul_le_self total inc
   have h2 := Nat.lt_mul_div_succ T incPos
   have K2 : 2 * (total / inc) ≤ 3 * (T / inc) + 2 := by
-    have : 2 * (total / inc) * inc < (3 * (T / inc) + 3) * inc := by linarith only [h1, h2, band]
+    have : 2 * (total / inc) * inc < (3 * (T / inc) + 3) * inc := by nlinarith
     have := Nat.lt_of_mul_lt_mul_right this
     omega
   have e : c * 448 ≤ 54 * (2 * (pq * (total / inc))) := by
@@ -790,7 +790,7 @@ private theorem credit_arith {inc pi E T P A : ℕ} (incPos : 0 < inc) (hT : T =
       _ = _ := by ring
   have A1 : pi ≤ A * pi := Nat.le_mul_of_pos_left _ hA
   refine Nat.div_le_of_le_mul ?_
-  linarith only [mul, hP, A1]
+  nlinarith
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- C's proposer credits to any set of keys, with the sync part of the bound, are bounded. -/
@@ -3676,14 +3676,7 @@ private theorem bands_arith (UP β cc SPE seats nV n4 n5 n6 nS nE nQ nB nU nK : 
   have bandEQ : UP * (nE + nQ) ≤ 2 * β * nU := Nat.mul_le_mul bandUp subEQ
   have bandB : UP * nB ≤ 2 * β * SPE := Nat.mul_le_mul bandUp cardB
   have bandK : 3 * cc * nK ≤ β * nK := Nat.mul_le_mul_right nK ceil
-  have h1 : UP * nE + UP * (nB + nQ) = UP * (nE + nQ) + UP * nB := by ring
-  have h2 : 3 * (β * (seats + SPE)) = β * (3 * seats) + 3 * (β * SPE) := by ring
-  have h3 : 3 * (β * nV) + β * n4 + 3 * (β * n5) + β * n6 + 3 * (β * nU) + β * nK =
-      β * (3 * nV + n4 + 3 * n5 + n6 + 3 * nU + nK) := by ring
-  have h4 : 2 * β * nU = 2 * (β * nU) := by ring
-  have h5 : 2 * β * SPE = 2 * (β * SPE) := by ring
-  have h6 : 3 * cc * nK = 3 * (cc * nK) := by ring
-  linarith only [scaled, bandS, bandEQ, bandB, bandK, h1, h2, h3, h4, h5, h6, Nat.zero_le (β * SPE)]
+  nlinarith
 
 /-- The cut keys are disjoint from the other classes in the sync budget. -/
 theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V) :
