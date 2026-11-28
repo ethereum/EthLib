@@ -152,15 +152,19 @@ This is safe because no export runs compiled code of the specification while it 
 `scripts/check_lean_commands.py` fails on a `#` command, such as `#eval`, in any module under `EthLib`.
 Review must still reject a `run_cmd`, an `initialize` or a `meta import` of a specification module in an export.
 
-Before saving, CI deletes the generated `*.setup.json` files from the build directory.
-These files contain absolute runner paths, and Lake regenerates them.
-The cache uses version `v2`, so that it cannot restore entries saved before this cleanup.
+Before saving, CI deletes `*.setup.json`, `*.irsetup.json` and `bin/` from the build directory.
+Setup files contain absolute runner paths, and Lake regenerates them.
+Checker binaries in `bin/` are not default targets, so dropping them removes over 1 GiB from the cache.
+The spec and full caches use version `v3`, so they do not restore older entries.
 
 Native objects are platform-specific.
 The build therefore does not claim the platform independence that CompPoly's library-only release archive relies on.
 
-The vector suites need only the library, so they run in the `suites` job, beside the proofs in the `build` job.
-Each job builds the library and the exports from the restored cache, and only the `build` job saves a cache.
+CI builds `EthLib` and `Exports` once in the `spec-exports` job and uploads their artifacts.
+The six Python `suites` jobs and `parity-sample` download those artifacts and set `ETHLIB_SKIP_LAKE=1`.
+`setup.py` then compiles the C wrappers in parallel without running Lake again.
+In parallel, six `proofs` shards elaborate disjoint proof subsets and upload their owned `.olean` and `.ir` files to the `build` job.
+The `build` job merges those shards, finishes `EthLib.Engine.Proofs` and the umbrella modules, runs every verification check (including `lake exe known-answers`), and saves `ethlib-build-v3` on `master`.
 
 The job summary reports the wall time and the CPU work of each build and test stage.
 The exports are measured before the bindings are installed, to keep their timing separate from the uv package build.

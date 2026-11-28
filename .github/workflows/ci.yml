@@ -26,7 +26,187 @@ permissions:
   contents: read
 
 jobs:
+  # Build the executable specification and C exports once per commit.
+  # Both the Python vector suites and the parallel proof shards reuse these artifacts.
+  spec-exports:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
+      BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - name: initialize timing paths
+        run: |
+          echo "BUILD_TIMING_RESULTS=$RUNNER_TEMP/ethlib-spec-timing/results.jsonl" >> "$GITHUB_ENV"
+          echo "BUILD_TIMING_LOG_DIR=$RUNNER_TEMP/ethlib-spec-timing" >> "$GITHUB_ENV"
+
+      - name: restore EthLib spec build
+        if: inputs.clean_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake/build
+          key: ethlib-spec-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ethlib-spec-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: install Lean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/install_elan.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # The library and the exports import no module of Mathlib or of the other packages.
+      # So this step only clones the packages, which Lake needs to load the workspace.
+      - name: fetch the dependencies
+        run: lake env true
+
+      # The library alone comes first, so a broken specification fails before the exports or proofs.
+      - name: library
+        run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
+
+      - name: exports
+        run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
+
+      # The C docstrings, the contract and the type stub must match the Lean docstrings and codes.
+      - name: binding contract
+        run: lake exe gen-bindings --check
+
+      # The Unicode table in Lean must match the pinned UnicodeData.txt.
+      - name: unicode table
+        run: uv run --no-project --python 3.12 python scripts/generate_unicode_nfkd.py --check
+
+      - name: stage spec and export artifacts
+        run: >-
+          uv run --no-project --python 3.12 python scripts/proof_shards.py stage spec-exports
+          --out-dir "$RUNNER_TEMP/ethlib-spec-exports"
+
+      - name: upload spec and export artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ethlib-spec-exports
+          path: ${{ runner.temp }}/ethlib-spec-exports
+          compression-level: 1
+          retention-days: 1
+
+      - name: prepare EthLib spec cache
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: bash scripts/prepare_build_cache.sh
+
+      - name: save EthLib spec build
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake/build
+          key: ethlib-spec-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # Elaborate proofs in six disjoint shards in parallel, then hand each shard's owned files to `build`.
+  proofs:
+    name: proofs (${{ matrix.shard }})
+    needs: [spec-exports]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - base-ser-net
+          - crypto-pq
+          - crypto-core
+          - execution
+          - consensus-forkchoice
+          - consensus-rest
+    env:
+      BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
+      BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - name: initialize timing paths
+        run: |
+          echo "BUILD_TIMING_RESULTS=$RUNNER_TEMP/ethlib-proofs-timing/results.jsonl" >> "$GITHUB_ENV"
+          echo "BUILD_TIMING_LOG_DIR=$RUNNER_TEMP/ethlib-proofs-timing" >> "$GITHUB_ENV"
+
+      - name: restore EthLib build
+        if: inputs.clean_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake/build
+          key: ethlib-build-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ethlib-build-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      # Overlay this commit's freshly built spec and export artifacts on top of any cached build.
+      - name: download spec and export artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ethlib-spec-exports
+          path: .lake/build
+
+      - name: install Lean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/install_elan.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: fetch the Mathlib cache
+        run: lake exe cache get
+
+      - name: restore dependency builds
+        if: inputs.clean_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/packages/VCVio/.lake/build
+            .lake/packages/PolyFun/.lake/build
+            .lake/packages/cslib/.lake/build
+          key: ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: build shard
+        shell: bash
+        run: |
+          read -r -a targets <<< "$(uv run --no-project --python 3.12 python scripts/proof_shards.py targets "${{ matrix.shard }}")"
+          bash scripts/build_timing_report.sh run proofs_build "$BUILD_TIMING_RESULTS" -- lake build --wfail "${targets[@]}"
+
+      - name: stage shard artifacts
+        run: >-
+          uv run --no-project --python 3.12 python scripts/proof_shards.py stage "${{ matrix.shard }}"
+          --out-dir "$RUNNER_TEMP/ethlib-proofs-stage"
+
+      - name: upload shard artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ethlib-proofs-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ethlib-proofs-stage
+          compression-level: 1
+          retention-days: 1
+
+  # Merge the disjoint proof shards, finish the top-level targets and run every verification check.
   build:
+    needs: [spec-exports, proofs]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -58,9 +238,9 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .lake/build
-          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ethlib-build-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+            ethlib-build-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: keep earlier module times
         run: |
@@ -68,6 +248,19 @@ jobs:
           if [ -f .lake/build/ethlib-module-times.json ]; then
             cp .lake/build/ethlib-module-times.json "$BUILD_TIMING_LOG_DIR/module-times-base.json"
           fi
+
+      - name: download spec and export artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ethlib-spec-exports
+          path: .lake/build
+
+      - name: download proof shard artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ethlib-proofs-*
+          path: .lake/build
+          merge-multiple: true
 
       # Installs elan and the Lean toolchain; only this step gets the token.
       # The builds run as named steps below, so the log shows which part failed.
@@ -95,34 +288,21 @@ jobs:
           restore-keys: |
             ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
-      # The library alone comes first, so a broken specification fails before the proofs.
-      # An unfinished proof only warns, so warnings have to be fatal.
-      - name: library
-        run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
-
-
-      # Time Lean exports separately from the Python package build.
+      # Verify that the downloaded spec and export artifacts are up-to-date.
       - name: exports
         id: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
-      # The C docstrings, the contract and the type stub must match the Lean docstrings and codes.
-      - name: binding contract
-        run: lake exe gen-bindings --check
-
-      # The Unicode table in Lean must match the pinned UnicodeData.txt.
-      - name: unicode table
-        run: uv run --no-project --python 3.12 python scripts/generate_unicode_nfkd.py --check
-
-      # The build pipeline regressions below run in this Python environment,
-      # so it syncs even when the contract check above fails.
-      # The sync builds the exports again, so it runs only when they built above.
+      # The build pipeline regressions below run in this Python environment.
+      # The exports were built in `spec-exports` and verified above, so skip invoking Lake again.
       - name: bindings
         id: bindings
         if: ${{ !cancelled() && steps.exports.outcome == 'success' }}
+        env:
+          ETHLIB_SKIP_LAKE: "1"
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
-      # The steps below run even after a failed step above, so every result is reported.
+      # Finish the remaining unsharded umbrella modules and `EthLib.Engine.Proofs`.
       - name: proofs
         id: proofs
         if: ${{ !cancelled() }}
@@ -268,6 +448,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: uv run --no-project --python 3.12 python -m unittest scripts/test_setup_runtime.py
 
+      - name: proof shard regressions
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --no-project --python 3.12 python scripts/proof_shards.py check
+          uv run --no-project --python 3.12 python -m unittest scripts/test_proof_shards.py
+
       # A failed run still publishes its logs and the status of each measured command.
       - name: build timing report
         if: ${{ always() }}
@@ -275,7 +461,6 @@ jobs:
           mkdir -p "$BUILD_TIMING_LOG_DIR"
           uv run --no-project --python 3.12 python scripts/module_times.py update .lake/build/ethlib-module-times.json \
             --commit "$GITHUB_SHA" \
-            "$BUILD_TIMING_LOG_DIR/library_build.log" \
             "$BUILD_TIMING_LOG_DIR/exports_build.log" \
             "$BUILD_TIMING_LOG_DIR/bindings_build.log" \
             "$BUILD_TIMING_LOG_DIR/proofs_build.log"
@@ -303,7 +488,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .lake/build
-          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ethlib-build-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # Each master run saves under a new key, so the newest entry holds every module imported now.
       - name: prepare dependency cache
@@ -324,11 +509,13 @@ jobs:
           key: ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # The vector suites run the library through the bindings, so they do not wait for the proofs.
+  # They reuse the compiled spec and export objects from `spec-exports`, without invoking Lake.
   # They run on each Python version from 3.10 to 3.14, so a feature that an older version lacks
   # fails here and not first in the wheel test of a release.
   # They also run on the free-threaded 3.14t build, where the extension runs without the GIL.
   suites:
     name: suites (Python ${{ matrix.python }})
+    needs: [spec-exports]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -355,16 +542,13 @@ jobs:
           echo "BUILD_TIMING_RESULTS=$RUNNER_TEMP/ethlib-suites-timing/results.jsonl" >> "$GITHUB_ENV"
           echo "BUILD_TIMING_LOG_DIR=$RUNNER_TEMP/ethlib-suites-timing" >> "$GITHUB_ENV"
 
-      # This job only reads the cache. The build job saves it.
-      - name: restore EthLib build
-        if: inputs.clean_build != true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: download spec and export artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: ethlib-spec-exports
           path: .lake/build
-          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
+      # `setup.py` needs the Lean toolchain headers and `libleanshared` to link the extension.
       - name: install Lean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -372,18 +556,9 @@ jobs:
           bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      # The library and the exports import no module of Mathlib or of the other packages.
-      # So this step only clones the packages, which Lake needs to load the workspace.
-      - name: fetch the dependencies
-        run: lake env true
-
-      - name: library
-        run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
-
-      - name: exports
-        run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
-
       - name: bindings
+        env:
+          ETHLIB_SKIP_LAKE: "1"
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
       # One test process per core, and the 25 slowest tests in the log.
@@ -492,7 +667,7 @@ jobs:
   # Of those, the build took 2 minutes, and the download and the shard together 2.6 minutes.
   # A change that breaks 1,000 cases escapes the sample with probability 0.7 percent.
   parity-sample:
-    needs: parity-plan
+    needs: [parity-plan, spec-exports]
     if: needs.parity-plan.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -508,14 +683,11 @@ jobs:
           version: "0.13.6"
           enable-cache: false
 
-      - name: restore EthLib build
-        if: inputs.clean_build != true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: download spec and export artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: ethlib-spec-exports
           path: .lake/build
-          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: install Lean
         env:
@@ -524,15 +696,9 @@ jobs:
           bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      # The library and the exports import no module of Mathlib or of the other packages.
-      # So this step only clones the packages, which Lake needs to load the workspace.
-      - name: fetch the dependencies
-        run: lake env true
-
-      - name: library
-        run: lake build --wfail EthLib Exports
-
       - name: bindings
+        env:
+          ETHLIB_SKIP_LAKE: "1"
         run: uv sync --frozen --extra test
 
       # The pinned release of execution-spec-tests, about 940 MB, which the fetcher checks.
@@ -647,6 +813,11 @@ jobs:
 
       - name: memory check, unit tests
         run: uv run --no-sync python -m unittest scripts/test_check_memory.py
+
+      - name: proof shards, unit tests
+        run: |
+          uv run --no-sync python scripts/proof_shards.py check
+          uv run --no-sync python -m unittest scripts/test_proof_shards.py
 
   soundness:
     runs-on: ubuntu-latest
