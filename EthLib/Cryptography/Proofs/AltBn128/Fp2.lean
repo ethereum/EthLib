@@ -175,4 +175,29 @@ noncomputable instance : Fintype Fp2 := Fintype.ofEquiv _ fp2Equiv.symm
 theorem card_fp2 : Fintype.card Fp2 = Fp.modulus ^ 2 := by
   rw [Fintype.card_eq_nat_card, Nat.card_congr fp2Equiv, Nat.card_prod, Nat.card_fin, sq]
 
+/-! ## The Euclidean inverse for the kernel
+
+The kernel runs the divsteps of the inverse of `Fp` slowly, and the Euclidean algorithm fast.
+
+So a proof that computes in the kernel first rewrites the operations to the Euclidean inverse.
+-/
+
+/-- The field operations of `Fp`, with the Euclidean inverse in place of the divsteps. -/
+abbrev euclidOps : FieldOps Fp := { instFieldOps with inverse := Fin.inverse }
+
+/-- The twist, with `b2` and the inverse of `Fp2` taken over the Euclidean inverse of `Fp`. -/
+abbrev euclidTwist : ShortWeierstrass.Params Fp2 :=
+  ⟨0, @Cryptography.Fp2.mul Fp euclidOps (@Cryptography.Fp2.ofFp Fp euclidOps 3)
+    (@Cryptography.Fp2.inverse Fp euclidOps ⟨9, 1⟩), @Cryptography.Fp2.inverse Fp euclidOps⟩
+
+/-- The field operations of `Fp` are those with the Euclidean inverse. -/
+theorem instFieldOps_eq_euclidOps : instFieldOps = euclidOps :=
+  congrArg (fun inv => { instFieldOps with inverse := inv }) Fp.inv_eq_fin_inverse
+
+/-- The twist is the one over the Euclidean inverse. -/
+theorem instTwistParams_eq_euclidTwist : instTwistParams = euclidTwist :=
+  congrArg (fun ops => (⟨0, @Cryptography.Fp2.mul Fp ops (@Cryptography.Fp2.ofFp Fp ops 3)
+    (@Cryptography.Fp2.inverse Fp ops ⟨9, 1⟩), @Cryptography.Fp2.inverse Fp ops⟩ :
+      ShortWeierstrass.Params Fp2)) instFieldOps_eq_euclidOps
+
 end EthLib.Cryptography.AltBn128

@@ -832,9 +832,15 @@ structure Representation (encode : Fin m → G) (inverse : G → G) (read : G �
   read_encode : ∀ x, read (encode x) = x
 
 omit [DecidableEq G] in
+/-- `Fin m` itself is a representation, with no conversion, for any inverse equal to its own. -/
+theorem Representation.of_eq_inverse {inverse : Fin m → Fin m}
+    (h : ∀ x, inverse x = Fin.inverse x) : Representation (m := m) id inverse id :=
+  ⟨Jacobian.Coords.Embedding.id, h, fun _ => rfl⟩
+
+omit [DecidableEq G] in
 /-- `Fin m` itself is a representation, with no conversion. -/
 theorem Representation.fin : Representation (m := m) id Fin.inverse id :=
-  ⟨Jacobian.Coords.Embedding.id, fun _ => rfl, fun _ => rfl⟩
+  Representation.of_eq_inverse fun _ => rfl
 
 /-- The point of a Jacobian form is its affine point, or the point at infinity. -/
 theorem ofJacobian_eq (p : Jacobian m) :

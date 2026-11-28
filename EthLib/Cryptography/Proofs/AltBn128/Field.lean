@@ -14,7 +14,7 @@ Both moduli are prime, by Pratt certificates that the kernel checks.
 
 `Fp` is `Fin p`, which is `ZMod p` by definition, so a proof states its algebra over `ZMod p`.
 
-The Euclidean inverse in `Fp` is the field inverse.
+The inverse in `Fp` is the Euclidean inverse, so it is the field inverse.
 -/
 
 @[expose] public section
@@ -192,9 +192,16 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
 @[simp] theorem toZMod_sub (a b : Fp) : toZMod (a - b) = toZMod a - toZMod b := rfl
 
-/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
-  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
+/-- The inverse is the Euclidean inverse, for every input. -/
+theorem inv_eq_inverse (a : Fp) : a.inv = Fin.inverse a := SafeGcd.inverseFin_eq a
+
+/-- The inverse is the Euclidean inverse, as functions. -/
+theorem inv_eq_fin_inverse : Fp.inv = Fin.inverse := funext inv_eq_inverse
+
+/-- The inverse is the field inverse, and it sends `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ := by
+  rw [inv_eq_inverse]
+  exact Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- In a field, a square has at most two roots, `c` and `-c`. -/
 theorem eq_or_eq_neg_of_mul_self {c d : ZMod modulus} (h : d * d = c * c) : d = c ∨ d = -c := by

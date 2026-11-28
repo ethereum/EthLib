@@ -118,14 +118,14 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve (0) (3)
 theorem isOnCurve_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
     (mulNat k p).isOnCurve = true :=
   ShortWeierstrass.Point.isOnCurve_mulNat embedding toZ_eq
-    ShortWeierstrass.Point.Representation.fin
+    (ShortWeierstrass.Point.Representation.of_eq_inverse Fp.inv_eq_inverse)
     toZ_a two_ne_zero' k hp
 
 /-- The scalar product computes `k P`. -/
 theorem toPoint_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mulNat k p) = k • toPoint p :=
   ShortWeierstrass.Point.toPoint_mulNat embedding toZ_eq
-    ShortWeierstrass.Point.Representation.fin
+    (ShortWeierstrass.Point.Representation.of_eq_inverse Fp.inv_eq_inverse)
     toZ_a two_ne_zero' k hp
 
 /-! ## Points and group elements correspond -/
