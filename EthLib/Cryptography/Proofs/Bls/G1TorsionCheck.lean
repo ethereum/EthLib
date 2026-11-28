@@ -134,18 +134,9 @@ theorem coords_zero : coords (G1.zero : G1) = zero := by
   rw [coords_eq, G1.map_zero]
   rfl
 
-theorem coords_mulNatSteps (p : G1) (k h n : Nat) (q : G1) :
-    coords (G1.mulNatSteps p k h n q) = mulNatSteps (coords p) k h n (coords q) := by
-  induction n generalizing q with
-  | zero => rfl
-  | succ n ih =>
-    rw [G1.mulNatSteps, mulNatSteps, ih]
-    congr 1
-    cases h.testBit (n + 1) <;> cases k.testBit (n + 1) <;>
-      simp only [coords_add, coords_neg, coords_double]
-
 theorem coords_mulNat (q : G1) (k : Nat) : coords (G1.mulNat q k) = mulNat (coords q) k := by
-  rw [G1.mulNat, mulNat, coords_mulNatSteps, coords_zero]
+  rw [G1.mulNat, mulNat, ScalarProduct.map_naf coords coords_double coords_add, coords_zero,
+    coords_neg]
 
 /-! ## The check -/
 

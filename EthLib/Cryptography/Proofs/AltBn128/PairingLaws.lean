@@ -22,11 +22,11 @@ namespace EthLib.Cryptography.AltBn128
 -- Points are affine, so each group element has one representative.
 /-- `P` is `a P1`. -/
 def Point.Represents (P : Point) (a : ZMod Fr.modulus) : Prop :=
-  P = Point.mulBits 256 a.val Point.generator
+  P = Point.mulNat a.val Point.generator
 
 /-- `Q` is `b P2`. -/
 def Point2.Represents (Q : Point2) (b : ZMod Fr.modulus) : Prop :=
-  Q = Point2.mulBits 256 b.val Point2.generator
+  Q = Point2.mulNat b.val Point2.generator
 
 /-- The law of the pairing check.
 
@@ -65,24 +65,24 @@ namespace Point
 
 /-- Every point on the curve over `Fp` is `a P1` for some `a`. -/
 theorem exists_represents {P : Point} (hP : P.isOnCurve = true) : ∃ a, P.Represents a := by
-  obtain ⟨k, hk, rfl⟩ := exists_eq_mulBits_generator hP
+  obtain ⟨k, hk, rfl⟩ := exists_eq_mulNat_generator hP
   refine ⟨k, ?_⟩
   rw [Represents, ZMod.val_cast_of_lt hk]
 
 /-- `P1` is `1 P1`. -/
 theorem represents_generator : generator.Represents 1 := by
   have h := isOnCurve_generator
-  rw [Represents, ZMod.val_one, ← toPoint_inj h (isOnCurve_mulBits _ _ h),
-    toPoint_mulBits _ _ h (by decide), one_smul]
+  rw [Represents, ZMod.val_one, ← toPoint_inj h (isOnCurve_mulNat _ h),
+    toPoint_mulNat _ h, one_smul]
 
 /-- When `P` is `a P1`, its negative is `(-a) P1`. -/
 theorem Represents.neg {P : Point} {a : ZMod Fr.modulus} (h : P.Represents a) :
     P.neg.Represents (-a) := by
   have hg := isOnCurve_generator
-  have hP : P.isOnCurve = true := h ▸ isOnCurve_mulBits _ _ hg
+  have hP : P.isOnCurve = true := h ▸ isOnCurve_mulNat _ hg
   have hlt (c : ZMod Fr.modulus) : c.val < 2 ^ 256 := lt_trans (ZMod.val_lt c) (by decide)
-  rw [Represents, ← toPoint_inj (isOnCurve_neg hP) (isOnCurve_mulBits _ _ hg), toPoint_neg hP,
-    h, toPoint_mulBits _ _ hg (hlt a), toPoint_mulBits _ _ hg (hlt (-a))]
+  rw [Represents, ← toPoint_inj (isOnCurve_neg hP) (isOnCurve_mulNat _ hg), toPoint_neg hP,
+    h, toPoint_mulNat _ hg, toPoint_mulNat _ hg]
   -- The two multiples add to `((-a).val + a.val) P1`, and `q` divides that scalar.
   refine (eq_neg_of_add_eq_zero_left ?_).symm
   rw [← add_nsmul, ← addOrderOf_dvd_iff_nsmul_eq_zero, addOrderOf_generator,
@@ -95,8 +95,8 @@ end Point
 /-- `P2` is `1 P2`. -/
 theorem Point2.represents_generator : Point2.generator.Represents 1 := by
   have h := Point2.isOnCurve_generator
-  rw [Point2.Represents, ZMod.val_one, ← Point2.toPoint_inj h (Point2.isOnCurve_mulBits _ _ h),
-    Point2.toPoint_mulBits _ _ h (by decide), one_smul]
+  rw [Point2.Represents, ZMod.val_one, ← Point2.toPoint_inj h (Point2.isOnCurve_mulNat _ h),
+    Point2.toPoint_mulNat _ h, one_smul]
 
 namespace PairingLaws
 

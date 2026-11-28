@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.G1
 public import EthLib.Cryptography.Bls.G2
 public import EthLib.Cryptography.Proofs.Bls.BaseFieldMap
+public import EthLib.Cryptography.Proofs.ScalarProduct
 
 /-!
 # Proofs: the BLS12-381 curves under a map of base fields
@@ -90,20 +91,10 @@ theorem map_toAffine (f : FieldOps.Hom F G) (p : G1 F) :
   · simp only [Prod.map, f.map_zero]
   · simp only [Prod.map, f.map_mul, f.map_inverse]
 
-/-- A map of the field operations commutes with the steps of the scalar multiplication. -/
-theorem map_mulNatSteps (f : FieldOps.Hom F G) (p : G1 F) (k h n : Nat) (q : G1 F) :
-    map f (mulNatSteps p k h n q) = mulNatSteps (map f p) k h n (map f q) := by
-  induction n generalizing q with
-  | zero => rfl
-  | succ n ih =>
-    rw [mulNatSteps, mulNatSteps, ih]
-    congr 1
-    cases h.testBit (n + 1) <;> cases k.testBit (n + 1) <;>
-      simp only [map_add_fn, map_neg_fn, map_double]
-
 theorem map_mulNat (f : FieldOps.Hom F G) (p : G1 F) (k : Nat) :
     map f (mulNat p k) = mulNat (map f p) k := by
-  rw [mulNat, mulNat, map_mulNatSteps, map_zero]
+  rw [mulNat, mulNat, ScalarProduct.map_naf (map f) (map_double f) (map_add_fn f), map_zero,
+    map_neg_fn]
 
 theorem map_mul (f : FieldOps.Hom F G) (p : G1 F) (s : Fr) : map f (p.mul s) = (map f p).mul s :=
   map_mulNat f p s.val

@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Proofs.AltBn128.Twist
 
 It lies on the twist and is not the point at infinity.
 
-The kernel computes `q P2 = O` by double and add, so `P2` has the prime order `q`.
+The kernel computes `q P2 = O` by the scalar product, so `P2` has the prime order `q`.
 
 EIP-197 says that `G_2` is the only group of order `q` on the twist, so `P2` generates it.
 
@@ -31,15 +31,15 @@ theorem isOnCurve_generator : generator.isOnCurve = true := by decide +kernel
 /-- `P2` is not the point at infinity. -/
 theorem generator_ne_infinity : generator ≠ infinity := by decide
 
-/-- `q P2 = O`, as the kernel computes it by double and add. -/
-theorem mulBits_order_generator : mulBits 256 Fr.modulus generator = infinity := by
+/-- `q P2 = O`, as the kernel computes it by the scalar product. -/
+theorem mulNat_order_generator : mulNat Fr.modulus generator = infinity := by
   decide +kernel
 
 /-- `P2` has order `q`, a prime. -/
 theorem addOrderOf_generator : addOrderOf (toPoint generator) = Fr.modulus := by
   refine addOrderOf_eq_prime ?_ fun h =>
     generator_ne_infinity ((toPoint_eq_zero isOnCurve_generator).mp h)
-  rw [← toPoint_mulBits 256 _ isOnCurve_generator (by decide), mulBits_order_generator]
+  rw [← toPoint_mulNat _ isOnCurve_generator, mulNat_order_generator]
   rfl
 
 end Point2

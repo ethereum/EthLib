@@ -129,18 +129,18 @@ It takes the inverse of that representation, and the map that reads an element b
 /-- The point of a Jacobian form. -/
 def ofJacobian (p : Jacobian m) : Point (Fin m) := ofCoords Fin.inverse id p.toCoords
 
-/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
+/-- `k P`, left to right on the non-adjacent form of `k`.
 
 The steps run in Jacobian coordinates, in a representation of the field.
 
 Only the conversion back to a point takes an inverse, once, at the end.
 
 It takes the maps into and out of that representation, its inverse, and the curve's `a` in it. -/
-@[specialize] def mulBits {F G : Type} [OfNat F 0] [OfNat F 1] [OfNat G 0] [OfNat G 1]
+@[specialize] def mulNat {F G : Type} [OfNat F 0] [OfNat F 1] [OfNat G 0] [OfNat G 1]
     [Add G] [Sub G] [Mul G] [DecidableEq G] (encode : F → G) (inverse : G → G) (read : G → F)
-    (a : G) (fuel k : Nat) (p : Point F) : Point F :=
+    (a : G) (k : Nat) (p : Point F) : Point F :=
   -- The representation can be the field itself, with the identity for both maps.
-  ofCoords inverse read (Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode))
+  ofCoords inverse read (Jacobian.Coords.mulNat a k (p.toCoords.map encode))
 
 end Jacobian
 
