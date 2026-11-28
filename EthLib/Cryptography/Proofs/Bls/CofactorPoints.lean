@@ -26,6 +26,8 @@ Each coordinate is written as two halves of 192 bits, so that each line stays sh
 
 namespace EthLib.Cryptography.Bls.CofactorCertificate
 
+open HashToCurve (clearCofactor map_clearCofactor)
+
 /-! ### First `13`-torsion witness -/
 
 def q13 : G2 :=
@@ -47,11 +49,10 @@ theorem q13_nonzero : G2.toPoint q13 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q13_annihilator : 13 • G2.toPoint q13 = 0 :=
-  nsmul_zero_cert q13 q13_valid 13 5 (by decide)
-    (by decide_g2_at_model [q13])
+  nsmul_zero_cert q13 q13_valid 13 (by decide_g2_at_model [q13])
 
-theorem q13_clear_zero : (clearAux q13).isInfinity = true := by
-  decide_g2_at_model [q13, map_clearAux]
+theorem q13_clear_zero : (clearCofactor q13).isInfinity = true := by
+  decide_g2_at_model [q13, map_clearCofactor]
 
 /-! ### First `23`-torsion witness -/
 
@@ -74,11 +75,10 @@ theorem q23_nonzero : G2.toPoint q23 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q23_annihilator : 23 • G2.toPoint q23 = 0 :=
-  nsmul_zero_cert q23 q23_valid 23 6 (by decide)
-    (by decide_g2_at_model [q23])
+  nsmul_zero_cert q23 q23_valid 23 (by decide_g2_at_model [q23])
 
-theorem q23_clear_zero : (clearAux q23).isInfinity = true := by
-  decide_g2_at_model [q23, map_clearAux]
+theorem q23_clear_zero : (clearCofactor q23).isInfinity = true := by
+  decide_g2_at_model [q23, map_clearCofactor]
 
 /-! ### Second independent `13`-torsion witness -/
 
@@ -101,11 +101,10 @@ theorem independent13_nonzero : G2.toPoint independent13 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem independent13_annihilator : 13 • G2.toPoint independent13 = 0 :=
-  nsmul_zero_cert independent13 independent13_valid 13 5 (by decide)
-    (by decide_g2_at_model [independent13])
+  nsmul_zero_cert independent13 independent13_valid 13 (by decide_g2_at_model [independent13])
 
-theorem independent13_clear_zero : (clearAux independent13).isInfinity = true := by
-  decide_g2_at_model [independent13, map_clearAux]
+theorem independent13_clear_zero : (clearCofactor independent13).isInfinity = true := by
+  decide_g2_at_model [independent13, map_clearCofactor]
 
 /-! ### Second independent `23`-torsion witness -/
 
@@ -128,11 +127,10 @@ theorem independent23_nonzero : G2.toPoint independent23 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem independent23_annihilator : 23 • G2.toPoint independent23 = 0 :=
-  nsmul_zero_cert independent23 independent23_valid 23 6 (by decide)
-    (by decide_g2_at_model [independent23])
+  nsmul_zero_cert independent23 independent23_valid 23 (by decide_g2_at_model [independent23])
 
-theorem independent23_clear_zero : (clearAux independent23).isInfinity = true := by
-  decide_g2_at_model [independent23, map_clearAux]
+theorem independent23_clear_zero : (clearCofactor independent23).isInfinity = true := by
+  decide_g2_at_model [independent23, map_clearCofactor]
 
 /-! ### `2713`-torsion witness -/
 
@@ -155,11 +153,10 @@ theorem q2713_nonzero : G2.toPoint q2713 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q2713_annihilator : 2713 • G2.toPoint q2713 = 0 :=
-  nsmul_zero_cert q2713 q2713_valid 2713 13 (by decide)
-    (by decide_g2_at_model [q2713])
+  nsmul_zero_cert q2713 q2713_valid 2713 (by decide_g2_at_model [q2713])
 
-theorem q2713_clear_zero : (clearAux q2713).isInfinity = true := by
-  decide_g2_at_model [q2713, map_clearAux]
+theorem q2713_clear_zero : (clearCofactor q2713).isInfinity = true := by
+  decide_g2_at_model [q2713, map_clearCofactor]
 
 /-! ### `11953`-torsion witness -/
 
@@ -182,11 +179,10 @@ theorem q11953_nonzero : G2.toPoint q11953 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q11953_annihilator : 11953 • G2.toPoint q11953 = 0 :=
-  nsmul_zero_cert q11953 q11953_valid 11953 15 (by decide)
-    (by decide_g2_at_model [q11953])
+  nsmul_zero_cert q11953 q11953_valid 11953 (by decide_g2_at_model [q11953])
 
-theorem q11953_clear_zero : (clearAux q11953).isInfinity = true := by
-  decide_g2_at_model [q11953, map_clearAux]
+theorem q11953_clear_zero : (clearCofactor q11953).isInfinity = true := by
+  decide_g2_at_model [q11953, map_clearCofactor]
 
 /-! ### `262069`-torsion witness -/
 
@@ -209,11 +205,10 @@ theorem q262069_nonzero : G2.toPoint q262069 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q262069_annihilator : 262069 • G2.toPoint q262069 = 0 :=
-  nsmul_zero_cert q262069 q262069_valid 262069 19 (by decide)
-    (by decide_g2_at_model [q262069])
+  nsmul_zero_cert q262069 q262069_valid 262069 (by decide_g2_at_model [q262069])
 
-theorem q262069_clear_zero : (clearAux q262069).isInfinity = true := by
-  decide_g2_at_model [q262069, map_clearAux]
+theorem q262069_clear_zero : (clearCofactor q262069).isInfinity = true := by
+  decide_g2_at_model [q262069, map_clearCofactor]
 
 /-! ### Large prime-torsion witness -/
 
@@ -236,10 +231,9 @@ theorem large_nonzero : G2.toPoint large ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem large_annihilator : CofactorPrimes.largePrime • G2.toPoint large = 0 :=
-  nsmul_zero_cert large large_valid _ 449 (by decide +kernel)
-    (by decide_g2_at_model [large])
+  nsmul_zero_cert large large_valid _ (by decide_g2_at_model [large])
 
-theorem large_clear_zero : (clearAux large).isInfinity = true := by
-  decide_g2_at_model [large, map_clearAux]
+theorem large_clear_zero : (clearCofactor large).isInfinity = true := by
+  decide_g2_at_model [large, map_clearCofactor]
 
 end EthLib.Cryptography.Bls.CofactorCertificate

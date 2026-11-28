@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the history storage contract of EIP-2935 does what its EIP describes
@@ -501,7 +502,7 @@ theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body mid : Body
     startSystemCalls env parentHash body =
       .ok { mid with builder := mid.builder.record HISTORY_STORAGE_ADDRESS id } := by
   have hdencun : .dencun ≤ fork := Nat.le_trans (by decide) hfork
-  simp only [startSystemCalls, BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, hdencun,
+  simp only [startSystemCalls_unfold, BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, hdencun,
     ↓reduceDIte, hbeacon, bind, Except.bind, hjoin,
     Except.mapError, hfork, ↓reduceIte,
     systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_HISTORY_STORAGE_ADDRESS,

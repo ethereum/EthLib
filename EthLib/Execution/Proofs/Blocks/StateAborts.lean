@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.NoncesFit
 public import EthLib.Execution.Proofs.Transactions.StateAborts
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: before Hegotá, a block aborts only with an error of the state
@@ -51,7 +52,7 @@ private theorem systemCall_eq_error {env : BlockEnvironment fork} {block : Block
     {target : Address} {data : ByteArray} {e : EvmError} (hfit : block.NoncesFit)
     (hwords : env.WordsFit)
     (h : systemCall env block target data = .error e) : ∃ error, e = .state error := by
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
     · exact Transactions.processMessageCall_eq_error hfit (wordsFit_systemMessage _ _ hwords) h
@@ -84,7 +85,7 @@ private theorem startSystemCalls_eq_error {env : BlockEnvironment fork} {parentH
     split at h
     · exact systemCall_join_eq_error fit hwords h
     · cases h
-  unfold startSystemCalls at h
+  rw [startSystemCalls_unfold] at h
   dsimp only at h
   split at h
   · rcases Base.bind_eq_error h with h | ⟨out, hout, h⟩

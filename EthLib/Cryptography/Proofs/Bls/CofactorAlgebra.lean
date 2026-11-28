@@ -27,41 +27,42 @@ theorem c1Psi_norm : (c1Psi : Fp2) * c1Psi.conjugate = c1Psi2 := by
 theorem c2Psi_norm : (c2Psi : Fp2) * c2Psi.conjugate = -1 := by
   decide_eq_at_model [map_c2Psi]
 
-private theorem toAffine_one (x y : Fp2) : G1.toAffine ⟨x, y, Fp2.one⟩ = (x, y) :=
-  G1.Law.toAffine_mk_one Fp2.embedding x y
-
 private theorem psi_noninf (P : G2) (hz : P.z.isZero = false) :
-    psi P = ⟨c1Psi * P.toAffine.1.conjugate, c2Psi * P.toAffine.2.conjugate, Fp2.one⟩ := by
+    psi P = ⟨c1Psi * P.x.conjugate, c2Psi * P.y.conjugate, P.z.conjugate⟩ := by
   unfold psi
   rw [hz]
   rfl
 
 private theorem psi2_noninf (P : G2) (hz : P.z.isZero = false) :
-    psi2 P = ⟨c1Psi2 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩ := by
+    psi2 P = ⟨c1Psi2 * P.x, -P.y, P.z⟩ := by
   unfold psi2
   rw [hz]
   rfl
+
+private theorem psi_z_isZero (P : G2) (hz : P.z.isZero = false) : (psi P).z.isZero = false := by
+  rw [psi_noninf P hz]
+  exact (Fp2.conjugate_isZero _).trans hz
 
 /-- The optimized `psi2` map equals two applications of `psi` (`RFC 9380 Appendix G.3`). -/
 theorem psi_psi_eq_psi2 (P : G2) : psi (psi P) = psi2 P := by
   cases hz : P.z.isZero with
   | true => simp [psi, psi2, hz]
   | false =>
-    rw [psi_noninf P hz]
-    rw [psi_noninf _ Fp2.one_isZero, psi2_noninf P hz, toAffine_one]
-    simp only [Fp2.conjugate_mul, Fp2.conjugate_conjugate]
-    refine congrArg₂ (fun a b => (⟨a, b, Fp2.one⟩ : G2)) ?_ ?_
-    · rw [← mul_assoc, c1Psi_norm]
-    · rw [← mul_assoc, c2Psi_norm, neg_one_mul]
+    rw [psi_noninf _ (psi_z_isZero P hz), psi_noninf P hz, psi2_noninf P hz]
+    dsimp only
+    simp only [Fp2.conjugate_mul, Fp2.conjugate_conjugate, ← mul_assoc, c1Psi_norm, c2Psi_norm,
+      neg_one_mul]
 
-/-- Three applications of `psi2` on a finite representative normalize to affine negation. -/
+/-- On a finite point, three applications of `psi2` give its negation. -/
 theorem psi2_cube_noninf (P : G2) (hz : P.z.isZero = false) :
-    psi2 (psi2 (psi2 P)) = ⟨P.toAffine.1, -P.toAffine.2, Fp2.one⟩ := by
-  rw [psi2_noninf P hz, psi2_noninf _ Fp2.one_isZero, psi2_noninf _ Fp2.one_isZero]
-  simp only [toAffine_one, neg_neg]
-  refine congrArg₂ (fun a b => (⟨a, b, Fp2.one⟩ : G2)) ?_ rfl
-  have h := congrArg (fun c : Fp2 => c * P.toAffine.1) c1Psi2_cube
-  simpa only [pow_succ, pow_zero, one_mul, mul_assoc] using h
+    psi2 (psi2 (psi2 P)) = G2.neg P := by
+  have hx : (c1Psi2 : Fp2) * (c1Psi2 * (c1Psi2 * P.x)) = P.x := by
+    linear_combination P.x * c1Psi2_cube
+  rw [psi2_noninf P hz, psi2_noninf (⟨c1Psi2 * P.x, -P.y, P.z⟩ : G2) hz,
+    psi2_noninf (⟨c1Psi2 * (c1Psi2 * P.x), - -P.y, P.z⟩ : G2) hz]
+  dsimp only
+  rw [hx, neg_neg]
+  rfl
 
 private theorem isZero_eq_of_projectiveEq {p q : G2} (h : p.projectiveEq q = true) :
     p.z.isZero = q.z.isZero := by
@@ -106,11 +107,17 @@ theorem psi_projectiveEq_of_projectiveEq {p q : G2} (h : p.projectiveEq q = true
   · have hq := hi.symm.trans hp
     simpa [psi, hp, hq] using h
   · have hq : ¬q.z.isZero = true := fun hq => hp (hi.trans hq)
-    have he : psi p = psi q := by
-      simp only [psi, hp, hq, Bool.false_eq_true, ↓reduceIte]
-      rw [toAffine_eq_of_projectiveEq h]
-    rw [he]
-    exact G2.projectiveEq_refl _
+    have hpf := Bool.eq_false_iff.mpr hp
+    have hqf := Bool.eq_false_iff.mpr hq
+    simp only [G1.projectiveEq, Fp2.fieldOps_isZero, Fp2.fieldOps_beq, hpf, hqf,
+      Bool.false_eq_true, ↓reduceIte, Bool.and_eq_true, Fp2.beq_iff_eq] at h
+    rw [psi_noninf p hpf, psi_noninf q hqf]
+    simp only [G1.projectiveEq, Fp2.fieldOps_isZero, Fp2.fieldOps_beq, Fp2.conjugate_isZero, hpf,
+      hqf, Bool.false_eq_true, ↓reduceIte, Bool.and_eq_true, Fp2.beq_iff_eq]
+    have h1 := congrArg Fp2.conjugate h.1
+    have h2 := congrArg Fp2.conjugate h.2
+    simp only [Fp2.conjugate_mul] at h1 h2
+    exact ⟨by linear_combination c1Psi * h1, by linear_combination c2Psi * h2⟩
 
 /-- On valid representatives `psi` depends only on the elliptic-curve group element. -/
 theorem psi_toPoint_eq_of_toPoint_eq {p q : G2} (hp : G2.Valid p) (hq : G2.Valid q)
@@ -119,21 +126,16 @@ theorem psi_toPoint_eq_of_toPoint_eq {p q : G2} (hp : G2.Valid p) (hq : G2.Valid
   (G2.projectiveEq_eq_true_iff_toPoint_eq (psi_valid hp) (psi_valid hq)).mp
     (psi_projectiveEq_of_projectiveEq ((G2.projectiveEq_eq_true_iff_toPoint_eq hp hq).mpr h))
 
-private theorem affine_neg {p : G2} (hz : p.z.isZero = false) :
-    (G2.neg p).toAffine = (p.toAffine.1, -p.toAffine.2) := by
-  simp only [G1.toAffine, G2.neg, Fp2.fieldOps_isZero, hz, Bool.false_eq_true, ↓reduceIte]
-  rw [neg_mul]
-
 /-- `psi` commutes with Jacobian negation on all representatives. -/
 theorem psi_neg (p : G2) : psi (G2.neg p) = G2.neg (psi p) := by
   by_cases hz : p.z.isZero = true
   · simp [psi, G2.neg, hz]
   · have hf : p.z.isZero = false := Bool.eq_false_iff.mpr hz
     have hnf : (G2.neg p).z.isZero = false := hf
-    simp only [psi, hf, hnf, Bool.false_eq_true, ↓reduceIte]
-    rw [affine_neg hf]
-    change (⟨_, _ * Fp2.conjugate (-p.toAffine.2), _⟩ : G2) = ⟨_, -(_ * _), _⟩
+    rw [psi_noninf _ hnf, psi_noninf p hf]
+    change (⟨_, c2Psi * Fp2.conjugate (-p.y), _⟩ : G2) = ⟨_, -(c2Psi * p.y.conjugate), _⟩
     rw [Fp2.conjugate_neg, mul_neg]
+    rfl
 
 /-- On valid points `psi` commutes with group negation. -/
 theorem psi_toPoint_neg {p : G2} (hp : G2.Valid p) :
@@ -170,19 +172,7 @@ theorem psi2_cube_projectiveEq_neg (P : G2) :
     simp [G2.neg, hz]
   | false =>
     rw [psi2_cube_noninf P hz]
-    have hnz : (G2.neg P).z.isZero = false := hz
-    have hPz : P.z ≠ 0 := fun h0 => by
-      rw [Fp2.isZero_iff.mpr h0] at hz
-      cases hz
-    have hone_nz : ¬(Fp2.one : Fp2).isZero = true := by rw [Fp2.one_isZero]; decide
-    simp only [G1.projectiveEq, Fp2.fieldOps_isZero, Fp2.fieldOps_beq]
-    rw [ite_eq_right hone_nz, ite_eq_right (by simp [hnz])]
-    dsimp only [G2.neg]
-    simp only [G1.toAffine, Fp2.fieldOps_isZero, hz, Bool.false_eq_true, ↓reduceIte]
-    rw [Bool.and_eq_true, Fp2.beq_iff_eq, Fp2.beq_iff_eq]
-    change P.x * (P.z⁻¹ * P.z⁻¹) * (P.z * P.z) = P.x * (1 * 1) ∧
-      -(P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) * (P.z * P.z * P.z) = -P.y * (1 * 1 * 1)
-    constructor <;> field_simp
+    exact G2.projectiveEq_refl _
 
 /-- On valid twist points, three applications of `psi2` act as group negation. -/
 theorem psi2_cube_toPoint {P : G2} (hP : G2.Valid P) :

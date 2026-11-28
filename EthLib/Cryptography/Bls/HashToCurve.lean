@@ -459,16 +459,15 @@ def c1Psi2 : Fp2 F :=
 
 The RFC writes it on fractions `(xn / xd, yn / yd)`.
 
-This is its affine form, with the denominators equal to 1.
+This is its form in Jacobian coordinates: it multiplies `X` by `c1`, negates `Y` and keeps `Z`.
 
 [g3]: https://www.rfc-editor.org/rfc/rfc9380#appendix-G.3
 -/
 def psi2 (P : G2 F) : G2 F :=
   -- The point at infinity maps to itself.
   if P.z.isZero then P else
-    -- Normalise to affine form, then map the coordinates, with `Z = 1`.
-    let (x, y) := P.toAffine
-    ⟨c1Psi2 * x, -y, Fp2.one⟩
+    -- `X / Z^2` maps to `c1 X / Z^2`, and `Y / Z^3` to `-Y / Z^3`, with no inversion.
+    ⟨c1Psi2 * P.x, -P.y, P.z⟩
 
 /-- `[c1] P`, with `c1 = -0xd201000000010000` the BLS parameter, [RFC 9380 Appendix G.3][g3].
 

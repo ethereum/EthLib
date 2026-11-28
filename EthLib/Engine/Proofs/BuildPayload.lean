@@ -4,6 +4,7 @@ public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Proofs.NewPayload
 public import EthLib.Execution.Proofs.Blocks.Transition
 import EthLib.Execution.Proofs.Blocks.BodyGas
+import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the payload that the execution layer builds
@@ -213,7 +214,7 @@ private theorem applyTransactions_append {env : BlockEnvironment fork} {body : B
     {l : List Transaction} {tx : Transaction} :
     applyTransactions env body (l ++ [tx]) =
       applyTransactions env body l >>= fun before => applyTransaction env l.length before tx := by
-  simp [applyTransactions, List.zipIdx_append, List.foldlM_append]
+  simp [applyTransactions_unfold, List.zipIdx_append, List.foldlM_append]
 
 /-- A property of every list follows from the empty list and from adding one value at the end. -/
 private theorem appendInduction {α : Type} {motive : List α → Prop} (nil : motive [])
@@ -243,7 +244,7 @@ private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {bo
           processTransaction env before.block included l[i] = .ok out := by
   induction l using appendInduction generalizing output with
   | nil =>
-    simp only [applyTransactions, List.zipIdx_nil, List.foldlM_nil, pure, Except.pure,
+    simp only [applyTransactions_unfold, List.zipIdx_nil, List.foldlM_nil, pure, Except.pure,
       Except.ok.injEq] at h
     subst h
     exact ⟨rfl, [], rfl, rfl, fun i hi => absurd hi (Nat.not_lt_zero i)⟩

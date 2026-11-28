@@ -11,6 +11,9 @@ public import EthLib.Execution.Proofs.Evm.Noninterference
 public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Execution.Proofs.Evm.Gas
 public import EthLib.Execution.Proofs.Evm.Op
+public import EthLib.Execution.Proofs.Evm.OpTables
+public import EthLib.Execution.Proofs.Evm.CodeKept
+public import EthLib.Execution.Proofs.Evm.Padding
 public import EthLib.Execution.Proofs.Evm.Machine.Stack
 public import EthLib.Execution.Proofs.Evm.Machine.Frame
 public import EthLib.Execution.Proofs.Evm.Step

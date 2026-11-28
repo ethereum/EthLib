@@ -30,9 +30,10 @@ Sources, at commit `1ca0818` of execution-apis:
 namespace EthLib.Engine
 
 open EthLib.Base
-open EthLib.Execution.Blocks (Block BlockChain stateTransition)
+open EthLib.Execution.Blocks (Block BlockChain indexedRoot stateTransition)
 open EthLib.Execution.Transactions (Transaction)
 open EthLib.Engine.Json (AnyPayload)
+open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 variable {preset : Consensus.Preset} {fork : Fork}
 
@@ -188,6 +189,28 @@ def payloadBlock (config : ChainConfig) (p : Consensus.ExecutionPayload preset f
     let block ← (payload.toBlock beacon lists accessList slot).toOption
     return ⟨executionFork, block⟩
   else none
+
+/-- From Gloas: the block hash of the payload of an envelope, the hash of its header.
+
+It is none before Gloas, or when the payload, its requests or its header cannot be encoded. -/
+def envelopeBlockHash (envelope : Consensus.ExecutionPayloadEnvelope preset fork) :
+    Option Hash32 := do
+  let p := envelope.payload
+  -- The payload as the structure of the Engine API, with the fields of its fork.
+  let payload ← ((← anyPayloadOf p).atFork fork).toOption
+  -- EIP-7685: each nonempty list of requests, its type byte and then its bytes.
+  let requests ← (Consensus.getExecutionRequestsList envelope.executionRequests).toOption
+  -- EIP-7928: the header holds the Keccak-256 hash of the bytes of the block access list.
+  let accessList ← sinceValue p.blockAccessList
+  -- EIP-7843: the header holds the slot number of the payload.
+  let slot ← sinceValue p.slotNumber
+  -- Yellow Paper §4.4.2: the trie root of the bytes of each transaction, as given.
+  let root ← (indexedRoot payload.transactions).toOption
+  -- The header of the payload, with the root of the parent beacon block of the envelope.
+  let header ← (payload.toHeader root (fun _ => envelope.parentBeaconBlockRoot) (fun _ => requests)
+    (fun _ => keccak256 ⟨accessList.data⟩) (fun _ => slot)).toOption
+  -- Version 1, step 2: the hash is `Keccak256(RLP(ExecutionBlockHeader))`.
+  header.hash.toOption
 
 /-- The execution layer of the beacon chain, on a chain of the execution layer. -/
 def executionEngine (chain : BlockChain) : Consensus.ExecutionEngine preset fork where

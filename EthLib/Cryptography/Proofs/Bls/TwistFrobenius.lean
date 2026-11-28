@@ -333,15 +333,15 @@ theorem toPoint_psi {P : G2} (hP : G2.Valid P) :
     have hnorm := WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hP hz
     change G2.toPoint P = _ at hnorm
     rw [hnorm, hom_apply]
+    have hu : IsUnit P.z.conjugate :=
+      IsUnit.mk0 _ fun h => hi (by rw [← Fp2.conjugate_isZero]; exact Fp2.isZero_iff.mpr h)
+    -- `psi P` is a rescaling of its affine form, which has the same normalization.
     have hv := psi_valid hP
-    have he : psi P = ⟨(c1Psi : Fp2) * P.toAffine.1.conjugate,
-        (c2Psi : Fp2) * P.toAffine.2.conjugate, Fp2.one⟩ := by
-      unfold psi
-      rw [hf]
-      rfl
-    rw [he] at hv ⊢
-    change WeierstrassCurve.Jacobian.Point.toAffine G2.curve _ = _
-    rw [WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hv one_ne_zero]
+    change G2.curve.Nonsingular (G2.rep (psi P)) at hv
+    rw [rep_psi P hf, WeierstrassCurve.Jacobian.nonsingular_smul _ hu] at hv
+    change WeierstrassCurve.Jacobian.Point.toAffine G2.curve (G2.rep (psi P)) = _
+    rw [rep_psi P hf, WeierstrassCurve.Jacobian.Point.toAffine_smul _ hu,
+      WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hv one_ne_zero]
     simp only [mapPoint, toAffine_eq_div P hf,
       G2.rep_x, G2.rep_y, G2.rep_z, show Fp2.one = (1 : Fp2) from rfl,
       one_pow, div_one]
@@ -361,7 +361,6 @@ theorem toPoint_psi_mulNat {P : G2} (hP : G2.Valid P) (n : Nat) :
 theorem psi_generator_projectiveEq :
     (psi (G2.generator : G2)).projectiveEq (mulNegX G2.generator) = true := by
   unfold mulNegX
-  rw [← G2.mulNatAux_eq 65 G2.generator blsX (by decide)]
   decide_g2_at_model [map_psi]
 
 /-- The `psi` eigenvalue on `G2.generator` equals the signed BLS parameter `x = -|x|`. -/

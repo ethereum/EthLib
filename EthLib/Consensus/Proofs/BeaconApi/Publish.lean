@@ -106,7 +106,8 @@ theorem publish_refused {reason : String}
 
 It is then answered with the store of the handler, and otherwise with the store as it was. -/
 theorem publish_of_pass {after : Seen}
-    (gossip : validateGossipMessage context.config context.checks context.setup seen
+    (gossip : validateGossipMessage context.config context.checks context.setup context.blockHashOf
+        seen
       context.store context.statuses context.currentTimeMs message = .ok (.accept, after))
     (passes : levelFailure level none consensus rival = none) :
     publish context seen level message consensus rival integrate =
@@ -122,11 +123,13 @@ theorem publish_of_pass {after : Seen}
 private theorem publish_gossip
     (notRefused : ∀ reason,
       (publish context seen level message consensus rival integrate).1 ≠ .refused reason) :
-    ∃ after, validateGossipMessage context.config context.checks context.setup seen
+    ∃ after, validateGossipMessage context.config context.checks context.setup context.blockHashOf
+        seen
       context.store context.statuses context.currentTimeMs message = .ok (.accept, after) ∧
       levelFailure level none consensus rival = none := by
   unfold publish at notRefused
-  rcases hg : validateGossipMessage context.config context.checks context.setup seen
+  rcases hg : validateGossipMessage context.config context.checks context.setup context.blockHashOf
+      seen
       context.store context.statuses context.currentTimeMs message with error | ⟨outcome, after⟩
   · rw [messageFailure_of_error hg] at notRefused
     exact absurd rfl (notRefused _)
@@ -147,7 +150,8 @@ theorem publish_passes
     (notRefused : ∀ reason,
       (publish context seen level message consensus rival integrate).1 ≠ .refused reason) :
     levelFailure level none consensus rival = none ∧
-      validateGossipMessage context.config context.checks context.setup seen context.store
+      validateGossipMessage context.config context.checks context.setup context.blockHashOf seen
+          context.store
         context.statuses context.currentTimeMs message =
         .ok (.accept, (publish context seen level message consensus rival integrate).2.2) := by
   obtain ⟨after, gossip, passes⟩ := publish_gossip notRefused
@@ -252,7 +256,8 @@ theorem publishBlock_noRival {root : Root}
 
 It is integrated exactly when the block handler succeeds, with the store of the handler. -/
 theorem publishBlock_of_pass {after : Seen}
-    (gossip : validateGossipMessage context.config context.checks context.setup seen
+    (gossip : validateGossipMessage context.config context.checks context.setup context.blockHashOf
+        seen
       context.store context.statuses context.currentTimeMs (.beaconBlock signed) =
         .ok (.accept, after))
     (passes : levelFailure level none
@@ -297,8 +302,8 @@ The messages seen after it hold its block, its builder, and the hash and gas lim
 theorem publishEnvelope_gossip
     (notRefused : ∀ reason,
       (publishEnvelope context sources seen level gloas envelope).1 ≠ .refused reason) :
-    validateExecutionPayloadEnvelope context.config context.checks seen context.store gloas
-        envelope = .ok .accept ∧
+    validateExecutionPayloadEnvelope context.config context.checks context.blockHashOf seen
+        context.store gloas envelope = .ok .accept ∧
       (publishEnvelope context sources seen level gloas envelope).2.2 =
         seen.recordExecutionPayloadEnvelope envelope := by
   obtain ⟨after, gossip, -⟩ := publish_gossip notRefused
@@ -332,7 +337,8 @@ theorem publishEnvelope_noRival {block : BeaconBlock preset fork}
 
 It is integrated exactly when the envelope handler succeeds, with the store of the handler. -/
 theorem publishEnvelope_of_pass {after : Seen}
-    (gossip : validateGossipMessage context.config context.checks context.setup seen
+    (gossip : validateGossipMessage context.config context.checks context.setup context.blockHashOf
+        seen
       context.store context.statuses context.currentTimeMs
         (.executionPayloadEnvelope gloas envelope) = .ok (.accept, after))
     (passes : levelFailure level none

@@ -31,7 +31,7 @@ theorem p3_valid : Valid p3 :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p3_torsion : 3 • toPoint p3 = 0 :=
-  nsmul_zero_cert p3_valid 3 2 (by decide) (by decide_at_model [p3])
+  nsmul_zero_cert p3_valid 3 (by decide_at_model [p3])
 
 theorem p3_ne_zero : toPoint p3 ≠ 0 := toPoint_ne_zero p3_valid
 
@@ -68,10 +68,10 @@ private theorem r11_valid : Valid r11 :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p11_torsion : 11 • toPoint p11 = 0 :=
-  nsmul_zero_cert p11_valid 11 4 (by decide) (by decide_at_model [p11, q11, r11])
+  nsmul_zero_cert p11_valid 11 (by decide_at_model [p11, q11, r11])
 
 theorem q11_torsion : 11 • toPoint q11 = 0 :=
-  nsmul_zero_cert q11_valid 11 4 (by decide) (by decide_at_model [p11, q11, r11])
+  nsmul_zero_cert q11_valid 11 (by decide_at_model [p11, q11, r11])
 
 theorem p11_ne_zero : toPoint p11 ≠ 0 := toPoint_ne_zero p11_valid
 
@@ -117,10 +117,10 @@ private theorem r10177_valid : Valid r10177 :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p10177_torsion : 10177 • toPoint p10177 = 0 :=
-  nsmul_zero_cert p10177_valid 10177 14 (by decide) (by decide_at_model [p10177, q10177, r10177])
+  nsmul_zero_cert p10177_valid 10177 (by decide_at_model [p10177, q10177, r10177])
 
 theorem q10177_torsion : 10177 • toPoint q10177 = 0 :=
-  nsmul_zero_cert q10177_valid 10177 14 (by decide) (by decide_at_model [p10177, q10177, r10177])
+  nsmul_zero_cert q10177_valid 10177 (by decide_at_model [p10177, q10177, r10177])
 
 theorem p10177_ne_zero : toPoint p10177 ≠ 0 := toPoint_ne_zero p10177_valid
 
@@ -134,9 +134,9 @@ theorem q10177_not_nsmul (i : Fin 10177) : toPoint q10177 ≠ i.val • toPoint 
     (fun i hi hd => by
       rcases eq_root_of_dvd (l1 := 4773) (l2 := 5403) (by norm_num) (by decide) (by decide)
         (by decide) (by decide) hi hd with rfl | rfl
-      · exact nsmul_ne_cert p10177_valid q10177_valid 4773 14 (by decide)
+      · exact nsmul_ne_cert p10177_valid q10177_valid 4773
           (by decide_at_model [p10177, q10177, r10177])
-      · exact nsmul_ne_cert p10177_valid q10177_valid 5403 14 (by decide)
+      · exact nsmul_ne_cert p10177_valid q10177_valid 5403
           (by decide_at_model [p10177, q10177, r10177])) i
 
 /-! ### Order 859267 -/
@@ -172,11 +172,11 @@ private theorem r859267_valid : Valid r859267 :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p859267_torsion : 859267 • toPoint p859267 = 0 :=
-  nsmul_zero_cert p859267_valid 859267 20 (by decide)
+  nsmul_zero_cert p859267_valid 859267
     (by decide_at_model [p859267, q859267, r859267])
 
 theorem q859267_torsion : 859267 • toPoint q859267 = 0 :=
-  nsmul_zero_cert q859267_valid 859267 20 (by decide)
+  nsmul_zero_cert q859267_valid 859267
     (by decide_at_model [p859267, q859267, r859267])
 
 theorem p859267_ne_zero : toPoint p859267 ≠ 0 := toPoint_ne_zero p859267_valid
@@ -191,9 +191,9 @@ theorem q859267_not_nsmul (i : Fin 859267) : toPoint q859267 ≠ i.val • toPoi
     (fun i hi hd => by
       rcases eq_root_of_dvd (l1 := 119571) (l2 := 739695) (by norm_num) (by decide) (by decide)
         (by decide) (by decide) hi hd with rfl | rfl
-      · exact nsmul_ne_cert p859267_valid q859267_valid 119571 20 (by decide)
+      · exact nsmul_ne_cert p859267_valid q859267_valid 119571
           (by decide_at_model [p859267, q859267, r859267])
-      · exact nsmul_ne_cert p859267_valid q859267_valid 739695 20 (by decide)
+      · exact nsmul_ne_cert p859267_valid q859267_valid 739695
           (by decide_at_model [p859267, q859267, r859267])) i
 
 /-! ### Order 52437899 -/
@@ -229,11 +229,11 @@ private theorem r52437899_valid : Valid r52437899 :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p52437899_torsion : 52437899 • toPoint p52437899 = 0 :=
-  nsmul_zero_cert p52437899_valid 52437899 26 (by decide)
+  nsmul_zero_cert p52437899_valid 52437899
     (by decide_at_model [p52437899, q52437899, r52437899])
 
 theorem q52437899_torsion : 52437899 • toPoint q52437899 = 0 :=
-  nsmul_zero_cert q52437899_valid 52437899 26 (by decide)
+  nsmul_zero_cert q52437899_valid 52437899
     (by decide_at_model [p52437899, q52437899, r52437899])
 
 theorem p52437899_ne_zero : toPoint p52437899 ≠ 0 := toPoint_ne_zero p52437899_valid

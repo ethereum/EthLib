@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Transactions.StorageAt
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: a system call keeps the storage of an account it does not read
@@ -34,7 +35,7 @@ theorem keptOrRead_systemCall {env : BlockEnvironment fork} {block : State.Block
   -- The message of the call runs at its target.
   have recipient : ∀ to, (systemMessage env target data).target = some to →
       to = (systemMessage env target data).currentTarget := fun _ hto => (Option.some.inj hto).symm
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   dsimp only at h
   split at h
   · obtain ⟨call, hcall, h⟩ := bind_ok_iff.mp h
@@ -68,7 +69,7 @@ theorem keptOrWipedEmpty_systemCall_of_away {env : BlockEnvironment fork}
     simp [systemMessage] at hn
   have codeless : Transactions.CodelessAtZero address (.ofBlock block) [] := fun _ ha => by
     simp at ha
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   dsimp only at h
   split at h
   · rename_i hglam

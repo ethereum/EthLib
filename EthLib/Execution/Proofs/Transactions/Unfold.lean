@@ -24,7 +24,7 @@ variable {Meter : Type} [GasMeter Meter]
 
 omit [GasMeter Meter] in
 /-- Lifting a result into the monad of errors leaves it unchanged. -/
-private theorem liftExcept_except {ε α : Type} (x : Except ε α) :
+theorem liftExcept_except {ε α : Type} (x : Except ε α) :
     (liftExcept x : Except ε α) = x := by
   cases x <;> rfl
 

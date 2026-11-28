@@ -52,7 +52,7 @@ theorem clear_le_sstoreRefund (original current new : U256) :
       sstoreRefund fork original current new := by
   obtain ⟨hset, hreset⟩ := sstoreReadCost_le fork
   have hclear : (0 : Int) ≤ (gasSchedule fork).REFUND_STORAGE_CLEAR := Int.natCast_nonneg _
-  unfold sstoreRefund
+  rw [sstoreRefund_eq]
   by_cases ho : original = 0 <;> by_cases hc : current = 0 <;> by_cases hn : new = 0 <;>
     by_cases hcn : current = new <;> by_cases hon : original = new <;>
     simp only [ho, hc, hn, hcn, hon, ne_eq, not_true_eq_false, not_false_eq_true, and_true,
@@ -517,7 +517,7 @@ theorem processCreateMessage_clearedRefund_le [LawfulGasMeter Meter]
 theorem sstoreRefund_nonneg (hfork : fork < .istanbul) (original current new : U256) :
     0 ≤ sstoreRefund fork original current new := by
   have hpre : ¬fork ≥ .istanbul := Nat.not_le.mpr hfork
-  unfold sstoreRefund
+  rw [sstoreRefund_eq]
   simp only [hpre, ↓reduceIte]
   split_ifs <;> omega
 

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Instructions.Storage
+public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 
 /-!
 # Proofs: the status of a slot that SSTORE writes
@@ -92,7 +93,7 @@ theorem sstoreCost_eq_witness (fork : Fork) (original current new : U256) (cold 
   unfold sstoreStatus
   by_cases h1 : current = new <;> by_cases h2 : original = current <;>
     by_cases h3 : original = 0 <;> by_cases h4 : current = 0 <;> by_cases h5 : new = 0 <;>
-    by_cases h6 : original = new <;> simp_all [sstoreCost, SstoreStatus.witness]
+    by_cases h6 : original = new <;> simp_all [sstoreCost_eq, SstoreStatus.witness]
 
 /-- The refund of SSTORE is the refund of the witness of the class of the write. -/
 theorem sstoreRefund_eq_witness (fork : Fork) (original current new : U256) :
@@ -101,7 +102,7 @@ theorem sstoreRefund_eq_witness (fork : Fork) (original current new : U256) :
   unfold sstoreStatus
   by_cases h1 : current = new <;> by_cases h2 : original = current <;>
     by_cases h3 : original = 0 <;> by_cases h4 : current = 0 <;> by_cases h5 : new = 0 <;>
-    by_cases h6 : original = new <;> simp_all [sstoreRefund, SstoreStatus.witness]
+    by_cases h6 : original = new <;> simp_all [sstoreRefund_eq, SstoreStatus.witness]
 
 /-- The state gas that SSTORE charges is that of the witness of the class of the write. -/
 theorem sstoreStateGas_eq_witness (fork : Fork) (original current new : U256) :
@@ -110,7 +111,7 @@ theorem sstoreStateGas_eq_witness (fork : Fork) (original current new : U256) :
   unfold sstoreStatus
   by_cases h1 : current = new <;> by_cases h2 : original = current <;>
     by_cases h3 : original = 0 <;> by_cases h4 : current = 0 <;> by_cases h5 : new = 0 <;>
-    by_cases h6 : original = new <;> simp_all [sstoreStateGas, SstoreStatus.witness]
+    by_cases h6 : original = new <;> simp_all [sstoreStateGas_eq, SstoreStatus.witness]
 
 /-- The state gas that SSTORE refills is that of the witness of the class of the write. -/
 theorem sstoreStateRefill_eq_witness (fork : Fork) (original current new : U256) :
@@ -119,7 +120,7 @@ theorem sstoreStateRefill_eq_witness (fork : Fork) (original current new : U256)
   unfold sstoreStatus
   by_cases h1 : current = new <;> by_cases h2 : original = current <;>
     by_cases h3 : original = 0 <;> by_cases h4 : current = 0 <;> by_cases h5 : new = 0 <;>
-    by_cases h6 : original = new <;> simp_all [sstoreStateRefill, SstoreStatus.witness]
+    by_cases h6 : original = new <;> simp_all [sstoreStateRefill_eq, SstoreStatus.witness]
 
 /-- At every fork, the price of SSTORE depends only on the class of the write. -/
 theorem sstoreCost_eq_of_sstoreStatus_eq {fork : Fork} {original current new original' current'

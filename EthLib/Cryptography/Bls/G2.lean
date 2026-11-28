@@ -84,14 +84,20 @@ def c2Psi : Fp2 F :=
 def psi (P : G2 F) : G2 F :=
   -- The point at infinity maps to itself.
   if P.z.isZero then P else
-    -- An affine point has `xd = yd = 1`, as Appendix G.3 allows.
-    let (x, y) := P.toAffine
+    -- The Frobenius map is a field automorphism.
+    --
+    -- So it maps `X / Z^2` to `frobenius(X) / frobenius(Z)^2`, and likewise for `Y / Z^3`.
+    --
+    -- The map then reads the Jacobian coordinates, with no inversion.
+    --
     -- Step 1: `qxn = c1 * frobenius(xn)`, where `frobenius(x0 + I * x1) = x0 - I * x1`.
-    let qx := c1Psi * x.conjugate
+    let qx := c1Psi * P.x.conjugate
     -- Step 3: `qyn = c2 * frobenius(yn)`.
-    let qy := c2Psi * y.conjugate
-    -- Steps 2, 4 and 5: `qxd = qyd = 1`, so the result is affine, with `Z = 1`.
-    ⟨qx, qy, Fp2.one⟩
+    let qy := c2Psi * P.y.conjugate
+    -- Steps 2, 4 and 5: the denominators `Z^2` and `Z^3` map to those powers of `frobenius(Z)`.
+    --
+    -- So the result keeps the Jacobian form, with `frobenius(Z)`.
+    ⟨qx, qy, P.z.conjugate⟩
 
 end G2
 

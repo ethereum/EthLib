@@ -493,40 +493,79 @@ theorem toPoint_add [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Vali
 
 /-! ## Scalar multiplication -/
 
-theorem valid_mulNat (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
-    Valid e b (mulNat P k) := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    by_cases hk : k = 0
-    · rw [ite_eq_left hk]
-      exact valid_zero e b
-    rw [ite_eq_right hk]
-    by_cases h2k : k % 2 = 1
-    · rw [ite_eq_left h2k]
-      exact valid_add e b h2 h (ih (k / 2) (by omega) (valid_double e b h))
-    · rw [ite_eq_right h2k]
-      exact ih (k / 2) (by omega) (valid_double e b h)
+/-- The steps of the scalar multiplication keep a valid accumulator valid. -/
+theorem valid_mulNatSteps (h2 : (2 : K) ≠ 0) {P : G1 F} (hP : Valid e b P) (k h n : Nat)
+    {Q : G1 F} (hQ : Valid e b Q) : Valid e b (mulNatSteps P k h n Q) := by
+  induction n generalizing Q with
+  | zero => exact hQ
+  | succ n ih =>
+    rw [mulNatSteps]
+    apply ih
+    have hd := valid_double e b hQ
+    cases h.testBit (n + 1) <;> cases k.testBit (n + 1)
+    · exact hd
+    · exact valid_add e b h2 hd (valid_neg e b hP)
+    · exact valid_add e b h2 hd hP
+    · exact hd
 
-/-- The double-and-add scalar multiplication is the action of `ℕ` on the group. -/
+theorem valid_mulNat (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
+    Valid e b (mulNat P k) :=
+  valid_mulNatSteps e b h2 h k _ _ (valid_zero e b)
+
+/-- The difference of the quotients of `h` and `k` by `2^i`, as an integer. -/
+private def quotDiff (k h i : Nat) : ℤ := ((h / 2 ^ i : Nat) : ℤ) - ((k / 2 ^ i : Nat) : ℤ)
+
+/-- The quotient by `2^i` is twice the quotient by `2^(i+1)`, plus bit `i`. -/
+private theorem div_two_pow_eq (x i : Nat) :
+    ((x / 2 ^ i : Nat) : ℤ) = 2 * ((x / 2 ^ (i + 1) : Nat) : ℤ) + ((x.testBit i).toNat : ℤ) := by
+  have h1 : x / 2 ^ (i + 1) = x / 2 ^ i / 2 := by rw [Nat.pow_succ, Nat.div_div_eq_div_mul]
+  rw [h1, Nat.toNat_testBit]
+  omega
+
+/-- The steps from `Q` give `2^n Q` plus the digits read so far, times `P`. -/
+private theorem toPoint_mulNatSteps [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F}
+    (hP : Valid e b P) (k h n : Nat) {Q : G1 F} (hQ : Valid e b Q) :
+    toPoint e b (mulNatSteps P k h n Q) = (2 ^ n : ℤ) • toPoint e b Q +
+      (quotDiff k h 1 - 2 ^ n * quotDiff k h (n + 1)) • toPoint e b P := by
+  induction n generalizing Q with
+  | zero => simp [mulNatSteps]
+  | succ n ih =>
+    rw [mulNatSteps]
+    have hd := valid_double e b hQ
+    have hq : quotDiff k h (n + 1) = 2 * quotDiff k h (n + 1 + 1) +
+        (((h.testBit (n + 1)).toNat : ℤ) - ((k.testBit (n + 1)).toNat : ℤ)) := by
+      simp only [quotDiff, div_two_pow_eq h (n + 1), div_two_pow_eq k (n + 1)]
+      ring
+    cases hh : h.testBit (n + 1) <;> cases hk : k.testBit (n + 1)
+    · rw [ih hd, hq, hh, hk, toPoint_double e b hQ, pow_succ]
+      simp only [Bool.toNat_false, Nat.cast_zero, sub_zero, add_zero]
+      module
+    · rw [ih (valid_add e b h2 hd (valid_neg e b hP)), toPoint_add e b h2 hd (valid_neg e b hP),
+        hq, hh, hk, toPoint_neg e b hP, toPoint_double e b hQ, pow_succ]
+      simp only [Bool.toNat_false, Bool.toNat_true, Nat.cast_zero, Nat.cast_one]
+      module
+    · rw [ih (valid_add e b h2 hd hP), toPoint_add e b h2 hd hP, hq, hh, hk,
+        toPoint_double e b hQ, pow_succ]
+      simp only [Bool.toNat_false, Bool.toNat_true, Nat.cast_zero, Nat.cast_one]
+      module
+    · rw [ih hd, hq, hh, hk, toPoint_double e b hQ, pow_succ]
+      simp only [Bool.toNat_true, Nat.cast_one, sub_self, add_zero]
+      module
+
+/-- The scalar multiplication is the action of `ℕ` on the group. -/
 theorem toPoint_mulNat [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
     toPoint e b (mulNat P k) = k • toPoint e b P := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    by_cases hk : k = 0
-    · rw [ite_eq_left hk, toPoint_zero, hk, zero_nsmul]
-    rw [ite_eq_right hk]
-    by_cases h2k : k % 2 = 1
-    · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m + 1 := ⟨k / 2, by omega⟩
-      rw [ite_eq_left h2k, toPoint_add e b h2 h (valid_mulNat e b h2 (valid_double e b h) _),
-        show (2 * m + 1) / 2 = m by omega, ih m (by omega) (valid_double e b h),
-        toPoint_double e b h]
-      module
-    · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m := ⟨k / 2, by omega⟩
-      rw [ite_eq_right h2k, show 2 * m / 2 = m by omega, ih m (by omega) (valid_double e b h),
-        toPoint_double e b h]
-      module
+  rw [mulNat, toPoint_mulNatSteps e b h2 h _ _ _ (valid_zero e b), toPoint_zero, smul_zero,
+    zero_add]
+  -- Above the top bit of `3k`, both quotients vanish.
+  have hlt : 3 * k < 2 ^ ((3 * k).log2 + 1) := Nat.lt_log2_self
+  have htop : quotDiff k (3 * k) ((3 * k).log2 + 1) = 0 := by
+    rw [quotDiff, Nat.div_eq_of_lt hlt, Nat.div_eq_of_lt (by omega : k < 2 ^ ((3 * k).log2 + 1))]
+    simp
+  have hone : quotDiff k (3 * k) 1 = k := by
+    simp only [quotDiff, pow_one]
+    omega
+  rw [htop, hone, mul_zero, sub_zero, natCast_zsmul]
 
 /-! ## Special values -/
 
@@ -550,13 +589,15 @@ theorem add_zero {P : G1 F} (hP : P.isInfinity = false) : add P zero = P := by
 
 /-- The product by zero is the point at infinity. -/
 theorem mulNat_zero (P : G1 F) : mulNat P 0 = zero := by
-  rw [mulNat_def, ite_eq_left rfl]
+  rw [mulNat, show Nat.log2 (3 * 0) = 0 by decide, mulNatSteps]
 
 include e in
-/-- The product of a finite triple by one is the triple. -/
-theorem mulNat_one {P : G1 F} (hP : P.isInfinity = false) : mulNat P 1 = P := by
-  rw [mulNat_def, ite_eq_right one_ne_zero, ite_eq_left rfl, mulNat_zero]
-  exact add_zero e hP
+/-- The product of a triple by one is the triple. -/
+theorem mulNat_one (P : G1 F) : mulNat P 1 = P := by
+  have hd : double (zero : G1 F) = zero := ite_eq_left ((e.isZero_iff _).mpr e.map_zero)
+  rw [mulNat, show Nat.log2 (3 * 1) = 1 by decide, mulNatSteps, mulNatSteps, hd,
+    show Nat.testBit (3 * 1) (0 + 1) = true by decide, show Nat.testBit 1 (0 + 1) = false by decide]
+  exact zero_add e P
 
 include e in
 /-- A triple with `z = 1` is its own affine form. -/

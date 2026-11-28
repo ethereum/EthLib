@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the access-list builder follows the system calls
@@ -143,7 +144,7 @@ theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : systemCall env block target data = .ok out) :
     RebuildState block out.state := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, hpure⟩ := bind_ok_iff.mp h
     cases hpure

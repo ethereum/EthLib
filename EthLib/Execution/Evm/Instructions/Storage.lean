@@ -72,49 +72,114 @@ From Berlin, it leaves out the price of a cold access, which SSTORE adds on its 
 def sstoreResetCost (fork : Fork) : Nat :=
   (gasSchedule fork).SSTORE_RESET
 
+/-- The kind of an SSTORE write, which sets its price. -/
+inductive SstoreWrite where
+  /-- From Istanbul, the new value is the current value, so the write changes nothing. -/
+  | unchanged
+  /-- From Istanbul, the write changes a dirty slot.
+
+  Its current value is neither its original value nor the new value. -/
+  | dirty
+  /-- Up to BPO5, a zero slot becomes nonzero.
+
+  From Istanbul, the slot is also clean: its original value is its current value. -/
+  | set
+  /-- Before Istanbul, any other write.
+
+  From Istanbul to BPO5, a clean slot with a nonzero value changes. -/
+  | reset
+  /-- From Glamsterdam, a clean slot changes, whatever its value. -/
+  | clean
+  deriving DecidableEq, Repr
+
+/-- The case of an SSTORE: how it prices the write, and which refunds and state gas apply. -/
+structure SstoreCase where
+  /-- How the write is priced. -/
+  write : SstoreWrite
+  /-- Whether the write adds the refund to clear a slot. -/
+  clears : Bool
+  /-- From Istanbul, whether the write takes back the refund to clear a slot.
+
+  An earlier write of the transaction added that refund. -/
+  unclears : Bool
+  /-- From Istanbul, whether the write puts back the original value of a changed slot. -/
+  restores : Bool
+  /-- From Glamsterdam, whether the write fills a new slot, which charges state gas. -/
+  fills : Bool
+  /-- From Glamsterdam, whether the write clears a slot that the transaction filled.
+
+  That write refills the state gas of the new slot. -/
+  refills : Bool
+  deriving DecidableEq, Repr
+
+/-- The case of an SSTORE at `fork`, from the original, current and new values of the slot.
+
+The original value is the value before the transaction. -/
+@[inline]
+def sstoreCase (fork : Fork) (original current new : U256) : SstoreCase :=
+  -- From Istanbul, net gas metering by EIP-2200: the case depends on all three values.
+  if fork ≥ .istanbul then
+    { -- EIP-2200 tests the no-op first, then the clean slot, and the dirty slot last.
+      --
+      -- Once the write changes the slot, the clean and the dirty slot exclude each other.
+      --
+      -- From Glamsterdam, EIP-8038 prices every write to a clean slot the same.
+      write :=
+        if current = new then .unchanged
+        else if original ≠ current then .dirty
+        else if fork ≥ .glamsterdam then .clean
+        else if original = 0 then .set
+        else .reset
+      -- EIP-2200: with a nonzero original and current, a new value of 0 adds the refund.
+      --
+      -- For a clean slot, `original = current`, so this covers both cases of the EIP.
+      clears := current ≠ new ∧ original ≠ 0 ∧ current ≠ 0 ∧ new = 0
+      -- A current value of 0, on a slot with a nonzero original, removes that refund again.
+      unclears := current ≠ new ∧ original ≠ 0 ∧ current = 0
+      -- An original value equal to the new value resets the slot.
+      restores := current ≠ new ∧ original = new
+      -- EIP-8037: a new slot has original 0, current 0 and new `x > 0`.
+      fills := fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0
+      -- EIP-8037: a slot cleared back to 0 has original 0, current `x > 0` and new 0.
+      refills := fork ≥ .glamsterdam ∧ original = 0 ∧ current ≠ 0 ∧ new = 0 }
+  -- Before Istanbul, the rule before EIP-2200, by the current and new values alone.
+  --
+  -- EIP-1283 never ran on mainnet, so Constantinople keeps the rule of Petersburg, by EIP-1716.
+  else
+    { -- The set price when a zero slot becomes nonzero, otherwise the reset price.
+      write := if new ≠ 0 ∧ current = 0 then .set else .reset
+      -- The refund to clear a slot when a nonzero slot becomes zero.
+      clears := new = 0 ∧ current ≠ 0
+      unclears := false
+      restores := false
+      fills := false
+      refills := false }
+
 /-- The price of SSTORE in execution gas, from the original, current and new values of the slot.
 
 The flag says whether the access to the slot is cold. -/
 def sstoreCost (fork : Fork) (original current new : U256) (cold : Bool) : Nat :=
-  -- From Glamsterdam, the price of a write has three parts, by EIP-8038.
+  -- From Glamsterdam, EIP-8038: the access, 2100 when cold and 100 when warm.
+  let access := if cold then COLD_STORAGE_ACCESS else WARM_ACCESS
+  -- From Berlin to BPO5, EIP-2929: a cold pair costs an additional `COLD_SLOAD_COST` gas, 2100.
   --
-  -- The third part is the state gas of a new slot, which SSTORE charges apart.
-  if fork ≥ .glamsterdam then
-    -- EIP-8038: the access, 2100 when cold and 100 when warm.
-    --
-    -- Then it additionally charges `STORAGE_WRITE` when the write moves the slot from its original.
-    --
-    -- That write costs 10000 more.
-    (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) +
-      if original = current ∧ current ≠ new then STORAGE_WRITE else 0
-  -- From Istanbul, net gas metering prices a write by the original, current and new value.
+  -- The access is cold when it is the first access to the slot in the transaction.
   --
-  -- The original value is the value before the transaction.
-  else if fork ≥ .istanbul then
-    -- EIP-2929, from Berlin: a cold pair costs an additional `COLD_SLOAD_COST` gas, 2100.
-    --
-    -- The access is cold when it is the first access to the slot in the transaction.
-    let surcharge := if cold then COLD_STORAGE_ACCESS else 0
-    surcharge +
-      -- EIP-2200: when the original value equals the current value, and the new value differs:
-      if original = current ∧ current ≠ new then
-        -- An original value of 0 costs `SSTORE_SET_GAS`, any other `SSTORE_RESET_GAS`.
-        if original = 0 then STORAGE_SET else sstoreResetCost fork
-      -- The no-op and the dirty slot, which EIP-2200 tests first and last.
-      --
-      -- Both cost `SLOAD_GAS`.
-      --
-      -- So a write to a slot that the transaction already changed costs as much as a read.
-      else sstoreReadCost fork
-  -- Before Istanbul, the rule before EIP-2200: the set price when a zero slot becomes nonzero.
+  -- No access is cold before Berlin, and the rule before EIP-2200 has no surcharge.
+  let surcharge := if fork ≥ .istanbul ∧ cold then COLD_STORAGE_ACCESS else 0
+  match (sstoreCase fork original current new).write with
+  -- EIP-2200: the no-op and the dirty slot cost `SLOAD_GAS`, as much as a read.
   --
-  -- Otherwise the reset price.
+  -- From Glamsterdam, EIP-8038: they cost only the access.
+  | .unchanged | .dirty => if fork ≥ .glamsterdam then access else surcharge + sstoreReadCost fork
+  -- `G_sset` of the paper, `SSTORE_SET_GAS` from Istanbul: 20000.
+  | .set => surcharge + STORAGE_SET
+  -- `G_sreset` of the paper, `SSTORE_RESET_GAS` from Istanbul: 5000, and 2900 from Berlin.
+  | .reset => surcharge + sstoreResetCost fork
+  -- EIP-8038: the access, and `STORAGE_WRITE`, 10000 more, for a write that moves the slot.
   --
-  -- Up to Petersburg, these are 20000 and 5000.
-  --
-  -- EIP-1283 never ran on mainnet, so Constantinople keeps the rule of Petersburg, by EIP-1716.
-  else if new ≠ 0 ∧ current = 0 then STORAGE_SET
-  else COLD_STORAGE_WRITE
+  -- The state gas of a new slot is charged apart.
+  | .clean => access + STORAGE_WRITE
 
 /-- The change of the refund counter by SSTORE, from the original, current and new values. -/
 def sstoreRefund (fork : Fork) (original current new : U256) : Int :=
@@ -122,38 +187,24 @@ def sstoreRefund (fork : Fork) (original current new : U256) : Int :=
   --
   -- It is 15000 before London, 4800 from London, and 11616 from Glamsterdam.
   let clear : Int := (gasSchedule fork).REFUND_STORAGE_CLEAR
-  if fork ≥ .istanbul then
-    -- From Istanbul, refunds give back the price of writes that a later write undoes.
-    --
-    -- EIP-2200: a current value equal to the new value is a no-op, with no refund.
-    if current = new then 0 else
-      -- With a nonzero original and current, a new value of 0 adds `SSTORE_CLEARS_SCHEDULE` gas.
-      --
-      -- For a clean slot, `original = current`, so this covers both cases of the EIP.
-      (if original ≠ 0 ∧ current ≠ 0 ∧ new = 0 then clear else 0) -
-      -- A current value of 0, on a slot with a nonzero original, removes that gas again.
-      (if original ≠ 0 ∧ current = 0 then clear else 0) +
-      -- An original value equal to the new value resets the slot.
-      (if original = new then
-        -- From Glamsterdam, EIP-8038 rule 3: `STORAGE_WRITE` is refunded, the 10000.
-        if fork ≥ .glamsterdam then (STORAGE_WRITE : Int)
-        -- An original value of 0 adds `SSTORE_SET_GAS - SLOAD_GAS` to the refund counter.
-        else if original = 0 then (STORAGE_SET : Int) - sstoreReadCost fork
-        -- Any other adds `SSTORE_RESET_GAS - SLOAD_GAS`.
-        else (sstoreResetCost fork : Int) - sstoreReadCost fork
-      else 0)
-  -- Before Istanbul, the rule before EIP-2200: the clear refund when a nonzero slot becomes zero.
-  else if new = 0 ∧ current ≠ 0 then clear
-  else 0
+  let case := sstoreCase fork original current new
+  (if case.clears then clear else 0) - (if case.unclears then clear else 0) +
+    -- From Istanbul, a write that resets the slot gives back the price of the first write.
+    (if case.restores then
+      -- From Glamsterdam, EIP-8038 rule 3: `STORAGE_WRITE` is refunded, the 10000.
+      if fork ≥ .glamsterdam then (STORAGE_WRITE : Int)
+      -- An original value of 0 adds `SSTORE_SET_GAS - SLOAD_GAS` to the refund counter.
+      else if original = 0 then (STORAGE_SET : Int) - sstoreReadCost fork
+      -- Any other adds `SSTORE_RESET_GAS - SLOAD_GAS`.
+      else (sstoreResetCost fork : Int) - sstoreReadCost fork
+    else 0)
 
 /-- The state gas that SSTORE charges at fork `fork`: from Glamsterdam, that of a new slot. -/
 def sstoreStateGas (fork : Fork) (original current new : U256) : Nat :=
   -- EIP-8037: a new slot charges `STATE_BYTES_PER_STORAGE_SET * CPSB` of state gas.
   --
   -- That is the state gas of 64 bytes.
-  --
-  -- A new slot has original 0, current 0 and new `x > 0`.
-  if fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0 then STORAGE_SET_STATE_GAS else 0
+  if (sstoreCase fork original current new).fills then STORAGE_SET_STATE_GAS else 0
 
 /-- The state gas that SSTORE refills at fork `fork`.
 
@@ -162,9 +213,7 @@ From Glamsterdam, a slot that was zero at the start of the transaction can go ba
 That write refills the state gas of a new slot. -/
 def sstoreStateRefill (fork : Fork) (original current new : U256) : Nat :=
   -- EIP-8037: a slot cleared back to 0 refills `STATE_BYTES_PER_STORAGE_SET * CPSB` of state gas.
-  --
-  -- That slot has original 0, current `x > 0` and new 0.
-  if fork ≥ .glamsterdam ∧ original = 0 ∧ current ≠ 0 ∧ new = 0 then STORAGE_SET_STATE_GAS else 0
+  if (sstoreCase fork original current new).refills then STORAGE_SET_STATE_GAS else 0
 
 /-- SLOAD: replace a key with the word at that key of the storage of the current account. -/
 def sloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do

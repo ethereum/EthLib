@@ -205,15 +205,6 @@ theorem Affine.simpleSwu_isoMapG2_valid {u : Fp2} {p : Fp2 × Fp2}
 private theorem square_eq_mul' (a : Fp2) : FieldOps.square a = a * a := by
   rw [Cryptography.Fp2.fieldOps_square, Cryptography.Fp2.square_eq Fp.embedding]
 
--- A triple `(Z^2 a, Z^3 b, Z)` is the affine point `(a, b)` scaled by `Z`.
-open WeierstrassCurve.Jacobian in
-private theorem rep_eq_smul (X Y Z a b : Fp2) (hX : X = Z ^ 2 * a) (hY : Y = Z ^ 3 * b) :
-    G2.rep ⟨X, Y, Z⟩ = Z • G2.rep ⟨a, b, Fp2.one⟩ := by
-  subst hX hY
-  rw [smul_fin3]
-  simp only [G2.rep_x, G2.rep_y, G2.rep_z, Fp2.one_eq_one, mul_one]
-  rfl
-
 -- At `(x t, t, y)`, the Jacobian isogeny is the affine point scaled by `x_den y_den`.
 open WeierstrassCurve.Jacobian in
 private theorem isoMapG2_jacobian (x t y : Fp2) (ht : t ≠ 0) (h : y * y = swuG x) :
@@ -246,7 +237,7 @@ private theorem isoMapG2_jacobian (x t y : Fp2) (ht : t ≠ 0) (h : y * y = swuG
   have hu : IsUnit (t ^ 3 * d x ^ 2 * (t ^ 3 * d x ^ 3)) := (mul_ne_zero hB0 hD0).isUnit
   have h9 : (9 : Fp2) ≠ 0 := by decide_eq_at_model []
   have h27 : (27 : Fp2) ≠ 0 := by decide_eq_at_model []
-  have hr := rep_eq_smul
+  have hr := G2.rep_eq_smul
     (t ^ 3 * (xn x / 9) * (t ^ 3 * d x ^ 2) * (t ^ 3 * d x ^ 3 * (t ^ 3 * d x ^ 3)))
     (y * (t ^ 3 * (yn x / 27)) * (t ^ 3 * d x ^ 3 * (t ^ 3 * d x ^ 3)) *
       (t ^ 3 * d x ^ 2 * (t ^ 3 * d x ^ 2) * (t ^ 3 * d x ^ 2)))

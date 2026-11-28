@@ -23,16 +23,19 @@ namespace EthLib.Consensus
 open Base Networking.Gossip Cryptography.Kzg
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {setup : TrustedSetup} {seen : Seen} {store : Store preset fork} {statuses : PayloadStatuses}
+  {setup : TrustedSetup} {blockHashOf : BlockHashOf preset fork} {seen : Seen} {store : Store preset
+      fork} {statuses : PayloadStatuses}
   {currentTimeMs : UInt64} {message : GossipMessage preset fork}
 
 /-- The outcome of the dispatch is the outcome of the validator of the topic. -/
 theorem validateGossipMessage_outcome {outcome : ValidationResult} {after : Seen}
-    (dispatched : validateGossipMessage config checks setup seen store statuses currentTimeMs
+    (dispatched : validateGossipMessage config checks setup blockHashOf seen store statuses
+        currentTimeMs
       message = .ok (outcome, after)) :
-    message.validate config checks setup seen store statuses currentTimeMs = .ok outcome := by
+    message.validate config checks setup blockHashOf seen store statuses currentTimeMs = .ok outcome
+        := by
   unfold validateGossipMessage at dispatched
-  cases h : message.validate config checks setup seen store statuses currentTimeMs with
+  cases h : message.validate config checks setup blockHashOf seen store statuses currentTimeMs with
   | error e => simp [h, bind, Except.bind] at dispatched
   | ok o =>
     simp only [h, bind, Except.bind] at dispatched
@@ -43,19 +46,23 @@ theorem validateGossipMessage_outcome {outcome : ValidationResult} {after : Seen
 
 /-- A message that its topic ignores or rejects leaves the messages seen as they were. -/
 theorem validateGossipMessage_of_not_accept {outcome : ValidationResult}
-    (validated : message.validate config checks setup seen store statuses currentTimeMs =
+    (validated : message.validate config checks setup blockHashOf seen store statuses currentTimeMs
+        =
       .ok outcome)
     (notAccepted : outcome.isAccept = false) :
-    validateGossipMessage config checks setup seen store statuses currentTimeMs message =
+    validateGossipMessage config checks setup blockHashOf seen store statuses currentTimeMs message
+        =
       .ok (outcome, seen) := by
   simp [validateGossipMessage, validated, notAccepted, bind, Except.bind, pure, Except.pure]
 
 /-- A message that its topic accepts adds its keys to the messages seen. -/
 theorem validateGossipMessage_of_accept {after : Seen}
-    (validated : message.validate config checks setup seen store statuses currentTimeMs =
+    (validated : message.validate config checks setup blockHashOf seen store statuses currentTimeMs
+        =
       .ok .accept)
     (recorded : message.record config store seen = .ok after) :
-    validateGossipMessage config checks setup seen store statuses currentTimeMs message =
+    validateGossipMessage config checks setup blockHashOf seen store statuses currentTimeMs message
+        =
       .ok (.accept, after) := by
   simp [validateGossipMessage, validated, recorded, ValidationResult.isAccept, bind, Except.bind,
     pure, Except.pure]
@@ -72,7 +79,8 @@ Before Electra an accepted attestation has an attester, since its checks find on
 
 The root of the data of an accepted aggregate was computed by its checks. -/
 theorem GossipMessage.record_of_accept
-    (validated : message.validate config checks setup seen store statuses currentTimeMs =
+    (validated : message.validate config checks setup blockHashOf seen store statuses currentTimeMs
+        =
       .ok .accept) :
     ∃ after, message.record config store seen = .ok after := by
   cases message with
@@ -124,11 +132,14 @@ theorem GossipMessage.record_of_accept
 
 /-- The dispatch fails only when the validator of the topic fails, with the same error. -/
 theorem validateGossipMessage_eq_error {e : ForkChoiceError}
-    (failed : validateGossipMessage config checks setup seen store statuses currentTimeMs
+    (failed : validateGossipMessage config checks setup blockHashOf seen store statuses
+        currentTimeMs
       message = .error e) :
-    message.validate config checks setup seen store statuses currentTimeMs = .error e := by
+    message.validate config checks setup blockHashOf seen store statuses currentTimeMs = .error e :=
+        by
   unfold validateGossipMessage at failed
-  cases validated : message.validate config checks setup seen store statuses currentTimeMs with
+  cases validated : message.validate config checks setup blockHashOf seen store statuses
+      currentTimeMs with
   | error e' => simp_all [bind, Except.bind]
   | ok outcome =>
     exfalso

@@ -1210,7 +1210,7 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, config: dict | None) -> list[list]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
-  ⟨"consensus_gossip_validation", `EthLib.Consensus.Exports.gossipValidationExport,
+  ⟨"consensus_gossip_validation", `EthLib.Engine.Exports.gossipValidationExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
       "blocks: list[tuple[int, int | None, bytes] | " ++
       "tuple[int, int | None, bytes, bytes | None] | " ++
@@ -1219,7 +1219,7 @@ def bindings : List Binding := [
       "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
       "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
-  ⟨"consensus_api_post", `EthLib.Consensus.Exports.apiPostExport,
+  ⟨"consensus_api_post", `EthLib.Engine.Exports.apiPostExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
       "blocks: list[tuple[int, int | None, bytes] | " ++
       "tuple[int, int | None, bytes, bytes | None] | " ++

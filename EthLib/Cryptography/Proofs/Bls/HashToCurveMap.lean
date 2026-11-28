@@ -117,21 +117,19 @@ theorem map_c1Psi2 (f : Hom F G) : (c1Psi2 : Fp2 F).map f = c1Psi2 := by
 theorem map_psi (f : Hom F G) (P : G2 F) : (psi P).map f = psi (P.map f) := by
   unfold psi
   have hz : (G2.map f P).z.isZero = P.z.isZero := Fp2.map_isZero f P.z
-  rw [hz, ← G2.map_toAffine]
+  rw [hz]
   cases P.z.isZero
-  · obtain ⟨x, y⟩ := P.toAffine
-    simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, G1.map, Fp2.hom, ← map_c1Psi f,
-      ← map_c2Psi f, ← Fp2.map_conjugate, ← Fp2.map_mul, Fp2.map_one]
+  · simp only [Bool.false_eq_true, ↓reduceIte, G2.map, G1.map, Fp2.hom, ← map_c1Psi f,
+      ← map_c2Psi f, ← Fp2.map_conjugate, ← Fp2.map_mul]
   · rfl
 
 theorem map_psi2 (f : Hom F G) (P : G2 F) : (psi2 P).map f = psi2 (P.map f) := by
   unfold psi2
   have hz : (G2.map f P).z.isZero = P.z.isZero := Fp2.map_isZero f P.z
-  rw [hz, ← G2.map_toAffine]
+  rw [hz]
   cases P.z.isZero
-  · obtain ⟨x, y⟩ := P.toAffine
-    simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, G1.map, Fp2.hom, ← map_c1Psi2 f,
-      ← Fp2.map_mul, ← Fp2.map_neg, Fp2.map_one]
+  · simp only [Bool.false_eq_true, ↓reduceIte, G2.map, G1.map, Fp2.hom, ← map_c1Psi2 f,
+      ← Fp2.map_mul, ← Fp2.map_neg]
   · rfl
 
 theorem map_mulNegX (f : Hom F G) (P : G2 F) : (mulNegX P).map f = mulNegX (P.map f) := by
