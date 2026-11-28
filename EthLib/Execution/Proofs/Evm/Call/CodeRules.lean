@@ -110,7 +110,7 @@ theorem stepRules_keepsCodeRules (P : ByteArray → Prop) :
     refine .of_codeWrites ?_
     rw [h.tracker.rest]
     rfl
-  sstore _ _ _ _ _ h := .of_codeWrites (codeWrites_setStorage h)
+  sstore _ _ _ _ h := .of_codeWrites (codeWrites_setStorage h)
   tstore _ _ _ _ := .of_codeWrites rfl
   log _ hs _ _ _ := by rw [hs]; exact .refl _
   selfdestruct _ _ h := by
@@ -120,7 +120,7 @@ theorem stepRules_keepsCodeRules (P : ByteArray → Prop) :
     · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact .of_codeWrites (codeWrites_selfdestructTransfer (Base.mapError_ok_iff.mp hst))
-  incrementNonce _ _ _ _ h := .of_codeWrites (codeWrites_modifyState h)
+  incrementNonce _ _ _ h := .of_codeWrites (codeWrites_modifyState h)
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-! ## Messages -/

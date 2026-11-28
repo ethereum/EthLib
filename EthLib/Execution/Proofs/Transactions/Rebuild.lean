@@ -35,7 +35,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 /-! ## Helpers for one delegation -/
 
 /-- A change of an account keeps the storage writes and wipes, or deletes the empty account. -/
-private theorem storage_modifyState {tx tx' : TransactionState} {address : Address}
+theorem storage_modifyState {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     (tx'.storageWrites = tx.storageWrites ∧ tx'.storageClears = tx.storageClears) ∨
       (f (tx.getAccount address) = .ok EMPTY_ACCOUNT ∧
@@ -54,7 +54,7 @@ private theorem storage_modifyState {tx tx' : TransactionState} {address : Addre
   · exact .inl ⟨rfl, rfl⟩
 
 /-- Setting a code keeps the storage writes and wipes, or deletes the account left empty. -/
-private theorem storage_setCode {tx tx' : TransactionState} {address : Address}
+theorem storage_setCode {tx tx' : TransactionState} {address : Address}
     {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
     (tx'.storageWrites = tx.storageWrites ∧ tx'.storageClears = tx.storageClears) ∨
       ({ tx.getAccount address with codeHash := keccak256 code } = EMPTY_ACCOUNT ∧
@@ -308,7 +308,7 @@ theorem applyAuthorizations_rebuildState {block : BlockState} {chainId : Nat}
 /-- Preparing the first frame of a message keeps the rebuild property and a caller's nonce or code.
 
 A call that runs code runs it at a target with a nonce or code. -/
-private theorem prepareFirstFrame_rebuildState {block : BlockState} {chainId : Nat}
+theorem prepareFirstFrame_rebuildState {block : BlockState} {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (valid : RebuildState block state) (hcaller : HasNonceOrCode state message.caller)

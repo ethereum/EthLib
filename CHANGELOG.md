@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, the refund counter that a transaction settles is at least zero ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
+  `Transactions.processMessageCall_refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) shows that a message that succeeds settles the counter of the frame that ends it, with no clamp, from a state that `Transactions.TransactionRun.refundReady` gives.
+  `Evm.processMessage_clearedRefund_le` and `Evm.processCreateMessage_clearedRefund_le` (`Execution/Proofs/Evm/Call/Refund.lean`) show that from Spurious Dragon a message that succeeds gains at least the refund of the slots that it leaves cleared.
+  `Evm.nonceOrCodeSlots` gives the lemmas of the fresh slots for any set of slots read from the words, and `Evm.nonceOrCodeClearedSlots` uses them.
+  `Evm.CreatesPlain`, `Evm.KeepsPlain`, `Evm.CodeAtNonceOrCode` and `Evm.childRelByKind_of_step` (`Execution/Proofs/Evm/Call/CreatesPlain.lean`) are now public, and `Evm.createdAccounts_finishSelfdestruct` moves to `ToDelete.lean`.
+
 - In Lean, `Kzg.everyOther` moves from `Kzg/Fft.lean` to `Kzg/FftHalves.lean`, with an unchanged full name.
   The definitions on naturals that the kernel checks of the Lagrange setup read move from `Proofs/Kzg/SetupLagrange/{Roots,Points,Glv,Dft,Rounds,Tables}.lean` to `Proofs/Kzg/SetupLagrange/Checker.lean`, with unchanged full names.
   The four tables of those checks are literal data in `Proofs/Kzg/SetupLagrange/Data/`, which `lake exe gen-setup-tables` writes, in place of elaborators that decoded the setup with the specification while the file was built.
@@ -1345,6 +1351,14 @@ Not yet released.
   No statement changes.
 
 ### Changes that break callers
+
+- In Lean, the rules of a relation of frames see the refund counter ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
+  `Evm.StaticStep` has a new field, `refund`: a static step keeps the refund counter, so an anonymous constructor needs one more argument.
+  The rules split: `Evm.FrameStepRules` holds the rules of one frame, and `Evm.OrdinaryStepRules` extends it with the rule for a caller that takes in a child.
+  The rule for SSTORE names the refund of the write, from the original, current and new words, in place of any gain, so it takes one argument less.
+  The rule for a nonce raises the nonce of the account of the frame only, the account that CREATE and CREATE2 raise, so it takes no address.
+  `Evm.nonceOrCodeFreshSlots` now unfolds to `Evm.nonceOrCodeSlots` of the fresh slots.
+  `Transactions.keptOrWiped_applyAuthorization` and `Transactions.keptOrWiped_foldlM_applyAuthorization` are gone; `Transactions.rel_applyAuthorization` and `Transactions.rel_foldlM_applyAuthorization` prove the same for any relation of states that each write keeps.
 
 - The consensus vectors move to consensus-specs `v1.7.0-beta.5` ([#1368](https://github.com/ethereum/EthLib/issues/1368)).
   In Lean, `Config.INCLUSION_LIST_DUE_BPS` is 7500 basis points in both configurations, in place of 6667: that is 9 s of a 12-second slot, as EIP-7805 states.

@@ -23,10 +23,10 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- The rules for a relation `R` of two frames to hold of every step other than SELFDESTRUCT.
+/-- The rules for a relation `R` of two frames to hold of every step of one frame.
 
-The relation also relates a caller to the frame that ends each message the caller sends. -/
-structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
+They leave out SELFDESTRUCT and the frame that a caller takes in after a message. -/
+structure FrameStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
   /-- The relation is transitive. -/
   trans : ∀ {a b c}, R a b → R b c → R a c
   -- Steps that keep the state change other parts of a frame freely.
@@ -36,17 +36,21 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
 
   So the relation sees only the state up to its reads, the message, the code and the substate.
 
-  Of the substate, it sees the touched accounts, the accounts to delete and the logs.
+  Of the substate, it sees the touched accounts, the accounts to delete, the logs and the refund.
 
-  It cannot see the refund counter, the gas, the memory or the stack. -/
+  It cannot see the gas, the memory or the stack. -/
   static : ∀ {a b}, StaticStep a b → R a b
-  /-- A write of storage that changes the refund counter keeps the relation.
+  /-- A write of storage that adds its refund to the refund counter keeps the relation.
 
-  The word is in the storage of the account of the frame, the only storage that SSTORE writes. -/
-  sstore : ∀ (evm : Evm fork Meter) (key : Bytes32) (value : U256) (state : TransactionState)
-    (gain : Int), evm.state.setStorage evm.message.currentTarget key value = .ok state →
+  The word is in the storage of the account of the frame, the only storage that SSTORE writes.
+
+  The refund comes from the original, the current and the new word of the slot. -/
+  sstore : ∀ (evm : Evm fork Meter) (key : Bytes32) (value : U256) (state : TransactionState),
+    evm.state.setStorage evm.message.currentTarget key value = .ok state →
     R evm (advance { evm with
-      state, substate := { evm.substate with refundCounter := evm.substate.refundCounter + gain } })
+      state, substate := { evm.substate with refundCounter := (evm.substate.refundCounter +
+        sstoreRefund fork (evm.state.getStorageOriginal evm.message.currentTarget key)
+          (evm.state.getStorage evm.message.currentTarget key) value) } })
   /-- A write of transient storage keeps the relation. -/
   tstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256),
     R evm (advance { evm with state := evm.state.setTransientStorage address key value })
@@ -58,10 +62,18 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
       logs := a.substate.logs.push log
       simulatedLogs := a.substate.simulatedLogs.push log } → b.message = a.message →
     b.code = a.code → R a b
-  /-- The rise of a nonce that is not the greatest keeps the relation. -/
-  incrementNonce : ∀ (evm : Evm fork Meter) (address : Address) (state : TransactionState),
-    (evm.state.getAccount address).nonce ≠ MAX_NONCE →
-    evm.state.incrementNonce fork address = .ok state → R evm { evm with state }
+  /-- The rise of the nonce of the account of the frame keeps the relation.
+
+  That nonce is not the greatest, and only CREATE and CREATE2 raise it. -/
+  incrementNonce : ∀ (evm : Evm fork Meter) (state : TransactionState),
+    (evm.state.getAccount evm.message.currentTarget).nonce ≠ MAX_NONCE →
+    evm.state.incrementNonce fork evm.message.currentTarget = .ok state → R evm { evm with state }
+
+/-- The rules for a relation `R` of two frames to hold of every step other than SELFDESTRUCT.
+
+The relation also relates a caller to the frame that ends each message the caller sends. -/
+structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop
+    extends FrameStepRules fork R where
   /-- A caller that takes in a child related to it is related to its frame before.
 
   A caller takes in the frame that ends its child. -/
@@ -101,30 +113,32 @@ theorem stepRules_messageCode :
     StepRules fork (fun a b : Evm fork Meter => b.message = a.message ∧ b.code = a.code) where
   trans hab hbc := ⟨hbc.1.trans hab.1, hbc.2.trans hab.2⟩
   static h := ⟨h.message, h.code⟩
-  sstore _ _ _ _ _ _ := ⟨rfl, rfl⟩
+  sstore _ _ _ _ _ := ⟨rfl, rfl⟩
   tstore _ _ _ _ := ⟨rfl, rfl⟩
   log _ _ _ hm hc := ⟨hm, hc⟩
   selfdestruct _ _ h := ⟨message_finishSelfdestruct h, code_finishSelfdestruct h⟩
-  incrementNonce _ _ _ _ _ := ⟨rfl, rfl⟩
+  incrementNonce _ _ _ _ := ⟨rfl, rfl⟩
   incorporate _ := ⟨message_incorporateChild _ _, code_incorporateChild _ _⟩
 
-namespace OrdinaryStepRules
+namespace FrameStepRules
 
 variable {R : Evm fork Meter → Evm fork Meter → Prop}
 
+omit [GasMeter Meter] in
 /-- A step that keeps the message, the state, the substate and the code keeps the relation. -/
-theorem sameContext (rules : OrdinaryStepRules fork R) {a b : Evm fork Meter}
+theorem sameContext (rules : FrameStepRules fork R) {a b : Evm fork Meter}
     (h : SameContext a b) : R a b :=
   rules.static (.of_sameContext h)
 
+omit [GasMeter Meter] in
 /-- Every frame is related to itself. -/
-theorem refl (rules : OrdinaryStepRules fork R) (evm : Evm fork Meter) : R evm evm :=
+theorem refl (rules : FrameStepRules fork R) (evm : Evm fork Meter) : R evm evm :=
   rules.static (.refl evm)
 
 /-! ## The instructions that give the next frame -/
 
 /-- A successful SSTORE keeps the relation. -/
-theorem sstoreStep (rules : OrdinaryStepRules fork R) {evm after : Evm fork Meter}
+theorem sstoreStep (rules : FrameStepRules fork R) {evm after : Evm fork Meter}
     (h : sstoreStep evm = .ok after) : R evm after := by
   unfold Evm.sstoreStep at h
   split at h
@@ -139,29 +153,31 @@ theorem sstoreStep (rules : OrdinaryStepRules fork R) {evm after : Evm fork Mete
   · rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
       ⟨cold, e3⟩
     have ha :
-        StaticStep evm (recordStorageRead e3 e2.message.currentTarget (U256.toBeBytes k)) := by
+        StaticStep e2 (recordStorageRead e3 e2.message.currentTarget (U256.toBeBytes k)) := by
       have := staticStep_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k)
       rw [hpair] at this
-      exact (c2.trans this).trans (staticStep_recordStorageRead _ _ _)
+      exact this.trans (staticStep_recordStorageRead _ _ _)
     simp only [hpair] at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
       obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-      have m5 : StaticStep evm e5 :=
+      have m5 : StaticStep e2 e5 :=
         ha.trans (.of_sameContext ((sameContext_refillStateGas _ _).trans
           ((chargeGas_sameContext h4).trans (chargeStateGas_sameContext h5))))
       split at h
       · simp [throw, throwThe, MonadExceptOf.throw] at h
       · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
         cases h
-        have hm : e2.message.currentTarget = e5.message.currentTarget := by
-          rw [m5.message, c2.message]
+        have hm : e2.message.currentTarget = e5.message.currentTarget := m5.message.symm ▸ rfl
         rw [hm] at hst
-        exact rules.trans (rules.static m5) (rules.sstore _ _ _ _ _ (Base.mapError_ok_iff.mp hst))
-    · exact rules.static (ha.trans (staticStep_exceptionalHalt _ _))
+        -- The steps between the read of the slot and the write add only reads.
+        have hw := rules.sstore _ _ _ _ (Base.mapError_ok_iff.mp hst)
+        rw [m5.tracker.getStorage, m5.tracker.getStorageOriginal, ← hm] at hw
+        exact rules.trans (rules.static (c2.trans m5)) hw
+    · exact rules.static ((c2.trans ha).trans (staticStep_exceptionalHalt _ _))
 
 /-- A successful TSTORE keeps the relation. -/
-theorem tstoreStep (rules : OrdinaryStepRules fork R) {evm after : Evm fork Meter}
+theorem tstoreStep (rules : FrameStepRules fork R) {evm after : Evm fork Meter}
     (h : tstoreStep evm = .ok after) : R evm after := by
   obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -175,7 +191,7 @@ theorem tstoreStep (rules : OrdinaryStepRules fork R) {evm after : Evm fork Mete
 /-- Each successful instruction that gives the next frame keeps the relation.
 
 Its opcode must not be SELFDESTRUCT. -/
-theorem instruction (rules : OrdinaryStepRules fork R) {op : Op}
+theorem instruction (rules : FrameStepRules fork R) {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
     (ordinary : op ≠ .selfdestruct) (hrun : instruction fork op = some run)
     (h : run evm = .ok after) : R evm after := by
@@ -211,41 +227,49 @@ theorem instruction (rules : OrdinaryStepRules fork R) {op : Op}
 
 /-! ## The calls and the creations -/
 
-/-- A caller that resumes after a call is related to the caller, when the child is. -/
-theorem resumeCall (rules : OrdinaryStepRules fork R) {caller child after : Evm fork Meter}
+/-- A caller that resumes after a call is related to the caller.
+
+The caller must be related to itself once it takes in the frame that ends the child. -/
+theorem resumeCall (rules : FrameStepRules fork R) {caller child after : Evm fork Meter}
     {newAccount : Nat} {outputStart outputSize : U256}
     (h : resumeCall fork caller newAccount outputStart outputSize child = .ok after)
-    (hc : R caller child) : R caller after := by
+    (hc : R caller (incorporateChild fork caller child)) : R caller after := by
   obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  refine rules.trans (rules.incorporate hc) (rules.sameContext ?_)
+  refine rules.trans hc (rules.sameContext ?_)
   refine SameContext.trans ?_ ((pushWord_sameContext h1).trans ⟨rfl, rfl, rfl, rfl⟩)
   constructor <;> split <;> rfl
 
-/-- A creator that resumes after a creation is related to the creator, when the child is. -/
-theorem resumeCreate (rules : OrdinaryStepRules fork R) {caller child after : Evm fork Meter}
+/-- A creator that resumes after a creation is related to the creator.
+
+The creator must be related to itself once it takes in the frame that ends the child. -/
+theorem resumeCreate (rules : FrameStepRules fork R) {caller child after : Evm fork Meter}
     {newAccount : Nat} {address : Address}
-    (h : resumeCreate fork caller newAccount address child = .ok after) (hc : R caller child) :
-    R caller after := by
+    (h : resumeCreate fork caller newAccount address child = .ok after)
+    (hc : R caller (incorporateChild fork caller child)) : R caller after := by
   obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  refine rules.trans (rules.incorporate hc) (rules.sameContext ?_)
+  refine rules.trans hc (rules.sameContext ?_)
   refine SameContext.trans ?_ ((pushWord_sameContext h1).trans ⟨rfl, rfl, rfl, rfl⟩)
   constructor <;> split <;> rfl
 
+omit [GasMeter Meter] in
 /-- A result that keeps the relation from a frame keeps it from any frame related to that one. -/
-theorem lift (rules : OrdinaryStepRules fork R) {evm evm' : Evm fork Meter}
-    {result : StepResult fork Meter} (h : R evm evm')
-    (r : result.Keeps R (fun caller _ child => R caller child) evm') :
-    result.Keeps R (fun caller _ child => R caller child) evm :=
-  StepResult.Keeps.lift (R := R) (C := fun caller _ child => R caller child) rules.trans h r
+theorem lift (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop} {evm evm' : Evm fork Meter}
+    {result : StepResult fork Meter} (h : R evm evm') (r : result.Keeps R C evm') :
+    result.Keeps R C evm :=
+  StepResult.Keeps.lift (R := R) (C := C) rules.trans h r
 
 /-- A successful send of a message keeps the relation. -/
-theorem genericCall (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
+theorem genericCall (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {evm : Evm fork Meter}
     {message : Message fork} {newAccount : Nat} {outputStart outputSize : U256}
     {result : StepResult fork Meter}
     (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
-    result.Keeps R (fun caller _ child => R caller child) evm := by
+    result.Keeps R C evm := by
   unfold Evm.genericCall at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
@@ -253,30 +277,36 @@ theorem genericCall (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
       (staticStep_skipCall hs)) :)
   · cases h
     have pre : R evm evm := rules.sameContext ⟨rfl, rfl, rfl, rfl⟩
-    exact ⟨pre, fun _ _ hres p => rules.trans pre (rules.resumeCall hres p)⟩
+    exact ⟨pre, fun _ _ hres p => rules.trans pre (rules.resumeCall hres (inc p))⟩
 
 /-- The successful end of a call instruction keeps the relation. -/
-theorem finishCall (rules : OrdinaryStepRules fork R) {kind : CallKind} {call : CallOperands}
+theorem finishCall (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {kind : CallKind} {call : CallOperands}
     {callee : Callee} {subCall newAccount expandBy : Nat} {evm : Evm fork Meter}
     {result : StepResult fork Meter}
     (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
-    result.Keeps R (fun caller _ child => R caller child) evm := by
+    result.Keeps R C evm := by
   unfold Evm.finishCall at h
   split at h
   · cases h
   dsimp only at h
   have pre : StaticStep evm (callerFrame evm expandBy) :=
-    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _, rfl⟩
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static ((pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
       (staticStep_skipCall hs)) :)
-  · exact rules.lift (rules.static pre) (rules.genericCall h)
+  · exact rules.lift (rules.static pre) (rules.genericCall inc h)
 
 /-- A successful step of a call instruction keeps the relation. -/
-theorem callStep (rules : OrdinaryStepRules fork R) {kind : CallKind} {evm : Evm fork Meter}
+theorem callStep (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {kind : CallKind} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : callStep kind evm = .ok result) :
-    result.Keeps R (fun caller _ child => R caller child) evm := by
+    result.Keeps R C evm := by
   unfold Evm.callStep at h
   obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   have c1 := (staticStep_popCallOperands h1).1
@@ -297,15 +327,18 @@ theorem callStep (rules : OrdinaryStepRules fork R) {kind : CallKind} {evm : Evm
     dsimp only at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      exact rules.lift (rules.static (s4.trans (staticStep_payCall h5))) (rules.finishCall h)
+      exact rules.lift (rules.static (s4.trans (staticStep_payCall h5))) (rules.finishCall inc h)
     · exact rules.static (s4.trans (staticStep_exceptionalHalt _ _))
   · exact rules.static (s3.trans (staticStep_exceptionalHalt _ _))
 
 /-- A successful launch of a creation keeps the relation. -/
-theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {value : U256}
+theorem launchCreate (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {evm : Evm fork Meter} {value : U256}
     {initCode : ByteArray} {salt : Option U256} {result : StepResult fork Meter}
     (h : launchCreate evm value initCode salt = .ok result) :
-    result.Keeps R (fun caller _ child => R caller child) evm := by
+    result.Keeps R C evm := by
   unfold Evm.launchCreate at h
   dsimp only at h
   have pre : StaticStep evm
@@ -333,12 +366,13 @@ theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {
       unfold TransactionState.getAccount
       rw [(pre.state _ List.not_mem_nil).1, (c2.state _ List.not_mem_nil).1]
     have ms : R evm { e2 with state } :=
-      rules.trans (rules.static c2) (rules.incrementNonce _ _ _ hn (Base.mapError_ok_iff.mp hst))
+      rules.trans (rules.static c2) (rules.incrementNonce _ _ (by rw [c2.message]; exact hn)
+        (by rw [c2.message]; exact Base.mapError_ok_iff.mp hst))
     split at hr
     · cases hr
       have md : R evm { e2 with state, gas := GasMeter.drain e2.gas } :=
         rules.trans ms (rules.sameContext ⟨rfl, rfl, rfl, rfl⟩)
-      exact ⟨md, fun _ _ hres p => rules.trans md (rules.resumeCreate hres p)⟩
+      exact ⟨md, fun _ _ hres p => rules.trans md (rules.resumeCreate hres (inc p))⟩
     · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr
       exact rules.trans ms
@@ -347,17 +381,23 @@ theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {
   · exact rules.static (c0.trans (staticStep_exceptionalHalt _ _))
 
 /-- A successful step of CREATE or CREATE2 keeps the relation. -/
-theorem createStep (rules : OrdinaryStepRules fork R) {create2 : Bool} {evm : Evm fork Meter}
+theorem createStep (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
-    result.Keeps R (fun caller _ child => R caller child) evm := by
+    result.Keeps R C evm := by
   obtain ⟨_, _, _, _, _, _, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
-  exact rules.lift (rules.sameContext sc) (rules.launchCreate launched)
+  exact rules.lift (rules.sameContext sc) (rules.launchCreate inc launched)
 
 /-- A successful instruction that may send a message keeps the relation. -/
-theorem messageInstruction (rules : OrdinaryStepRules fork R) {op : Op}
+theorem messageInstruction (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
-    (h : run evm = .ok result) : result.Keeps R (fun caller _ child => R caller child) evm := by
+    (h : run evm = .ok result) : result.Keeps R C evm := by
   unfold Evm.messageInstruction at hrun
   cases hc : callInstruction (Meter := Meter) fork op with
   | some call =>
@@ -365,21 +405,21 @@ theorem messageInstruction (rules : OrdinaryStepRules fork R) {op : Op}
     subst hrun
     cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hc
     all_goals first
-      | (subst hc; exact rules.callStep h)
+      | (subst hc; exact rules.callStep inc h)
       | (split at hc
          · simp only [Option.some.injEq] at hc
            subst hc
-           exact rules.callStep h
+           exact rules.callStep inc h
          · cases hc)
   | none =>
     simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse] at hrun
     cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hrun
     all_goals first
-      | (subst hrun; exact rules.createStep h)
+      | (subst hrun; exact rules.createStep inc h)
       | (split at hrun
          · simp only [Option.some.injEq] at hrun
            subst hrun
-           exact rules.createStep h
+           exact rules.createStep inc h
          · cases hrun)
 
 /-- Every successful step of every frame runs SELFDESTRUCT or keeps the relation.
@@ -388,11 +428,16 @@ A step that runs SELFDESTRUCT gives the next frame by the instruction of SELFDES
 
 Any other step keeps the relation.
 
-A message that it sends must end in a frame related to its caller. -/
-theorem step (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
+A message that it sends must end as `C` says.
+
+What `C` says must relate the caller to itself once it takes in the frame that ends the message. -/
+theorem step (rules : FrameStepRules fork R)
+    {C : Evm fork Meter → Message fork → Evm fork Meter → Prop}
+    (inc : ∀ {caller message child}, C caller message child →
+      R caller (incorporateChild fork caller child)) {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : step fork evm = .ok result) :
     (RunsSelfdestruct evm ∧ ∃ after, result = .next after ∧ selfdestructStep fork evm = .ok after) ∨
-      (¬RunsSelfdestruct evm ∧ result.Keeps R (fun caller _ child => R caller child) evm) := by
+      (¬RunsSelfdestruct evm ∧ result.Keeps R C evm) := by
   unfold Evm.step at h
   split at h
   · rename_i within
@@ -419,7 +464,7 @@ theorem step (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
       · rename_i hnone
         split at h
         · rename_i hcall
-          refine .inr ⟨fun ⟨_, hd⟩ => ?_, rules.messageInstruction hcall h⟩
+          refine .inr ⟨fun ⟨_, hd⟩ => ?_, rules.messageInstruction inc hcall h⟩
           cases Option.some.inj (decoded.symm.trans hd)
           have hsel : Evm.instruction (Meter := Meter) fork .selfdestruct =
               some (selfdestructStep fork) := rfl
@@ -432,6 +477,39 @@ theorem step (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
     exact .inr ⟨fun ⟨within, _⟩ => outside within,
       rules.sameContext (controlFlowStep_sameContext (op := .stop) rfl rfl)⟩
 
+/-- A successful SELFDESTRUCT keeps the relation, when the end of each one does. -/
+theorem selfdestructStep (rules : FrameStepRules fork R)
+    (finish : ∀ {evm after : Evm fork Meter} (beneficiary : Address) (refund : Nat),
+      finishSelfdestruct fork beneficiary refund evm = .ok after → R evm after)
+    {evm after : Evm fork Meter} (h : selfdestructStep fork evm = .ok after) : R evm after := by
+  obtain ⟨word, -, paid, -, hpaid, -, -, ⟨refund, finished⟩ | halted⟩ :=
+    selfdestructStep_eq_ok h
+  · exact rules.trans (rules.static hpaid) (finish _ refund finished)
+  · obtain ⟨error, rfl⟩ := halted
+    exact rules.static (hpaid.trans (staticStep_exceptionalHalt _ _))
+
+end FrameStepRules
+
+namespace OrdinaryStepRules
+
+variable {R : Evm fork Meter → Evm fork Meter → Prop}
+
+/-- A result that keeps the relation from a frame keeps it from any frame related to that one. -/
+theorem lift (rules : OrdinaryStepRules fork R) {evm evm' : Evm fork Meter}
+    {result : StepResult fork Meter} (h : R evm evm')
+    (r : result.Keeps R (fun caller _ child => R caller child) evm') :
+    result.Keeps R (fun caller _ child => R caller child) evm :=
+  rules.toFrameStepRules.lift h r
+
+/-- Every successful step of every frame runs SELFDESTRUCT or keeps the relation.
+
+A message that it sends must end in a frame related to its caller. -/
+theorem step (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (h : step fork evm = .ok result) :
+    (RunsSelfdestruct evm ∧ ∃ after, result = .next after ∧ selfdestructStep fork evm = .ok after) ∨
+      (¬RunsSelfdestruct evm ∧ result.Keeps R (fun caller _ child => R caller child) evm) :=
+  rules.toFrameStepRules.step (fun hc => rules.incorporate hc) h
+
 end OrdinaryStepRules
 
 namespace StepRules
@@ -443,24 +521,20 @@ theorem and {S : Evm fork Meter → Evm fork Meter → Prop} (r : StepRules fork
     (s : StepRules fork S) : StepRules fork (fun a b => R a b ∧ S a b) where
   trans hab hbc := ⟨r.trans hab.1 hbc.1, s.trans hab.2 hbc.2⟩
   static h := ⟨r.static h, s.static h⟩
-  sstore evm key value state gain h :=
-    ⟨r.sstore evm key value state gain h, s.sstore evm key value state gain h⟩
+  sstore evm key value state h :=
+    ⟨r.sstore evm key value state h, s.sstore evm key value state h⟩
   tstore evm address key value := ⟨r.tstore evm address key value, s.tstore evm address key value⟩
   log log hs hsub hm hc := ⟨r.log log hs hsub hm hc, s.log log hs hsub hm hc⟩
   selfdestruct beneficiary refund h :=
     ⟨r.selfdestruct beneficiary refund h, s.selfdestruct beneficiary refund h⟩
-  incrementNonce evm address state hn h :=
-    ⟨r.incrementNonce evm address state hn h, s.incrementNonce evm address state hn h⟩
+  incrementNonce evm state hn h :=
+    ⟨r.incrementNonce evm state hn h, s.incrementNonce evm state hn h⟩
   incorporate h := ⟨r.incorporate h.1, s.incorporate h.2⟩
 
 /-- A successful SELFDESTRUCT keeps the relation. -/
 theorem selfdestructStep (rules : StepRules fork R) {evm after : Evm fork Meter}
-    (h : selfdestructStep fork evm = .ok after) : R evm after := by
-  obtain ⟨word, -, paid, -, hpaid, -, -, ⟨refund, finished⟩ | halted⟩ :=
-    selfdestructStep_eq_ok h
-  · exact rules.trans (rules.static hpaid) (rules.selfdestruct _ refund finished)
-  · obtain ⟨error, rfl⟩ := halted
-    exact rules.static (hpaid.trans (staticStep_exceptionalHalt _ _))
+    (h : selfdestructStep fork evm = .ok after) : R evm after :=
+  rules.toFrameStepRules.selfdestructStep rules.selfdestruct h
 
 /-- Every successful step of every frame keeps the relation.
 
@@ -635,7 +709,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
   · cases h
   dsimp only at h
   have pre : StaticStep evm (callerFrame evm expandBy) :=
-    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _, rfl⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial

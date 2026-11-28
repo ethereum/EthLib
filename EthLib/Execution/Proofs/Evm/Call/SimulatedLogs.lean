@@ -62,7 +62,7 @@ private theorem stepRules_logsMatch (hfork : fork ≥ .glamsterdam) :
     unfold LogsMatch at hm ⊢
     rw [h.simulatedLogs, h.logs]
     exact hm
-  sstore _ _ _ _ _ _ h := h
+  sstore _ _ _ _ _ h := h
   tstore _ _ _ _ h := h
   log _ _ hsub _ _ h := by
     unfold LogsMatch at h ⊢
@@ -70,7 +70,7 @@ private theorem stepRules_logsMatch (hfork : fork ≥ .glamsterdam) :
     dsimp only
     rw [h]
   selfdestruct _ _ h := logsMatch_finishSelfdestruct hfork h
-  incrementNonce _ _ _ _ _ h := h
+  incrementNonce _ _ _ _ h := h
   incorporate h hc := logsMatch_incorporateChild hc (h hc)
 
 /-- From Glamsterdam, calls and creations that start with equal lists end with equal lists. -/

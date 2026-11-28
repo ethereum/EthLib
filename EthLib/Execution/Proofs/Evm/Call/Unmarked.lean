@@ -59,7 +59,7 @@ theorem stepRules_unmarked (address : Address) :
           address ∉ b.substate.accountsToDelete)) where
   trans hab hbc := ⟨fun h => hbc.1 (hab.1 h), fun h hx => hbc.2 (hab.1 h) (hab.2 h hx)⟩
   static h := ⟨fun hne => h.message ▸ hne, fun _ hx => h.toDelete ▸ hx⟩
-  sstore _ _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
+  sstore _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
   tstore _ _ _ _ := ⟨id, fun _ hx => hx⟩
   log _ _ hsub hm _ := ⟨fun hne => hm ▸ hne, fun _ hx => by rw [hsub]; exact hx⟩
   -- SELFDESTRUCT marks for deletion at most the account that runs it.
@@ -77,7 +77,7 @@ theorem stepRules_unmarked (address : Address) :
         · exact hne (Std.LawfulEqCmp.eq_of_compare heq)
         · exact hx hin
       · exact hx
-  incrementNonce _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
+  incrementNonce _ _ _ _ := ⟨id, fun _ hx => hx⟩
   incorporate h := ⟨fun hne => by rw [message_incorporateChild]; exact hne,
     fun hne hx => unmarked_incorporateChild hx (h.2 hne hx)⟩
 

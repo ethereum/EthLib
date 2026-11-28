@@ -312,7 +312,7 @@ theorem stepRules_keepsAt (hyp : CodeHyp code) :
     (hab.2 hne).trans (hbc.2 (by rw [hab.1]; exact hne))⟩
   static h := ⟨h.message, fun _ => keepsAt_staticStep h⟩
   -- SSTORE writes the storage of the account of the frame, which is another one.
-  sstore _ _ _ _ _ h := ⟨rfl, fun hne => keepsAt_setStorage h (Ne.symm hne)⟩
+  sstore _ _ _ _ h := ⟨rfl, fun hne => keepsAt_setStorage h (Ne.symm hne)⟩
   tstore _ _ _ _ := ⟨rfl, fun _ => .of_eq rfl (fun _ => rfl) rfl⟩
   log _ hs _ hm _ := ⟨hm, fun _ => by rw [hs]; exact .refl _⟩
   selfdestruct _ _ h := ⟨message_finishSelfdestruct h, fun _ => by
@@ -322,7 +322,7 @@ theorem stepRules_keepsAt (hyp : CodeHyp code) :
     · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact keepsAt_selfdestructTransfer hyp (Base.mapError_ok_iff.mp hst)⟩
-  incrementNonce _ _ _ _ h := ⟨rfl, fun _ => keepsAt_incrementNonce hyp h⟩
+  incrementNonce _ _ _ h := ⟨rfl, fun _ => keepsAt_incrementNonce hyp h⟩
   incorporate h := ⟨message_incorporateChild _ _, fun hne => by
     rw [state_incorporateChild]
     exact h.2 hne⟩
