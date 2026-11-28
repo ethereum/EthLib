@@ -73,15 +73,17 @@ end BlockAccessList
 
 These are three assumptions on the call, which the builder cannot check itself.
 
-A creation wipes no word, since [EIP-7610][eip7610] makes it fail at an address with storage.
+A creation wipes no word when no account with nonce 0 and no code holds storage.
 
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
+The rebuild property keeps that invariant. -/
 structure Followable (block : BlockState) (tx : TransactionState) : Prop where
   /-- The call ran on the block state. -/
   parent : tx.parent = block
   /-- A key that the call did not write keeps its word, so a wipe hides no word.
 
-  This excludes a change that deletes an empty account with storage, which wipes that storage. -/
+  This excludes the deletion of an empty account with storage, which wipes that storage.
+
+  It also excludes a creation at an account with nonce 0, no code and storage, which wipes it. -/
   storage : ∀ address key, tx.storageWrites.slot address key = none →
     tx.getStorage address key = (TransactionState.ofBlock block).getStorage address key
   /-- The code of each account that the call wrote has the code hash of that account.

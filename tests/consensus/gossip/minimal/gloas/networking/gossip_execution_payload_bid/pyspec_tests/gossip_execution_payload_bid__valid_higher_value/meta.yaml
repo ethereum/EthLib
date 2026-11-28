@@ -1,53 +1,53 @@
 topic: execution_payload_bid
 blocks:
 - {block: 
-    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
 - {block: 
-    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2}
+    block_0xe6d21d299e0272c7bac63fdf5b950e1a3a7ee9e8cb752beb8dd226c23688a235}
 - {block: 
-    block_0xf16bbaa1a71b7cad7629682de30a88366130f3e450c935be5003905cc7a70659}
+    block_0x6b077142aafb6980d3c49a55f1f4e3829ab7e68ec24b08344bfd239375fe651c}
 - {block: 
-    block_0xcf262931d6ce0ab840187a5c41b15fa95df4da7fd562ee86567a0b943c37a09d}
+    block_0xf67526c2d91c5924eaf4440ecf1d1b753420dad80287ff636e06b989d8fddb5f}
 - {block: 
-    block_0xbd56b5103a57e37c1ffa3ba4ef6fc93d0c237cb462e9eaa682ce3f5085336146}
+    block_0x36a27c78b19d1272b72f51f8401269802c5ba5c10441e4b793e27c3e5198e0b2}
 - {block: 
-    block_0x1d4bc5bd5cd1b30bae6a1728427c1b489e03ed3f5327cd800ee847d385f99f49}
+    block_0xb01ca409fbb4d3716f8ac2bc0f382b5eb35d1a9ee08fdf29d856377929baf4ff}
 - {block: 
-    block_0x565faaf059ed0ee24722e5e8d3813478211e9c97694fa08adba4cb2df432a971}
+    block_0xc57e061bc7e4c0ceb81246d8362066624de5397a844c6c77b80cd37c0c832f15}
 - {block: 
-    block_0x82f9e0d2ccc3dfdba2241925a652bcaa71eed4fd66b635a6a683b87f8389acc4}
+    block_0x1f13230c5ba0d68e8272310dc882a543eee4eb892539c99e4c46dd5db3b0751a}
 - {block: 
-    block_0x69327ced0e4fd82c9aa58725ea713582b98f0c7c11c64f90b68ac9b131021b92}
+    block_0xf159438549c16fe98edfa913d863bf18fc400292bfd4d945af6de06c4ff73ae1}
 - {block: 
-    block_0x92505057cce9381d099e202038b864aa88a668e3359257c3b3685296e2874793}
+    block_0x8997c55cd8ceaa86c6a44a66e9c4930752531d01f8c72ccb8d0234710e98b3de}
 - {block: 
-    block_0x8ff3a243b522d9499327d1f76e74089005ee606aa0b74c4b641eca356dec2b1e}
+    block_0x220b42d6cd8ba4a743c7dc6938ea3c68b18422ab411328a2315a32ed96f4de92}
 - {block: 
-    block_0x918c1af0ae0403915bc5cbcae7eca0be642fb8a65bc0ca221a93d33d3ef79669}
+    block_0x7d4979e6f37d87cba3988499f6c0a8e4329f7f584a7bd5a6aeb44e75beb9812c}
 - {block: 
-    block_0x22c11c341c745c99eaecdcf3976280ec8a7f64a4f3318e48572b81d1ef5b863a}
+    block_0xf988cffb34005c6ffe4e5151928a5077d579b04a225879aa4b361fd8b1163b85}
 - {block: 
-    block_0x124b6494bf9476e68993d78cc077f402747aa5f6e1cd6249e8eaf1ddd83278a3}
+    block_0xa1a0fc60b426d54de0ce267d5921a5e474cc3617decd6a74824684ae3c3180d1}
 - {block: 
-    block_0xd855f593207cc4b899c68645bd8747d5ff5d56003480f5a0141e82fbf31808dd}
+    block_0xd1efb1921baa90275f8f73e205a34e05705ad719aa14bb16b16d38b37cd81d92}
 - {block: 
-    block_0x713df7011077b8241090f4089efa5098e1676465aa35cea87a299c0eb312a9ca}
+    block_0xcc3cf5abf76d43ac6498924bdbef40e59aed96724b868e9c4141acfad73057e4}
 - {block: 
-    block_0x93ed76ec1a7a9a9d1abc93850d4844be2fe790c31d9a505842dcc36f566c351e, 
+    block_0x2010d8f707c92791a0ed1cd0d3de61881feaa1dc1954652ebb49e254a6f7093f, 
     payload: 
-    execution_payload_envelope_0x140174b4a22d93abc414dcdf12ca23b2ec868282c961df8fb1bf5f55b7d3e5d8}
+    execution_payload_envelope_0x0cc503ca1349d0d7ad50c8cc8408e2898931e1e87bfc43085759abf730b5ca32}
 finalized_checkpoint: {epoch: 1, block: 
-    block_0x69327ced0e4fd82c9aa58725ea713582b98f0c7c11c64f90b68ac9b131021b92}
+    block_0xf159438549c16fe98edfa913d863bf18fc400292bfd4d945af6de06c4ff73ae1}
 messages:
 - {current_time_ms: 96050, message: 
-    proposer_preferences_0xeb7f10d51d0ce08c144545dfd67f5568a9e0fde0240d42144692595771e47cca,
+    proposer_preferences_0xb91a420f90dcfa9cc2c1669c38cfe36a20e99f8d35cef0a1f9a371f20c899a7e,
   expected: valid}
 - {message: 
-    execution_payload_envelope_0x140174b4a22d93abc414dcdf12ca23b2ec868282c961df8fb1bf5f55b7d3e5d8,
+    execution_payload_envelope_0x0cc503ca1349d0d7ad50c8cc8408e2898931e1e87bfc43085759abf730b5ca32,
   expected: valid}
-- {current_time_ms: 96100, message: 
-    execution_payload_bid_0x138b19d3ca1ad0fd2bbf66347ab05e32c923a7e0bec1550cce0b51470fd2e285,
+- {current_time_ms: 100540, message: 
+    execution_payload_bid_0x0848cf1d74f83b3ee59bb2dc9c7b06c99b88d7a55881e9a8cd01e4424c212f3b,
   expected: valid}
-- {current_time_ms: 96110, message: 
-    execution_payload_bid_0x1a92cc72a7e11a17ff07a10292f0a6b7bcf8cbe968b0228e429c84939cbc98a2,
+- {current_time_ms: 100550, message: 
+    execution_payload_bid_0x8c638e7680749dce4ce14d092326193a281997f6f33953b5bb6b310078b37669,
   expected: valid}

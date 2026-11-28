@@ -127,8 +127,8 @@ def test_unknown_container():
 
 # The release archives that hold every case, one for each preset.
 ARCHIVES = {
-    "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
-    "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
+    "minimal": "consensus-specs/v1.7.0-beta.5/minimal",
+    "mainnet": "consensus-specs/v1.7.0-beta.5/mainnet",
 }
 
 

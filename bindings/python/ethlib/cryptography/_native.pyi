@@ -1224,11 +1224,11 @@ def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_bloc
     """The handler outcomes of each step of a fork choice case, from an anchor state and block."""
     ...
 
-def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
+def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None] | tuple[int, int | None, bytes, bytes | None, bool]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
     ...
 
-def consensus_api_post(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]] | tuple[int, str, list[bytes], str | None]], config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]:
+def consensus_api_post(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None] | tuple[int, int | None, bytes, bytes | None, bool]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]] | tuple[int, str, list[bytes], str | None]], config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]:
     """Answer the requests to pool and publish endpoints in turn."""
     ...
 

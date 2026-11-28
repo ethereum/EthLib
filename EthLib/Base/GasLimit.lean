@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Uint64
+
 /-!
 # `Base.GasLimit`
 
@@ -8,11 +10,15 @@ The gas limit that a block takes when it moves from its parent's toward a target
 Consensus checks a builder's bid with it, and Engine builds a payload with it.
 
 So it sits below both.
+
+It also gives the highest limit after a parent's, which bounds the transactions of an envelope.
 -/
 
 @[expose] public section
 
 namespace EthLib.Base
+
+open Uint64 (addChecked saturatingSub)
 
 /-- The gas limit that moves from a parent's limit toward a target, by at most one step.
 
@@ -32,5 +38,12 @@ def gasLimitToward (parentGasLimit target : Nat) : Nat :=
   else if parentGasLimit + step < target then parentGasLimit + step
   -- Any other target, within one step, is the gas limit itself.
   else target
+
+/-- The highest gas limit that a block may take after a parent's limit.
+
+A limit past `2^64 - 1` is an error. -/
+def maxGasLimitAfter (parentGasLimit : UInt64) : Except ArithError UInt64 :=
+  -- `p + max(floor(p / 1024) - 1, 0)`, for the parent's limit `p`.
+  addChecked parentGasLimit (saturatingSub (parentGasLimit / 1024) 1)
 
 end EthLib.Base

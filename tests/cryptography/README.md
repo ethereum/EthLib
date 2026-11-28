@@ -31,7 +31,7 @@ Its `tests/` directory holds the same 344 cases, byte for byte.
 They are its copies of the cases of consensus-specs runs from `v1.5.0-alpha.9` to `v1.6.0-beta.0`.
 Those runs used the specification's own KZG functions, with an external library only for the elliptic-curve arithmetic.
 That library is pinned in [`setup.py`](https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/setup.py#L579) at `v1.5.0-alpha.9` and in [`pyproject.toml`](https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.0/pyproject.toml#L24) at `v1.6.0-beta.0`.
-The `eth_*` cases of `bls/` are pinned to consensus-specs `v1.7.0-beta.4`, at commit `aa16bb4c156184e9548a997d53efaf2a228a6304`.
+The `eth_*` cases of `bls/` are pinned to consensus-specs `v1.7.0-beta.5`, at commit `36888ee87b0faa6ad7804b017a0184e8e6e6a1c6`.
 Its `general.tar.gz` holds the same 20 cases, byte for byte, and has sha256 `c4f395f71f606c28093500e32067990e430cc73a2277be6f3bf5090adcce3f67`.
 Only the path of a case differs from upstream:
 

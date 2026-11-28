@@ -69,7 +69,7 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
     apply toZMod.injective
     rw [toZMod_mul, toZMod_powNat]
     exact pow_sqrt_exponent (by rw [← toZMod_mul, h])
-  rw [Fp.sqrt, Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent,
+  rw [Fp.sqrt, Fp.sqrtCandidate_eq_powNat,
     ite_eq_left (show (Fp.powNat a ((Fp.modulus + 1) / 4) *
       Fp.powNat a ((Fp.modulus + 1) / 4)).beq a = true from Fp.beq_iff.mpr hcand)]
 
@@ -112,9 +112,7 @@ theorem sqrtCandidate_sq_or_neg (a : Fp) :
   have hs := h (Fp.toZMod a)
   dsimp only at hs
   rw [← Fp.toZMod_powNat] at hs
-  change Montgomery.powLimbs a Fp.sqrtExponent * Montgomery.powLimbs a Fp.sqrtExponent = a ∨
-    Montgomery.powLimbs a Fp.sqrtExponent * Montgomery.powLimbs a Fp.sqrtExponent = -a
-  rw [Fp.powLimbs_sqrtExponent]
+  rw [Fp.sqrtCandidate_eq_powNat]
   rcases hs with hs | hs
   · exact Or.inl (Fp.toZMod.injective (by rw [Fp.toZMod_mul]; exact hs))
   · exact Or.inr (Fp.toZMod.injective (by rw [Fp.toZMod_mul, Fp.toZMod_neg]; exact hs))

@@ -1,10 +1,10 @@
 topic: data_column_sidecar
 blocks:
 - {block: 
-    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+    block_0xa571ebd8a51f50fcb998488a43db9fecd4c5b65d7b09ed1e3df653db2b61df2a}
 - {block: 
-    block_0x373878be697c8fb8690cce8af2c8e5c8d8966ca5fc6ef79e801a33aec1d608e7}
+    block_0x657de02e5284557175d699222b1b0571ded2eeb8a1120723f6acfb678282f4a5}
 messages:
 - {subnet_id: 0, current_time_ms: 6500, message: 
-    data_column_sidecar_0x67f7db8135ce3025c4540a450fdd63790a88c45c4841b6ee03710ae2b0781f66,
+    data_column_sidecar_0x199f0c3a0a5adf5673c38e3870edcc7085aec1ad041408fd1659f74888166255,
   expected: valid}

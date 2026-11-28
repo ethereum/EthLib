@@ -137,7 +137,7 @@ structure Config extends Networking.Gossip.SubnetParameters where
 
   [EIP-7805](https://eips.ethereum.org/EIPS/eip-7805#validators) puts this deadline at 9 s.
 
-  That is 7500 of a 12-second slot, but both configurations below give 6667, that is 8 s. -/
+  That is 7500 of a 12-second slot, the value of both configurations below. -/
   INCLUSION_LIST_DUE_BPS : UInt64
   /-- From Altair: the inactivity score that a validator gains in each epoch that it misses. -/
   INACTIVITY_SCORE_BIAS : UInt64
@@ -215,6 +215,12 @@ structure Config extends Networking.Gossip.SubnetParameters where
   MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS : Epoch
   /-- From Gloas: the most execution payload envelopes in one request. -/
   MAX_REQUEST_PAYLOADS : UInt64
+  /-- From Gloas: a lower bound on the gas that one transaction uses.
+
+  So a payload of gas limit `g` can hold at most `floor(g / MIN_TRANSACTION_GAS)` transactions.
+
+  The cheapest transaction of Glamsterdam uses 12,000 gas, well above this bound. -/
+  MIN_TRANSACTION_GAS : UInt64
   /-- From Heze: the most inclusion lists in one request. -/
   MAX_REQUEST_INCLUSION_LIST : UInt64
   /-- From Heze: the fewest recent slots whose inclusion lists a node serves. -/
@@ -283,7 +289,7 @@ def mainnet : Config where
   CONTRIBUTION_DUE_BPS_GLOAS := 5000
   PAYLOAD_DUE_BPS := 5000
   PAYLOAD_ATTESTATION_DUE_BPS := 7500
-  INCLUSION_LIST_DUE_BPS := 6667
+  INCLUSION_LIST_DUE_BPS := 7500
   INACTIVITY_SCORE_BIAS := 2 ^ 2
   INACTIVITY_SCORE_RECOVERY_RATE := 2 ^ 4
   EJECTION_BALANCE := 2 ^ 4 * 10 ^ 9
@@ -326,6 +332,7 @@ def mainnet : Config where
   BALANCE_PER_ADDITIONAL_CUSTODY_GROUP := 32 * 10 ^ 9
   MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS := 2 ^ 12
   MAX_REQUEST_PAYLOADS := 2 ^ 7
+  MIN_TRANSACTION_GAS := 2 ^ 12
   MAX_REQUEST_INCLUSION_LIST := 2 ^ 4
   MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS := 1
   MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST := 2 ^ 13

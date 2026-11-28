@@ -1,0 +1,14 @@
+topic: sync_committee
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+- {block: 
+    block_0x61df9a3d96a64d344f3e683f0149937cfd5f9be5da5edf8f5f8604b6a1f0904f}
+messages:
+- {current_time_ms: 762500, subnet_id: 1, message: 
+    sync_committee_message_0x5d6c6f9ba2a38e252e488896657146611fbf9d3c2aaced2a494272680e6d90db,
+  expected: valid}
+- {current_time_ms: 762500, subnet_id: 3, message: 
+    sync_committee_message_0xe9f0a79072a9e2753ba0bdcac1359476d8b385d0cfcf0bd575e2a1bdeda42a8f,
+  expected: reject, reason: subnet_id is not valid for the validator}
+bls_setting: 1

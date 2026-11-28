@@ -1,0 +1,10 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xa71c9abc703f72b364756dad779cb6c4f9ab0dc175b0e308041aa90e257afdd6,
+  column_index: 0, current_time_ms: 6500, message: 
+    partial_data_column_sidecar_0x6c0776aa54bc4b35691948efa1b523abd0c143711ae2e9ae112762dc06590a96,
+  expected: reject, reason: header's kzg_commitments is too long}

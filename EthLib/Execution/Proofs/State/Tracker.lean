@@ -328,49 +328,11 @@ theorem getAccount_destroyTouchedEmptyAccounts {fork : Fork} {tx : TransactionSt
         · rfl
       rw [List.foldl_cons, ih (step ▸ nonce), step]
 
-/-- A key that a storage map holds at an address is a key of the slots at that address. -/
-private theorem mem_keys_of_slot {storage : StorageMap} {address : Address} {key : Bytes32}
-    {value : U256} (h : storage.slot address key = some value) :
-    key ∈ (storage.getD address ∅).keys := by
-  unfold StorageMap.slot at h
-  rw [Option.bind_eq_some_iff] at h
-  obtain ⟨slots, hslots, hkey⟩ := h
-  rw [Std.ExtTreeMap.getD_eq_getD_getElem?, hslots, Option.getD_some, Std.ExtTreeMap.mem_keys,
-    Std.ExtTreeMap.mem_iff_isSome_getElem?, hkey, Option.isSome_some]
-
-/-- The storage of an address holds a word other than zero exactly when some key reads one. -/
-theorem accountHasStorage_eq_true_iff {tx : TransactionState} {address : Address} :
-    tx.accountHasStorage address = true ↔ ∃ key, tx.getStorage address key ≠ 0 := by
-  unfold accountHasStorage
-  simp only [List.any_eq_true, bne_iff_ne, ne_eq]
-  refine ⟨fun ⟨key, _, h⟩ => ⟨key, h⟩, fun ⟨key, h⟩ => ⟨key, ?_, h⟩⟩
-  simp only [List.mem_append]
-  unfold getStorage at h
-  split at h
-  · exact .inl (.inl (mem_keys_of_slot ‹_›))
-  · split at h
-    · exact absurd rfl h
-    · split at h
-      · exact .inl (.inr (mem_keys_of_slot ‹_›))
-      · split at h
-        · exact absurd rfl h
-        · unfold State.getStorage at h
-          cases hslot : StorageMap.slot tx.parent.preState.storage address key with
-          | none => simp [hslot] at h
-          | some value => exact .inr (mem_keys_of_slot hslot)
-
-/-- A contract may be deployed at an address exactly when it has no nonce, code or storage.
-
-Its account has nonce 0 and no code, by EIP-684.
-
-Every key of its storage reads zero, by EIP-7610, at every fork. -/
+/-- A contract may be deployed at an address exactly when its account has nonce 0 and no code. -/
 theorem accountDeployable_eq_true_iff {tx : TransactionState} {address : Address} :
     tx.accountDeployable address = true ↔ (tx.getAccount address).nonce = 0 ∧
-      (tx.getAccount address).codeHash = EMPTY_CODE_HASH ∧
-      ∀ key, tx.getStorage address key = 0 := by
+      (tx.getAccount address).codeHash = EMPTY_CODE_HASH := by
   unfold accountDeployable
-  simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true', and_assoc]
-  rw [← Bool.not_eq_true, accountHasStorage_eq_true_iff]
   simp
 
 /-- An address where an account can be deployed has nonce 0. -/
@@ -378,22 +340,12 @@ theorem nonce_eq_zero_of_accountDeployable {tx : TransactionState} {address : Ad
     (h : tx.accountDeployable address = true) : (tx.getAccount address).nonce = 0 :=
   (accountDeployable_eq_true_iff.mp h).1
 
-/-- Two states agree on whether an address holds storage when they agree on every key there. -/
-theorem accountHasStorage_congr {tx tx' : TransactionState} {address : Address}
-    (hstorage : ∀ key, tx'.getStorage address key = tx.getStorage address key) :
-    tx'.accountHasStorage address = tx.accountHasStorage address := by
-  rw [Bool.eq_iff_iff, accountHasStorage_eq_true_iff, accountHasStorage_eq_true_iff]
-  simp only [hstorage]
-
-/-- Two states agree on whether a contract may be deployed at an address they read alike.
-
-They must have the same account there and the same word at every key of its storage. -/
+/-- Two states agree on whether a contract may be deployed at an address of the same account. -/
 theorem accountDeployable_congr {tx tx' : TransactionState} {address : Address}
-    (haccount : tx'.getAccount address = tx.getAccount address)
-    (hstorage : ∀ key, tx'.getStorage address key = tx.getStorage address key) :
+    (haccount : tx'.getAccount address = tx.getAccount address) :
     tx'.accountDeployable address = tx.accountDeployable address := by
   unfold accountDeployable
-  rw [haccount, accountHasStorage_congr hstorage]
+  rw [haccount]
 
 /-- A change by `f` succeeds exactly when `f` does on the account.
 

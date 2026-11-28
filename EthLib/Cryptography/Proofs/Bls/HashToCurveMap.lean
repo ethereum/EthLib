@@ -50,25 +50,29 @@ theorem map_Aprime (f : Hom F G) : (Aprime : Fp2 F).map f = Aprime := by
 theorem map_Bprime (f : Hom F G) : (Bprime : Fp2 F).map f = Bprime := by
   simp only [Bprime, Fp2.ofNats, Fp2.map, f.map_ofNat]
 
+theorem map_sqrtNegNormZ (f : Hom F G) : f (sqrtNegNormZ : F) = sqrtNegNormZ := f.map_ofNat _
+
+theorem map_sqrtRatio (f : Hom F G) (u v : Fp2 F) :
+    sqrtRatio (u.map f) (v.map f) = Prod.map id (Fp2.map f) (sqrtRatio u v) := by
+  have h0 : ∀ a : Fp2 F, (a.map f).c0 = f a.c0 := fun _ => rfl
+  have h1 : ∀ a : Fp2 F, (a.map f).c1 = f a.c1 := fun _ => rfl
+  simp only [sqrtRatio, h0, h1, ← f.map_mul, ← f.map_add, f.map_isZero, f.map_invSqrtCandidate,
+    f.map_beq, ← f.map_one, ← Fp2.map_mul, ← map_Z f, ← map_sqrtNegNormZ f, Fp2.map_sqrtOfNormRoot,
+    ← Fp2.map_conjugate, ← Fp2.map_mulFp, ← apply_ite (Fp2.map f)]
+  split
+  · simp only [Prod.map, id, Fp2.map_zero]
+  · rfl
+
 theorem map_simpleSwu (f : Hom F G) (u : Fp2 F) :
-    simpleSwu (u.map f) = (simpleSwu u).map (Prod.map (Fp2.map f) (Fp2.map f)) := by
-  unfold simpleSwu
-  simp only [← map_Z f, ← map_Aprime f, ← map_Bprime f, ← Fp2.map_mul, ← Fp2.map_add,
-    Fp2.map_isZero, ← Fp2.map_div, ← Fp2.map_neg, ← Fp2.map_one f, ← Fp2.map_inverse,
-    ← apply_ite (Fp2.map f), Fp2.map_sqrt]
-  generalize Z * (u * u) = zu2
-  generalize (if (zu2 * zu2 + zu2).isZero = true then (Bprime / (Z * Aprime) : Fp2 F)
-    else -Bprime / Aprime * (Fp2.one + (zu2 * zu2 + zu2).inverse)) = x1
-  cases Fp2.sqrt (x1 * x1 * x1 + Aprime * x1 + Bprime) with
-  | some y =>
-    simp only [Option.map, Except.map, pure, Except.pure, Prod.map, Fp2.map_sgn0,
-      apply_ite (Fp2.map f), Fp2.map_neg]
-  | none =>
-    cases Fp2.sqrt (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
-    | some y =>
-      simp only [Option.map, Except.map, pure, Except.pure, Prod.map, Fp2.map_sgn0,
-        apply_ite (Fp2.map f), Fp2.map_neg]
-    | none => rfl
+    simpleSwu (u.map f) =
+      Prod.map (Fp2.map f) (Prod.map (Fp2.map f) (Fp2.map f)) (simpleSwu u) := by
+  simp only [simpleSwu, ← map_Z f, ← map_Aprime f, ← map_Bprime f, ← Fp2.map_square,
+    ← Fp2.map_mul, ← Fp2.map_add, ← Fp2.map_one f, Fp2.map_isZero, ← Fp2.map_neg,
+    ← apply_ite (Fp2.map f), map_sqrtRatio]
+  generalize (sqrtRatio _ _ : Bool × Fp2 F) = r
+  obtain ⟨b, y⟩ := r
+  cases b <;> simp only [Prod.map, id, Bool.false_eq_true, ↓reduceIte, Fp2.map_sgn0,
+    ← Fp2.map_mul, ← Fp2.map_neg, ← apply_ite (Fp2.map f)]
 
 theorem map_ofNats (f : Hom F G) (c0 c1 : Nat) :
     Fp2.map f (Fp2.ofNats c0 c1 : Fp2 F) = Fp2.ofNats c0 c1 := by
@@ -88,14 +92,14 @@ theorem map_k40 (f : Hom F G) : (k40 : Fp2 F).map f = k40 := map_ofNats f _ _
 theorem map_k41 (f : Hom F G) : (k41 : Fp2 F).map f = k41 := map_ofNats f _ _
 theorem map_k42 (f : Hom F G) : (k42 : Fp2 F).map f = k42 := map_ofNats f _ _
 
-theorem map_isoMapG2 (f : Hom F G) (xp yp : Fp2 F) :
-    (isoMapG2 xp yp).map f = isoMapG2 (xp.map f) (yp.map f) := by
-  unfold isoMapG2
-  simp only [← map_k10 f, ← map_k11 f, ← map_k12 f, ← map_k13 f, ← map_k20 f, ← map_k21 f,
-    ← map_k30 f, ← map_k31 f, ← map_k32 f, ← map_k33 f, ← map_k40 f, ← map_k41 f, ← map_k42 f,
-    ← Fp2.map_mul, ← Fp2.map_add, Fp2.map_isZero,
-    ← Fp2.map_div, apply_ite (G2.map f), G2.map_zero]
-  simp only [G2.map, G1.map, Fp2.hom, Fp2.map_one]
+theorem map_isoMapG2 (f : Hom F G) (p : Fp2 F × Fp2 F × Fp2 F) :
+    (isoMapG2 p).map f = isoMapG2 (Prod.map (Fp2.map f) (Prod.map (Fp2.map f) (Fp2.map f)) p) := by
+  obtain ⟨xn, xd, y⟩ := p
+  simp only [isoMapG2, Prod.map, ← map_k10 f, ← map_k11 f, ← map_k12 f, ← map_k13 f,
+    ← map_k20 f, ← map_k21 f, ← map_k30 f, ← map_k31 f, ← map_k32 f, ← map_k33 f, ← map_k40 f,
+    ← map_k41 f, ← map_k42 f, ← Fp2.map_square, ← Fp2.map_mul, ← Fp2.map_add, Fp2.map_isZero,
+    apply_ite (G2.map f), G2.map_zero]
+  simp only [G2.map, G1.map, Fp2.hom]
 
 theorem map_c1Psi (f : Hom F G) : (c1Psi : Fp2 F).map f = c1Psi := by
   unfold c1Psi
@@ -148,18 +152,10 @@ theorem map_hashToG2 (f : Hom F G) (msg dst : ByteArray) :
   cases (hashToFieldFp2 msg dst 2 : Except BlsError (Vector (Fp2 F) 2)) with
   | error e => rfl
   | ok us =>
-    simp only [Except.map, bind, Except.bind, Vector.getElem_map, map_simpleSwu]
-    cases simpleSwu us[0] with
-    | error e => rfl
-    | ok p0 =>
-      cases simpleSwu us[1] with
-      | error e => rfl
-      | ok p1 =>
-        obtain ⟨x0, y0⟩ := p0
-        obtain ⟨x1, y1⟩ := p1
-        simp only [Prod.map, pure, Except.pure, map_clearCofactor, ← map_isoMapG2]
-        congr 2
-        exact G2.map_add f _ _
+    simp only [Except.map, bind, Except.bind, Vector.getElem_map, map_simpleSwu, pure,
+      Except.pure, map_clearCofactor, ← map_isoMapG2]
+    congr 2
+    exact G2.map_add f _ _
 
 end HashToCurve
 
@@ -302,14 +298,8 @@ theorem map_mapToG1 (f : Hom F G) (u : F) :
 
 theorem map_mapToG2 (f : Hom F G) (u : Fp2 F) :
     mapToG2 (u.map f) = (mapToG2 u).map (G2.map f) := by
-  unfold mapToG2
-  rw [HashToCurve.map_simpleSwu]
-  cases HashToCurve.simpleSwu u with
-  | error e => rfl
-  | ok p =>
-    obtain ⟨x, y⟩ := p
-    simp only [Except.map, bind, Except.bind, pure, Except.pure, Prod.map,
-      HashToCurve.map_clearCofactor, HashToCurve.map_isoMapG2]
+  simp only [mapToG2, HashToCurve.map_simpleSwu, ← HashToCurve.map_isoMapG2, pure,
+    Except.pure, Except.map, HashToCurve.map_clearCofactor]
 
 end MapToCurve
 

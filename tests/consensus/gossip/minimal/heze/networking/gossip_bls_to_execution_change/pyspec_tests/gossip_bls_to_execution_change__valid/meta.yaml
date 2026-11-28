@@ -1,7 +1,7 @@
 topic: bls_to_execution_change
 blocks:
 - {block: 
-    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+    block_0xa571ebd8a51f50fcb998488a43db9fecd4c5b65d7b09ed1e3df653db2b61df2a}
 messages:
 - {current_time_ms: 0, message: 
     bls_to_execution_change_0x40a9df9312e02c1da95a7ddc2c0b83fe804c0074fb6112e98663ad2d847a4938,

@@ -12,7 +12,7 @@ The rules here hold from Berlin to the fork before Glamsterdam, with one counter
 
 Out of scope: a creation that runs no message, a creation in a static frame, and the deposit.
 
-Sources: EIP-150, EIP-684, EIP-1014, EIP-2929, EIP-3860 and EIP-7610.
+Sources: EIP-150, EIP-684, EIP-1014, EIP-2929 and EIP-3860.
 -/
 
 @[expose] public section
@@ -47,8 +47,6 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         (extendMemory evm.memory.size [(start, size)]).expandBy) start.toNat size.toNat) =
         .ok address)
     -- The address must hold no code and a nonce of 0, as EIP-684 asks.
-    --
-    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : evm.state.accountDeployable address = true)
     -- The creation pays 32000 and the growth of memory.
     --
@@ -230,8 +228,6 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
       (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         start.toNat size.toNat) = .ok address)
     -- The address must hold no code and a nonce of 0, as EIP-684 asks.
-    --
-    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : state.accountDeployable address = true)
     -- The creation pays 32000 and the growth of memory.
     --
@@ -332,8 +328,6 @@ theorem createWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         start.toNat size.toNat) = .ok address)
     -- The address must hold no code and a nonce of 0, as EIP-684 asks.
-    --
-    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : state.accountDeployable address = true)
     (hgas : createBaseCost fork +
         (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -392,8 +386,6 @@ theorem create2With (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         start.toNat size.toNat) = .ok address)
     -- The address must hold no code and a nonce of 0, as EIP-684 asks.
-    --
-    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : state.accountDeployable address = true)
     (hgas : createBaseCost fork +
         OPCODE_KECCAK256_PER_WORD * wordCount size.toNat +

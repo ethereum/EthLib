@@ -2,16 +2,17 @@ module
 
 public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.NoninterferenceRun
-public import EthLib.Execution.Proofs.Transactions.Candidate
+public import EthLib.Execution.Proofs.Transactions.Authorization
+public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.CodeOrigin
 public import EthLib.Execution.Proofs.Transactions.Process
 
 /-!
 # Proofs: the message of a transaction depends only on what it records
 
-Run the message of a transaction on two states that agree on four sets.
+Run the message of a transaction on two states that agree on three sets.
 
-The sets name accounts, whole storages, slots and code hashes.
+The sets name accounts, slots and code hashes.
 
 When the first run ends with every read in the sets, the second gives the same output.
 
@@ -27,7 +28,7 @@ namespace EthLib.Execution.Transactions
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State
-open EthLib.Execution.State.TransactionState (AgreesOn NoNewCandidate)
+open EthLib.Execution.State.TransactionState (AgreesOn)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -54,7 +55,7 @@ theorem processMessageCall_withCode [LawfulGasMeter Meter] {chainId : Nat}
 
 section Helpers
 
-variable {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+variable {account : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
 /-- A record of an account read keeps every read. -/
@@ -78,8 +79,8 @@ private theorem readsLe_delegate {state state' : TransactionState} {authority : 
 
 /-- At an account in the sets, both states fetch the same code for its current code hash. -/
 private theorem getCode_getAccount_eq {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {tx other : TransactionState}
-    (hagree : AgreesOn account allStorage slot code tx other) (horigin : CodeOrigin block tx)
+    (covers : CoversBlock block account code) {tx other : TransactionState}
+    (hagree : AgreesOn account slot code tx other) (horigin : CodeOrigin block tx)
     {address : Address} (ha : account address) :
     other.getCode (other.getAccount address).codeHash =
       tx.getCode (tx.getAccount address).codeHash := by
@@ -89,8 +90,8 @@ private theorem getCode_getAccount_eq {block : BlockState}
 
 /-- At an account in the sets, both states fetch the same code for its code hash in the block. -/
 private theorem getCode_getPreStateAccount_eq {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {tx other : TransactionState}
-    (hagree : AgreesOn account allStorage slot code tx other) (hparent : tx.parent = block)
+    (covers : CoversBlock block account code) {tx other : TransactionState}
+    (hagree : AgreesOn account slot code tx other) (hparent : tx.parent = block)
     {address : Address} (ha : account address) :
     other.getCode (other.getPreStateAccount address).codeHash =
       tx.getCode (tx.getPreStateAccount address).codeHash := by
@@ -116,20 +117,20 @@ private def outState {α : Type} (getState : α → TransactionState) :
   | .error (_, read) => read
 
 /-- Two results of the authorizations are the same, up to their states, which agree. -/
-private def DelegationsAgree (account allStorage : Address → Prop)
+private def DelegationsAgree (account : Address → Prop)
     (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop) :
     Except (EvmError × TransactionState) (Delegations Meter) →
       Except (EvmError × TransactionState) (Delegations Meter) → Prop
-  | .ok d, .ok d' => d' = { d with state := d'.state } ∧ AgreesOn account allStorage slot code
+  | .ok d, .ok d' => d' = { d with state := d'.state } ∧ AgreesOn account slot code
       d.state d'.state
-  | .error (e, read), .error (e', read') => e' = e ∧ AgreesOn account allStorage slot code
+  | .error (e, read), .error (e', read') => e' = e ∧ AgreesOn account slot code
       read read'
   | _, _ => False
 
 /-- At an authority in the sets, both states accept an authorization alike. -/
 private theorem authorityAccepts_eq {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {tx other : TransactionState}
-    (hagree : AgreesOn account allStorage slot code tx other) (horigin : CodeOrigin block tx)
+    (covers : CoversBlock block account code) {tx other : TransactionState}
+    (hagree : AgreesOn account slot code tx other) (horigin : CodeOrigin block tx)
     {authority : Address} (ha : account authority) (auth : Authorization) :
     authorityAccepts other authority auth = authorityAccepts tx authority auth := by
   have hcode := getCode_getAccount_eq covers hagree horigin ha
@@ -138,8 +139,8 @@ private theorem authorityAccepts_eq {block : BlockState}
 
 /-- At an authority in the sets, the payment of an authorization ignores the rest of the state. -/
 private theorem payAuthorization_withState {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {done : Delegations Meter}
-    {other : TransactionState} (hagree : AgreesOn account allStorage slot code done.state other)
+    (covers : CoversBlock block account code) {done : Delegations Meter}
+    {other : TransactionState} (hagree : AgreesOn account slot code done.state other)
     (hparent : done.state.parent = block) {authority : Address} (ha : account authority)
     (auth : Authorization) :
     payAuthorization fork { done with state := other } authority auth =
@@ -156,9 +157,9 @@ private theorem payAuthorization_withState {block : BlockState}
 
 /-- At an authority in the sets, an authorization sets the code alike on agreeing states. -/
 private theorem delegate_agrees {tx other : TransactionState}
-    (hagree : AgreesOn account allStorage slot code tx other) {authority : Address}
+    (hagree : AgreesOn account slot code tx other) {authority : Address}
     (ha : account authority) (auth : Authorization) :
-    ExceptRel (fun p q : TransactionState × Nat => AgreesOn account allStorage slot code p.1 q.1 ∧
+    ExceptRel (fun p q : TransactionState × Nat => AgreesOn account slot code p.1 q.1 ∧
         q.2 = p.2)
       (delegate fork tx authority auth) (delegate fork other authority auth) := by
   unfold delegate
@@ -169,13 +170,13 @@ private theorem delegate_agrees {tx other : TransactionState}
 
 /-- One authorization with its reads in the sets gives the same result on an agreeing state. -/
 private theorem applyAuthorization_agrees {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {chainId : Nat}
+    (covers : CoversBlock block account code) {chainId : Nat}
     {done : Delegations Meter} {other : TransactionState} {auth : Authorization}
-    (hagree : AgreesOn account allStorage slot code done.state other)
+    (hagree : AgreesOn account slot code done.state other)
     (hparent : done.state.parent = block) (horigin : CodeOrigin block done.state)
     (hreads : ReadsIn account slot
       (outState Delegations.state (applyAuthorization fork chainId done auth))) :
-    DelegationsAgree account allStorage slot code (applyAuthorization fork chainId done auth)
+    DelegationsAgree account slot code (applyAuthorization fork chainId done auth)
       (applyAuthorization fork chainId { done with state := other } auth) := by
   unfold applyAuthorization at hreads ⊢
   cases hscope : authorizationInScope chainId auth
@@ -308,13 +309,13 @@ private theorem readsLe_foldlM_applyAuthorization {chainId : Nat} :
 
 /-- The authorizations with their reads in the sets give the same result on an agreeing state. -/
 private theorem foldlM_applyAuthorization_agrees {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {chainId : Nat} :
+    (covers : CoversBlock block account code) {chainId : Nat} :
     ∀ (auths : List Authorization) (start : Delegations Meter) (other : TransactionState),
-      AgreesOn account allStorage slot code start.state other → start.state.parent = block →
+      AgreesOn account slot code start.state other → start.state.parent = block →
       CodeOrigin block start.state →
       ReadsIn account slot
         (outState Delegations.state (auths.foldlM (applyAuthorization fork chainId) start)) →
-      DelegationsAgree account allStorage slot code
+      DelegationsAgree account slot code
         (auths.foldlM (applyAuthorization fork chainId) start)
         (auths.foldlM (applyAuthorization fork chainId) { start with state := other })
   | [], _, _, hagree, _, _, _ => ⟨rfl, hagree⟩
@@ -359,13 +360,13 @@ Each lookup of the preparation is at an account in the sets.
 Both runs then prepare the same frame. -/
 
 /-- Two results of the preparation are the same, up to their states, which agree. -/
-private def FramesAgree (account allStorage : Address → Prop)
+private def FramesAgree (account : Address → Prop)
     (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop) :
     Except (EvmError × TransactionState) (FirstFrame fork Meter) →
       Except (EvmError × TransactionState) (FirstFrame fork Meter) → Prop
-  | .ok f, .ok f' => f' = { f with state := f'.state } ∧ AgreesOn account allStorage slot code
+  | .ok f, .ok f' => f' = { f with state := f'.state } ∧ AgreesOn account slot code
       f.state f'.state
-  | .error (e, read), .error (e', read') => e' = e ∧ AgreesOn account allStorage slot code
+  | .error (e, read), .error (e', read') => e' = e ∧ AgreesOn account slot code
       read read'
   | _, _ => False
 
@@ -449,13 +450,13 @@ private theorem readsLe_callRest {message : Message fork} {target : Address}
 
 /-- The end of the preparation of a call with its reads in the sets agrees on agreeing states. -/
 private theorem callRest_framesAgree {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {message : Message fork}
+    (covers : CoversBlock block account code) {message : Message fork}
     {target : Address} {substate : Substate} {accessed : Std.ExtTreeSet Address} {refund : Nat}
-    {state other : TransactionState} (hagree : AgreesOn account allStorage slot code state other)
+    {state other : TransactionState} (hagree : AgreesOn account slot code state other)
     (horigin : CodeOrigin block state) (meter : Meter)
     (hreads : ReadsIn account slot (outState FirstFrame.state
       (callRest message target substate accessed refund state meter))) :
-    FramesAgree account allStorage slot code
+    FramesAgree account slot code
       (callRest message target substate accessed refund state meter)
       (callRest message target substate accessed refund other meter) := by
   have hrecord := hagree.recordAccountRead target
@@ -526,13 +527,13 @@ private theorem readsLe_callFrame {message : Message fork} {target : Address}
 
 /-- The preparation of a call after its authorizations agrees on agreeing states. -/
 private theorem callFrame_framesAgree {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {message : Message fork}
+    (covers : CoversBlock block account code) {message : Message fork}
     {target : Address} {substate : Substate} {done : Delegations Meter}
-    {other : TransactionState} (hagree : AgreesOn account allStorage slot code done.state other)
+    {other : TransactionState} (hagree : AgreesOn account slot code done.state other)
     (horigin : CodeOrigin block done.state)
     (hreads : ReadsIn account slot (outState FirstFrame.state
       (callFrame message target substate done))) :
-    FramesAgree account allStorage slot code (callFrame message target substate done)
+    FramesAgree account slot code (callFrame message target substate done)
       (callFrame message target substate { done with state := other }) := by
   have ht : account target :=
     (ReadsIn.of_readsLe (readsLe_callFrame done) hreads).account _ (mem_recordAccountRead _ _)
@@ -561,14 +562,13 @@ private theorem callFrame_framesAgree {block : BlockState}
 
 /-- A preparation with its reads in the sets gives the same result on an agreeing state. -/
 private theorem prepareFirstFrame_framesAgree {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {chainId : Nat} {message : Message fork}
+    (covers : CoversBlock block account code) {chainId : Nat} {message : Message fork}
     {state other : TransactionState} {substate : Substate} {auths : List Authorization}
-    {paid : Std.ExtTreeSet Address} (hagree : AgreesOn account allStorage slot code state other)
+    {paid : Std.ExtTreeSet Address} (hagree : AgreesOn account slot code state other)
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
-    (hcandidates : NoNewCandidate block state)
     (hreads : ReadsIn account slot (outState FirstFrame.state
       (prepareFirstFrame (Meter := Meter) chainId message state substate auths paid))) :
-    FramesAgree (Meter := Meter) account allStorage slot code
+    FramesAgree (Meter := Meter) account slot code
       (prepareFirstFrame chainId message state substate auths paid)
       (prepareFirstFrame chainId message other substate auths paid) := by
   cases htarget : message.target with
@@ -592,8 +592,7 @@ private theorem prepareFirstFrame_framesAgree {block : BlockState}
     have hdeploy : (other.recordAccountRead message.currentTarget).accountDeployable
         message.currentTarget = (state.recordAccountRead message.currentTarget).accountDeployable
         message.currentTarget :=
-      hrecord.accountDeployable_eq (.inr ha) fun hn hc =>
-        (hcandidates _ hn hc).imp_right fun ⟨hn', hc'⟩ => covers.allStorage _ ha hn' hc'
+      hrecord.accountDeployable_eq (.inr ha)
     rw [hdeploy, hrecord.getPreStateAccount_eq ha]
     by_cases hd : (state.recordAccountRead message.currentTarget).accountDeployable
       message.currentTarget = true <;>
@@ -639,7 +638,7 @@ private theorem prepareFirstFrame_framesAgree {block : BlockState}
       | ok done' =>
         rw [hf2] at hfold
         obtain ⟨hsame, hagree'⟩ := hfold
-        show FramesAgree account allStorage slot code (callFrame message target substate done)
+        show FramesAgree account slot code (callFrame message target substate done)
           (callFrame message target substate done')
         rw [hsame]
         exact callFrame_framesAgree covers hagree' (horigin.of_keepsCodeOrigin hk) hreads
@@ -679,23 +678,22 @@ end Helpers
 /-- A preparation that ends with its reads in the sets gives the same frame on an agreeing state.
 
 The two frames differ only in their states, which agree. -/
-theorem prepareFirstFrame_agrees {block : BlockState} {account allStorage : Address → Prop}
+theorem prepareFirstFrame_agrees {block : BlockState} {account : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
     -- The sets must cover the block, which the first state must have as its parent.
-    (covers : CoversBlock block account allStorage code) {chainId : Nat} {message : Message fork}
+    (covers : CoversBlock block account code) {chainId : Nat} {message : Message fork}
     {state other : TransactionState} {substate : Substate} {auths : List Authorization}
-    {paid : Std.ExtTreeSet Address} (hagree : AgreesOn account allStorage slot code state other)
+    {paid : Std.ExtTreeSet Address} (hagree : AgreesOn account slot code state other)
     -- The code hashes of the first state must come from the block or from writes.
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
-    -- The first state must have no new deployment candidate.
-    (hcandidates : NoNewCandidate block state) {first : FirstFrame fork Meter}
+    {first : FirstFrame fork Meter}
     (h : prepareFirstFrame chainId message state substate auths paid = .ok first)
     (hreads : ReadsIn account slot first.state) :
     ∃ first', prepareFirstFrame chainId message other substate auths paid = .ok first' ∧
       first' = { first with state := first'.state } ∧
-      AgreesOn account allStorage slot code first.state first'.state := by
+      AgreesOn account slot code first.state first'.state := by
   have hfa := prepareFirstFrame_framesAgree covers (chainId := chainId) (message := message)
-    (substate := substate) (auths := auths) (paid := paid) hagree hparent horigin hcandidates
+    (substate := substate) (auths := auths) (paid := paid) hagree hparent horigin
     (by rw [h]; exact hreads)
   rw [h] at hfa
   cases h2 : prepareFirstFrame (Meter := Meter) chainId message other substate auths paid with
@@ -710,24 +708,23 @@ theorem prepareFirstFrame_agrees {block : BlockState} {account allStorage : Addr
 
 The error is the same, and the states it keeps agree. -/
 theorem prepareFirstFrame_agrees_error {block : BlockState}
-    {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+    {account : Address → Prop} {slot : Address → Bytes32 → Prop}
     -- The sets must cover the block, which the first state must have as its parent.
-    {code : Hash32 → Prop} (covers : CoversBlock block account allStorage code) {chainId : Nat}
+    {code : Hash32 → Prop} (covers : CoversBlock block account code) {chainId : Nat}
     {message : Message fork} {state other : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address}
-    (hagree : AgreesOn account allStorage slot code state other)
+    (hagree : AgreesOn account slot code state other)
     -- The code hashes of the first state must come from the block or from writes.
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
-    -- The first state must have no new deployment candidate.
-    (hcandidates : NoNewCandidate block state) {e : EvmError} {read : TransactionState}
+    {e : EvmError} {read : TransactionState}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
       .error (e, read))
     (hreads : ReadsIn account slot read) :
     ∃ read', prepareFirstFrame (Meter := Meter) chainId message other substate auths paid =
         .error (e, read') ∧
-      AgreesOn account allStorage slot code read read' := by
+      AgreesOn account slot code read read' := by
   have hfa := prepareFirstFrame_framesAgree covers (chainId := chainId) (message := message)
-    (substate := substate) (auths := auths) (paid := paid) hagree hparent horigin hcandidates
+    (substate := substate) (auths := auths) (paid := paid) hagree hparent horigin
     (by rw [h]; exact hreads)
   rw [h] at hfa
   cases h2 : prepareFirstFrame (Meter := Meter) chainId message other substate auths paid with
@@ -748,16 +745,14 @@ The run of a message depends only on what it records, so the two outputs agree. 
 
 The two outputs differ only in their states, which agree. -/
 theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
-    {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+    {account : Address → Prop} {slot : Address → Bytes32 → Prop}
     -- The sets must cover the block, which the first state must have as its parent.
-    {code : Hash32 → Prop} (covers : CoversBlock block account allStorage code) {chainId : Nat}
+    {code : Hash32 → Prop} (covers : CoversBlock block account code) {chainId : Nat}
     {message : Message fork} {state other : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address}
-    (hagree : AgreesOn account allStorage slot code state other)
+    (hagree : AgreesOn account slot code state other)
     -- The code hashes of the first state must come from the block or from writes.
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
-    -- The first state must have no new deployment candidate.
-    (hcandidates : NoNewCandidate block state)
     -- A call must run at its recipient.
     (recipient : ∀ target, message.target = some target → target = message.currentTarget)
     {output : CallOutput}
@@ -767,7 +762,7 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
     ∃ output', processMessageCall (Meter := Meter) chainId message other substate auths paid =
         .ok output' ∧
       output' = { output with state := output'.state } ∧
-      AgreesOn account allStorage slot code output.state output'.state := by
+      AgreesOn account slot code output.state output'.state := by
   rw [processMessageCall_unfold] at h ⊢
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
@@ -779,7 +774,7 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
       cases h
       -- A preparation that halts returns its state so far, and both runs halt with the same error.
       obtain ⟨read', h2, hread⟩ := prepareFirstFrame_agrees_error covers hagree hparent horigin
-        hcandidates hprep ⟨hreads.account, hreads.slot⟩
+        hprep ⟨hreads.account, hreads.slot⟩
       rw [h2]
       dsimp only
       simp only [halts, Bool.false_eq_true, ↓reduceIte]
@@ -787,7 +782,6 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
   · rw [hprep] at h
     dsimp only at h
     have horigin1 := horigin.of_keepsCodeOrigin (keepsCodeOrigin_prepareFirstFrame hprep)
-    have hcandidates1 := noNewCandidate_prepareFirstFrame hcandidates hprep
     have hcurrent : first.message.currentTarget ∈ first.state.accountReads := by
       rw [currentTarget_prepareFirstFrame hprep]
       exact currentRead_prepareFirstFrame recipient hprep
@@ -797,9 +791,9 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
       cases h
       rw [state_ofFrame] at hreads
       obtain ⟨first', h2, hsame, hfirst⟩ := prepareFirstFrame_agrees covers hagree hparent horigin
-        hcandidates hprep (ReadsIn.of_readsLe (readsLe_processCreateMessage hrun) hreads)
+        hprep (ReadsIn.of_readsLe (readsLe_processCreateMessage hrun) hreads)
       obtain ⟨⟨evm', used'⟩, hrun', hrest, hstate⟩ := processCreateMessage_agrees covers hfirst
-        horigin1 hcandidates1 hcurrent hrun hreads
+        horigin1 hcurrent hrun hreads
       dsimp only at hrest hstate hreads
       rw [h2]
       dsimp only
@@ -817,9 +811,9 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
       rw [state_ofFrame] at hreads
       have hle := readsLe_processMessage hrun
       obtain ⟨first', h2, hsame, hfirst⟩ := prepareFirstFrame_agrees covers hagree hparent horigin
-        hcandidates hprep (ReadsIn.of_readsLe hle hreads)
+        hprep (ReadsIn.of_readsLe hle hreads)
       obtain ⟨⟨evm', used'⟩, hrun', hrest, hstate⟩ := processMessage_agrees covers hfirst
-        horigin1 hcandidates1 hcurrent hrun hreads
+        horigin1 hcurrent hrun hreads
       dsimp only at hrest hstate hreads hle
       have ht : account target := by
         refine hreads.account _ (hle.accountReads _ ?_)

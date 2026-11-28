@@ -10,6 +10,8 @@ public import VCVio.OracleComp.QueryTracking.QueryBound.Basic
 The oracle that answers each byte string with a 32-byte value, and how many such values exist.
 
 One call to it makes at most one query.
+
+Calls on a list of inputs cost at most the sum of their costs.
 -/
 
 @[expose] public section
@@ -30,6 +32,18 @@ def oracleHash (x : ByteArray) : OracleComp HashSpec Digest :=
 theorem oracleHash_queryBound (x : ByteArray) :
     IsQueryBoundP (oracleHash x) (fun _ => True) 1 := by
   simp [oracleHash]
+
+/-- Calls of the hash oracle on a list of inputs cost at most the sum of their costs. -/
+theorem isQueryBound_mapM_oracleHash {α : Type} (hashCost : ByteArray → ℕ) (l : List α)
+    (input : α → ByteArray) :
+    IsQueryBound (l.mapM fun a => oracleHash (input a)) (l.map fun a => hashCost (input a)).sum
+      (fun x n => hashCost x ≤ n) fun x n => n - hashCost x := by
+  induction l with
+  | nil => simp
+  | cons a rest ih =>
+    simp only [List.mapM_cons, List.map_cons, List.sum_cons, oracleHash, bind_pure_comp,
+      isQueryBound_query_bind_iff, isQueryBound_map_iff, Nat.add_sub_cancel_left]
+    exact ⟨Nat.le_add_right _ _, fun _ => ih⟩
 
 /-- There are `2^256` values of 32 bytes. -/
 theorem natCard_digest : Nat.card Digest = 2 ^ 256 := by
