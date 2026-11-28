@@ -15,7 +15,7 @@ Then the outputs at distinct indices are independent uniform values.
 
 No theorem here covers a secret chosen after the oracle answered one of those inputs.
 
-The independence holds for the oracle only, and no theorem carries it over to Keccak-256.
+The independence holds for the oracle, and no theorem carries it over to Keccak-f[1600] itself.
 -/
 
 @[expose] public section
