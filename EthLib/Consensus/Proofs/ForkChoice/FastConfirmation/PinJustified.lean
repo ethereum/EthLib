@@ -360,7 +360,7 @@ variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin 
   (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
   (start : ∀ a ∈ J, e.start a = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
   (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-  -- Slots are nonempty, the delay fits a slot, and honest stores agree on duty windows.
+  -- The slot duration is positive, the delay fits a slot, and honest stores agree on duty windows.
   (slots : 0 < config.SLOT_DURATION_MS) (fits : DelayFits fork config genesisTimeMs Δ)
   (windows : AssignmentWindowAgreement (e := e) time) (params : DirectSafety.Parameters preset)
   -- Through the limit, honest stores hold only blocks with nonzero state roots.
@@ -428,7 +428,7 @@ theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setti
     (zero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
     -- The inclusion delay is positive, and honest validators are unslashed in counted states.
     (delay : preset.InclusionDelayPositive) (unslashed : HonestCountedStatesUnslashed (e := e) time)
-    -- Honest justified chains read an honest finalized checkpoint when their epoch reaches its.
+    -- Each honest justified chain reads each honest finalized checkpoint whose epoch it reaches.
     (finality : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →
@@ -448,7 +448,7 @@ theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setti
   -- The fork window bounds the held states before the next fork.
   have early := Execution.heldStatesBeforeUpgrade_of_bounded (e := e) anchored start anchorSlot
     slots params.slots forkWindow storeBound
-  -- The setting pins the justified checkpoints of the call's epoch, at the anchor's epoch.
+  -- The setting pins the justified checkpoints of each epoch past the anchor's justified one.
   have pins := justifiedPinned_of_setting (margin := margin) (first := 0) bls anchored start
     anchorSlot rfl header zero slots params delay genesis pre roots absent storeBound enough
     terminal unslashed finality guarded preGloas fusaka forkWindow bands caps exitWindow

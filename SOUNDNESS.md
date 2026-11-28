@@ -4394,28 +4394,38 @@ The paper's conclusion is a seed whose unrealized justification is the target or
 The premise also allows two honest stores that collide, since the seed reads the call's block at the target root.
 Votes for the target of epoch E count until start(E+1) − 1, and the conclusion applies once a receiver's epoch is E + 2 or later.
 
-`Execution.justified_eq_currentTarget_of_noConflictingCheckpoint` in the same file addresses Theorem 1 of [#2058](https://github.com/ethereum/EthLib/issues/2058).
+`Execution.justified_eq_currentTarget_of_noConflictingCheckpoint` in `Consensus/Proofs/ForkChoice/FastConfirmation/CheckpointConsistency.lean` is a step toward Theorem 1 of [#2058](https://github.com/ethereum/EthLib/issues/2058).
 Suppose an honest caller passes the no-conflict test at a slot start for a target of an epoch after the anchor's justified epoch.
 Assume the reserved honest count and the pin on justified checkpoints, and that block states held by honest stores by the time limit have slots before the next scheduled fork.
 All honest validators start at the store initialized from the anchor state and block, whose shared slot starts an epoch.
 A run reaches the anchor state from genesis.
-The slot duration is positive, a vote delayed by the bound from its deadline arrives before the next slot, and the honest duty windows agree.
+The slot duration is positive, a vote delayed by the bound Δ from its deadline arrives before the next slot, and the honest duty windows agree.
 The direct-safety preset conditions and the run and terminal stake floors hold.
 Through the limit, honest store epochs stay within the horizon, honest stores lack the anchor's parent, and the blocks they hold have nonzero state roots.
 The caller reads its head, its current target and slot, and the slot's start time.
 The successor of the target epoch, its first slot and its start time are read successfully.
 Up-to-date honest heads must descend from an origin of the target epoch on the caller's head chain, from the call through the start of the next epoch.
 If both events are by the limit, an up-to-date honest receiver's justified checkpoint of that epoch equals the caller's target, or honest stores exhibit a block collision or cross-store justified evidence.
-From Fulu until Gloas the corollary derives the pin under the setting's hypotheses, including cross-store finality and the pin guard, and derives the held-state bound from the fork window; it still assumes origin coverage.
-The setting uses BLS checks; the anchor state's header matches the anchor block except for its zero state root.
+That evidence is two honest stores with different justified or unrealized checkpoints of one epoch.
+With enough churn since the anchor, its stake inequality holds with no accountable key.
+
+`Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setting` in `Consensus/Proofs/ForkChoice/FastConfirmation/PinJustified.lean` derives the pin from Fulu until Gloas, under the setting's hypotheses.
+It derives the held-state bound from the fork window.
+It still assumes origin coverage.
+The setting uses BLS checks, and the anchor state's header matches the anchor block except for its zero state root.
 The inclusion delay is positive, and honest validators are unslashed in counted states through the limit.
 Through the limit, each honest justified chain reads each honest finalized checkpoint whose epoch it reaches.
+That premise is assumed, not derived.
 The pin guard holds and the horizon precedes the next scheduled fork.
-The balance increment is positive and within the upward band, the balance caps are ordered and increment-aligned, the maximum seed lookahead is at least three epochs, an epoch has more than one slot, and the preset meets the pin's drift bounds.
+The balance increment is positive and within the upward band, and the balance caps are ordered and increment-aligned.
+The maximum seed lookahead is at least three epochs, an epoch has more than one slot, and the preset meets the pin's drift bounds.
+
+No theorem yet discharges origin coverage where the rule runs the no-conflict test.
+There the confirmed block is of an earlier epoch than the target, so Theorem 1 stays open.
 The confirmed-root coverage theorem does not supply this origin coverage, even from Fulu.
 Its confirmed root may predate the target epoch.
 Its coverage starts at the following slot, not at the call.
-And it applies to the last event of a consecutive run of calls, not an arbitrary caller at a slot start.
+It also applies only to the last event of a consecutive run of calls, not to an arbitrary caller at a slot start.
 
 `Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
 It takes consecutive calls of the rule by one honest validator, one per slot from `firstSlot`, run from the anchor store.

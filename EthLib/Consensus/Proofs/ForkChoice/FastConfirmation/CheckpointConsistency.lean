@@ -428,11 +428,11 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
   subst same
   exact ⟨boundary, boundaryOk, le⟩
 
-/-- A pinned quorum at the call's count gives the call's target, or a later honest duty.
+/-- A pinned quorum at the call's count gives the call's target, or an honest duty from its slot.
 
-The pin `pin` is the target-or-unseen-signer step at the caller's count `M`.
+The pin hypothesis gives the target or an unseen signer at the caller's count `M`.
 
-The duty is for the receiver's checkpoint, from the call's slot to the receiver's `current` slot. -/
+The duty is for the store's justified checkpoint, and its slot is before `current`. -/
 private theorem eq_target_or_later_duty_of_pin
     {n k time margin M : ℕ} {anchor : Store preset fork} {u w : ValidatorIndex}
     {head : ForkChoiceNode} {slot first last current : Slot} {target : Checkpoint}
@@ -878,7 +878,7 @@ variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin 
   (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
   (start : ∀ a ∈ J, e.start a = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
   (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-  -- Slots are nonempty, the delay fits a slot, and honest stores agree on duty windows.
+  -- The slot duration is positive, the delay fits a slot, and honest stores agree on duty windows.
   (slots : 0 < config.SLOT_DURATION_MS) (fits : DelayFits fork config genesisTimeMs Δ)
   (windows : AssignmentWindowAgreement (e := e) time) (params : DirectSafety.Parameters preset)
   -- Through the limit, honest stores hold only blocks with nonzero state roots.
@@ -929,19 +929,13 @@ include anchored start anchorSlot anchorBoundary slots fits windows params roots
 
 /-- By `time`, an up-to-date honest receiver justified at the target epoch has the call's target.
 
-Else honest stores collide or give cross-store justified evidence; assume coverage, reserve and pin.
+Otherwise two honest stores collide on a block, or give cross-store justified evidence.
 
-By `time` an honest slot-start call passes the no-conflict test after the anchor's justified epoch.
+The honest call is at a slot start and passes the no-conflict test.
 
-It needs a shared epoch-start anchor, a genesis run, duty windows and direct-safety parameters.
+Its target's epoch is after the anchor's justified epoch.
 
-The anchor block and state share a slot; a vote Δ past its deadline arrives before the next slot.
-
-The slot duration is positive; honest stores hold only blocks with nonzero state roots by `time`.
-
-By `time`, honest store epochs stay within the horizon and honest stores lack the anchor's parent.
-
-Honest held states precede the next fork, and the run and terminal stake floors hold. -/
+It assumes origin coverage, the reserved count, the pin and held states before the next fork. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint
     (early : HeldStatesBeforeUpgrade (e := e) time)
     (pins : JustifiedPinned (e := e) anchor.justifiedCheckpoint.epoch margin 0 time) :
