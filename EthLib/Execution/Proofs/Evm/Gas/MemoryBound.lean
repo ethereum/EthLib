@@ -15,7 +15,7 @@ The gas is what the frame holds plus the price of its memory.
 
 For at most `2^24` gas, the cap of [EIP-7825][eip7825], the bound is 2,941,344 bytes.
 
-That the gas of a frame stays within the cap of its transaction is left to a later theorem.
+That the gas held plus the price of memory stays within the gas of the frame is not yet proved.
 
 [eip7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
 -/

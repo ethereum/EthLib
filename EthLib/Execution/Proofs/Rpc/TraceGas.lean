@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Evm.Call.ChildGas
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
 public import EthLib.Execution.Proofs.Rpc.Trace
 import EthLib.Execution.Proofs.Evm.Call.Observe
@@ -27,57 +28,6 @@ open EthLib.Execution.Transactions
 section Child
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
-
-/-- A call that sends a message sends it one level deeper than its caller. -/
-private theorem callStep_child_depth {kind : CallKind} {evm caller : Evm fork Meter}
-    {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (h : callStep kind evm = .ok (.child caller message resume)) :
-    message.depth = caller.message.depth + 1 := by
-  unfold Evm.callStep at h
-  obtain ⟨⟨call, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  split at h
-  · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h; cases h
-  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨_, hc⟩
-  · obtain ⟨⟨callee, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
-    dsimp only at h
-    rcases keepReads_eq_ok h with h | ⟨_, hc⟩
-    · obtain ⟨⟨subCall, e5⟩, -, h⟩ := Base.bind_ok_iff.mp h
-      unfold Evm.finishCall at h
-      split at h
-      · cases h
-      dsimp only at h
-      split at h
-      · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
-      · unfold Evm.genericCall at h
-        split at h
-        · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
-        · cases h; rfl
-    · cases hc
-  · cases hc
-
-/-- A creation that sends a message sends it one level deeper than its caller. -/
-private theorem createStep_child_depth {create2 : Bool} {evm caller : Evm fork Meter}
-    {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (h : createStep create2 evm = .ok (.child caller message resume)) :
-    message.depth = caller.message.depth + 1 := by
-  obtain ⟨_, _, _, _, _, _, -, -, -, -, -, h⟩ := createStep_eq_ok h
-  unfold Evm.launchCreate at h
-  dsimp only at h
-  split at h
-  · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
-  obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨_, hc⟩
-  · obtain ⟨e1, -, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e2, -, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
-    split at h
-    · cases h; rfl
-    · obtain ⟨_, -, hc⟩ := Base.bind_ok_iff.mp h; cases hc
-  · cases hc
 
 /-- A step that sends a message runs a call or a creation, and sends it one level deeper. -/
 private theorem step_child {evm caller : Evm fork Meter} {message : Message fork}
