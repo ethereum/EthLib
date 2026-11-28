@@ -75,16 +75,37 @@ theorem canonical_byteList {limit : Nat} {data : Bytes} {value : Value}
   simp only [serialize, Bind.bind, Except.bind, pure, Except.pure]
   rw [ite_eq_right (by omega), ite_eq_right (by omega)]
 
-set_option maxRecDepth 4096 in
 private theorem byte_bit (byte : UInt8) (offset : Fin 8) :
     ((byte >>> UInt8.ofNat offset.val) &&& 1 == 1) = byte.toBitVec.getLsbD offset.val := by
-  -- There are 256 bytes and eight positions, checked by the kernel.
-  cases byte with
-  | ofBitVec byte =>
-    cases byte with
-    | ofFin byte =>
-      revert byte offset
-      decide
+  -- Both sides test bit `offset` of `byte.toNat`: `(byte >>> offset) &&& 1 == 1`.
+  have hshift : (byte >>> UInt8.ofNat offset.val).toNat = byte.toNat >>> offset.val := by
+    rw [UInt8.toNat_shiftRight]
+    have hlt : offset.val < 256 := Nat.lt_trans offset.isLt (by decide)
+    have hmod : (UInt8.ofNat offset.val).toNat % 8 = offset.val := by
+      rw [UInt8.toNat_ofNat', Nat.mod_eq_of_lt hlt, Nat.mod_eq_of_lt offset.isLt]
+    rw [hmod]
+  have hbit : ((byte >>> UInt8.ofNat offset.val) &&& 1).toNat =
+      (byte.toNat >>> offset.val) % 2 := by
+    rw [UInt8.toNat_and, hshift, UInt8.toNat_ofNat, Nat.and_one_is_mod]
+  change ((byte >>> UInt8.ofNat offset.val) &&& 1 == 1) = byte.toNat.testBit offset.val
+  rw [Nat.testBit, Nat.and_comm, Nat.and_one_is_mod]
+  cases h : (byte.toNat >>> offset.val) % 2 with
+  | zero =>
+    have hne : ((byte >>> UInt8.ofNat offset.val) &&& 1) ≠ 1 := by
+      intro heq
+      have h1 := congrArg UInt8.toNat heq
+      rw [hbit, h] at h1
+      cases h1
+    simp [hne]
+  | succ k =>
+    have hk : k = 0 := by
+      have : (byte.toNat >>> offset.val) % 2 < 2 := Nat.mod_lt _ (by decide)
+      omega
+    subst hk
+    have heq : ((byte >>> UInt8.ofNat offset.val) &&& 1) = 1 := by
+      apply UInt8.toNat_inj.mp
+      simpa [hbit] using h
+    simp [heq]
 
 private theorem byte_eq_of_bits {left right : UInt8}
     (same : ∀ offset, offset < 8 →
@@ -131,13 +152,34 @@ theorem packBits_unpackBits {data : Bytes} {count : Nat}
 private theorem byte_padding (byte : UInt8) (start offset : Fin 8)
     (clear : byte >>> UInt8.ofNat start.val = 0) (above : start.val ≤ offset.val) :
     ((byte >>> UInt8.ofNat offset.val) &&& 1 == 1) = false := by
-  -- Shifting away the low bits exposes every bit in the padding region.
-  cases byte with
-  | ofBitVec byte =>
-    cases byte with
-    | ofFin byte =>
-      revert byte start offset
-      decide +kernel
+  -- Shifting right by `start` gives zero, so `byte.toNat < 2 ^ start ≤ 2 ^ offset`.
+  have hclear : byte.toNat >>> start.val = 0 := by
+    have h0 := congrArg UInt8.toNat clear
+    rw [UInt8.toNat_shiftRight] at h0
+    have hlt : start.val < 256 := Nat.lt_trans start.isLt (by decide)
+    have hmod : (UInt8.ofNat start.val).toNat % 8 = start.val := by
+      rw [UInt8.toNat_ofNat', Nat.mod_eq_of_lt hlt, Nat.mod_eq_of_lt start.isLt]
+    rw [hmod] at h0
+    simpa using h0
+  have hlt_start : byte.toNat < 2 ^ start.val := by
+    rw [Nat.shiftRight_eq_div_pow] at hclear
+    exact (Nat.div_eq_zero_iff_lt (Nat.two_pow_pos _)).mp hclear
+  have hpow : 2 ^ start.val ≤ 2 ^ offset.val := Nat.pow_le_pow_right (by decide) above
+  have hzero : byte.toNat >>> offset.val = 0 := by
+    rw [Nat.shiftRight_eq_div_pow]
+    exact Nat.div_eq_of_lt (Nat.lt_of_lt_of_le hlt_start hpow)
+  have hshift : (byte >>> UInt8.ofNat offset.val).toNat = 0 := by
+    rw [UInt8.toNat_shiftRight]
+    have hlt : offset.val < 256 := Nat.lt_trans offset.isLt (by decide)
+    have hmod : (UInt8.ofNat offset.val).toNat % 8 = offset.val := by
+      rw [UInt8.toNat_ofNat', Nat.mod_eq_of_lt hlt, Nat.mod_eq_of_lt offset.isLt]
+    rw [hmod, hzero]
+  have hne : ((byte >>> UInt8.ofNat offset.val) &&& 1) ≠ 1 := by
+    intro heq
+    have h1 := congrArg UInt8.toNat heq
+    rw [UInt8.toNat_and, hshift] at h1
+    cases h1
+  simp [hne]
 
 /-- Fixed bitfields accept only the packed representation with zero high padding. -/
 theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
