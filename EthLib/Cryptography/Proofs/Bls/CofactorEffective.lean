@@ -34,7 +34,7 @@ private theorem mem_effKernel_iff (P : G2.curve.toAffine.Point) :
 
 /-- A witness of order `q` that the method sends to `O` lies in it, if `q` divides `h_eff`. -/
 private theorem mem_eff_of_clear_zero {P : G2} (hP : G2.Valid P)
-    (hc : (clearAux P).isInfinity = true) {q : Nat} (hq : q • G2.toPoint P = 0)
+    (hc : (clearCofactor P).isInfinity = true) {q : Nat} (hq : q • G2.toPoint P = 0)
     (hdvd : q ∣ H_EFF_G2) : G2.toPoint P ∈ effKernel := by
   rw [mem_effKernel_iff, cofactor_zero_cert P hP hc]
   obtain ⟨k, hk⟩ := hdvd
@@ -47,8 +47,7 @@ private theorem generator_mem_eff : G2.toPoint G2.generator ∈ effKernel := by
     ← G2.toPoint_mulNat G2.valid_generator]
   apply (G2.projectiveEq_eq_true_iff_toPoint_eq (clearCofactor_valid G2.valid_generator)
     (G2.valid_mulNat G2.valid_generator _)).mp
-  rw [← G2.mulNatAux_eq 130 G2.generator _ (by decide), ← clearAux_eq]
-  decide_g2_at_model [map_clearAux]
+  decide_g2_at_model [map_clearCofactor]
 
 /-- The subgroup is the whole twist. -/
 private theorem effKernel_eq_top : effKernel = ⊤ := by

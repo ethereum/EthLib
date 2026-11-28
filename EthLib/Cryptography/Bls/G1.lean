@@ -190,14 +190,32 @@ def toAffine (p : G1 F) : F × F :=
     let zinv3 := zinv2 * zinv
     (p.x * zinv2, p.y * zinv3)
 
-/-- Scalar multiplication via double-and-add. -/
+/-- Steps `n, n - 1, ..., 1` of the scalar multiplication of this file, from the accumulator `q`.
+
+Step `i` doubles `q`, then adds the digit `h_i - k_i` times `p`, from bit `i` of `h` and of `k`. -/
+def mulNatSteps (p : G1 F) (k h : Nat) : Nat → G1 F → G1 F
+  | 0, q => q
+  | i + 1, q =>
+    let q := double q
+    -- The digit is `1`, `-1` or `0`.
+    let q := match h.testBit (i + 1), k.testBit (i + 1) with
+      | true, false => add q p
+      | false, true => add q (neg p)
+      | _, _ => q
+    mulNatSteps p k h i q
+
+/-- Scalar multiplication, left to right on the non-adjacent form of `k`.
+
+With `h = 3k`, the digits `h_i - k_i` for `i` from the top bit of `h` down to 1 write `k`.
+
+These digits are `-1`, `0` or `1`, and digit `i` has the weight `2^(i-1)`.
+
+No two adjacent digits are nonzero, so about a third of them are, against half of the bits of `k`.
+
+Each addition adds `p` or `-p`, so it takes the shorter mixed formulas when `p` has `z = 1`. -/
 def mulNat (p : G1 F) (k : Nat) : G1 F :=
-  if k = 0 then zero
-  else
-    let half := mulNat (double p) (k / 2)
-    if k % 2 = 1 then add p half else half
-termination_by k
-decreasing_by omega
+  -- Bit `log2 h` of `h` is its top bit, so the steps start from there.
+  mulNatSteps p k (3 * k) (3 * k).log2 zero
 
 @[inline] def mul (p : G1 F) (s : Fr) : G1 F := mulNat p s.val
 
@@ -207,7 +225,7 @@ Here `t` is the BLS parameter, and `|t|` has 64 bits, six of them set.
 
 So the four products by `|t|` take at most 256 doublings and 24 additions.
 
-One product by `r` would take up to 255 doublings and 134 additions. -/
+One product by `r` would take at most 255 doublings and 60 additions. -/
 def mulModulus (p : G1 F) : G1 F :=
   let a := mulNat (mulNat p blsX) blsX
   add (mulNat (mulNat (add a (neg p)) blsX) blsX) p

@@ -74,10 +74,10 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
   rw [G1.mul, Fr.val_zero]
   exact Bls.G1.Law.mulNat_zero p
 
-/-- Scalar multiplication of a non-infinity `G1` point by `1` returns the point unchanged. -/
-@[simp] theorem G1.mul_one {p : G1} (hp : p.isInfinity = false) : G1.mul p (1 : Fr) = p := by
+/-- Scalar multiplication of a `G1` point by `1` returns the point unchanged. -/
+@[simp] theorem G1.mul_one (p : G1) : G1.mul p (1 : Fr) = p := by
   rw [G1.mul, Fr.val_one]
-  exact Bls.G1.Law.mulNat_one Bls.Fp.embedding hp
+  exact Bls.G1.Law.mulNat_one Bls.Fp.embedding p
 
 /-- Adding from `G2.zero` on the left returns the right operand. -/
 @[simp] theorem G2.zero_add (q : G2) : G2.add G2.zero q = q :=
@@ -92,10 +92,10 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
   rw [G2.mul, Fr.val_zero]
   exact Bls.G1.Law.mulNat_zero p
 
-/-- Scalar multiplication of a non-infinity `G2` point by `1` returns the point unchanged. -/
-@[simp] theorem G2.mul_one {p : G2} (hp : p.isInfinity = false) : G2.mul p (1 : Fr) = p := by
+/-- Scalar multiplication of a `G2` point by `1` returns the point unchanged. -/
+@[simp] theorem G2.mul_one (p : G2) : G2.mul p (1 : Fr) = p := by
   rw [G2.mul, Fr.val_one]
-  exact Bls.G1.Law.mulNat_one Bls.Fp2.embedding hp
+  exact Bls.G1.Law.mulNat_one Bls.Fp2.embedding p
 
 /-- A `G1` generator multiple is non-infinity exactly when its scalar is nonzero.
 

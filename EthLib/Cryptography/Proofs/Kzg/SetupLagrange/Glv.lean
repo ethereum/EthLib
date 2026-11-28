@@ -98,10 +98,9 @@ theorem eigenvalue_lt : eigenvalue < 2 ^ 128 := by decide +kernel
 
 /-- On the generator, the homomorphism is the product by `λ`, which the kernel checks. -/
 theorem endoHom_generator : endoHom (toPoint generator) = eigenvalue • toPoint generator := by
-  rw [← toPoint_endo valid_generator, ← toPoint_mulNat valid_generator,
-    ← mulNatAux_eq 128 generator eigenvalue eigenvalue_lt]
+  rw [← toPoint_endo valid_generator, ← toPoint_mulNat valid_generator]
   refine (toPoint_eq_of_sameAffine coords_endo_generator ?_).symm
-  rw [TorsionCheck.coords_mulNatAux, coords_generator]
+  rw [TorsionCheck.coords_mulNat, coords_generator]
   decide +kernel
 
 /-- On a point of order dividing `r`, the map `(x, y) ↦ (β' x, y)` is the product by `λ`. -/

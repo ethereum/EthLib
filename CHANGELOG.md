@@ -1373,6 +1373,20 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the KZG opening check multiplies the proof by `z` in `G1`, in place of the generator of `G2` ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Kzg.verifyKzgProofWith` (`Cryptography/Kzg/Core.lean`) checks `e(P - [y] + [z] proof, -[1]) * e(proof, [s]) = 1`, which is the former check by bilinearity.
+  `Kzg.verifyKzgProofWith_iff` keeps its statement; a proof that unfolds the definition sees the new pairs.
+
+- In Lean, the scalar product of `G1` and `G2` runs left to right on the non-adjacent form of the scalar, so it adds about a third as often as the bits, and with the mixed formulas on a point with `Z = 1` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  `G1.mulNat` (`Cryptography/Bls/G1.lean`) runs the new `G1.mulNatSteps` by structural recursion, so the kernel evaluates it, and it gives the same points as before with other Jacobian coordinates.
+  `G1.mulNat_def`, `G1.mulNatAux`, `G1.mulNatAux_eq` and `G1.map_mulNatAux` (`Cryptography/Proofs/Bls/CurveMap.lean`), and their `G2` names, are removed; `G1.map_mulNatSteps` is new.
+  `G1.TorsionCheck.mulNatAux` and `coords_mulNatAux` become `mulNatSteps`, `mulNat`, `coords_mulNatSteps` and `coords_mulNat` (`Cryptography/Proofs/Bls/G1NatCheck.lean`, `G1TorsionCheck.lean`).
+  `CofactorCertificate.negXAux`, `clearAux`, `map_negXAux`, `map_clearAux`, `negXAux_eq` and `clearAux_eq` (`Cryptography/Proofs/Bls/CofactorCertificateHelpers.lean`) are removed: the kernel checks run `HashToCurve.clearCofactor` itself.
+  The certificates `nsmul_zero_cert` (`G1Rotation.lean`, `CofactorCertificateHelpers.lean`), `nsmul_ne_cert` (`G1Rotation.lean`) and `not_nsmul_cert` (`CofactorIndependence.lean`) lose their fuel argument and its bound.
+  The `*_clear_zero` witnesses (`CofactorPoints.lean`) and `cofactor_zero_cert` state their check on `HashToCurve.clearCofactor` in place of `clearAux`.
+  `G1.Law.mulNat_one`, `G1.mul_one` and `G2.mul_one` (`Cryptography/Proofs/Kzg/CeremonyChecks.lean`) no longer assume a finite point.
+  `G1.Law.valid_mulNatSteps` is new.
+
 - In Lean, the endomorphisms `psi` and `psi2` of the twist read Jacobian coordinates, so the cofactor clearing of G2 and the subgroup check of G2 invert no element that depends on the point ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   `G2.psi` (`Cryptography/Bls/G2.lean`) maps a finite point `(X, Y, Z)` to `(c1 conj(X), c2 conj(Y), conj(Z))`, and `HashToCurve.psi2` (`Cryptography/Bls/HashToCurve.lean`) maps it to `(c1Psi2 X, -Y, Z)`, in place of affine points with `Z = 1`.
   They give the same points of the curve as before, with other Jacobian coordinates.

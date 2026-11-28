@@ -810,4 +810,18 @@ theorem memoryAligned_callInstruction {op : Op}
 
 end Memory
 
+/-- The access to a delegate keeps the gas. -/
+theorem gas_accessDelegation [GasMeter Meter] {evm after : Evm fork Meter}
+    {address : Base.Address} {known : Nat} {callee : Callee}
+    (h : accessDelegation evm address known = .ok (callee, after)) : after.gas = evm.gas := by
+  obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
+  dsimp only at h
+  split at h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    exact (accessAddress_of_stack _ _ _).2
+  · cases h
+    rfl
+
 end EthLib.Execution.Evm
