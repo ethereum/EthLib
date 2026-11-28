@@ -127,8 +127,6 @@ theorem psi2_neg (P : G2) : psi2 (G2.neg P) = G2.neg (psi2 P) := by
   · simp [hp]
   · simp [hp, neg_mul]
 
--- The pair matcher is named on purpose: its equation selects the branch without evaluation.
-set_option linter.auxLemma false in
 /-- Every successful `hashToG2` output clears the cofactor of a nonsingular point on the twist. -/
 theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
     (h : hashToG2 msg dst = .ok P) : ∃ Q : G2, G2.Valid Q ∧ P = clearCofactor Q := by
@@ -138,19 +136,8 @@ theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
   | error e => rw [hf] at h; cases h
   | ok us =>
     rw [hf, Base.ok_bind] at h
-    cases h0 : simpleSwu us[0] with
-    | error e => rw [h0] at h; cases h
-    | ok p0 =>
-      rw [h0, Base.ok_bind] at h
-      cases h1 : simpleSwu us[1] with
-      | error e => rw [h1] at h; cases h
-      | ok p1 =>
-        rw [h1] at h
-        rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)] at h
-        simp (config := { zeta := false, iota := false }) only
-          [psi2.match_1.eq_1, Base.ok_bind, pure, Except.pure, Except.ok.injEq] at h
-        refine ⟨_, ?_, h.symm⟩
-        exact G2.valid_add (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1)
+    exact ⟨_, G2.valid_add (simpleSwu_isoMapG2_valid _) (simpleSwu_isoMapG2_valid _),
+      (Except.ok.inj h).symm⟩
 
 /-- Every successful `hashToG2` output is a nonsingular point on the BLS12-381 twist. -/
 theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
@@ -167,7 +154,8 @@ private theorem expandMessageXmd_256_ok (msg dst : ByteArray) :
     Std.Legacy.Range.forIn_eq_forIn_range']
   exact ⟨_, rfl⟩
 
-private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
+/-- The hash to the field succeeds on every message and tag, for two elements. -/
+theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
     ∃ us : Vector Fp2 2, hashToFieldFp2 msg dst 2 = .ok us := by
   obtain ⟨uniform, hunif⟩ := expandMessageXmd_256_ok msg dst
   unfold hashToFieldFp2
@@ -176,20 +164,13 @@ private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
   dsimp only [bind, Except.bind, pure, Except.pure]
   exact ⟨_, rfl⟩
 
--- The pair matcher is named on purpose: its equation selects the branch without evaluation.
-set_option linter.auxLemma false in
 /-- `hashToG2 msg dst` succeeds for all `msg` and `dst` and returns a `G2.Valid` point. -/
 theorem hashToG2_total (msg dst : ByteArray) :
     ∃ P : G2, hashToG2 msg dst = .ok P ∧ G2.Valid P := by
   obtain ⟨us, hus⟩ := hashToFieldFp2_two_ok msg dst
-  obtain ⟨p0, h0⟩ := simpleSwu_ok us[0]
-  obtain ⟨p1, h1⟩ := simpleSwu_ok us[1]
-  have hok : ∃ P : G2, hashToG2 msg dst = .ok P := by
-    rw [hashToG2, hus, Base.ok_bind, h0, Base.ok_bind, h1]
-    rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)]
-    simp (config := { zeta := false, iota := false }) only [psi2.match_1.eq_1, Base.ok_bind]
-    exact ⟨_, rfl⟩
-  rcases hok with ⟨P, hP⟩
-  exact ⟨P, hP, hashToG2_valid hP⟩
+  refine ⟨_, ?_, clearCofactor_valid (G2.valid_add (simpleSwu_isoMapG2_valid us[0])
+    (simpleSwu_isoMapG2_valid us[1]))⟩
+  rw [hashToG2, hus, Base.ok_bind]
+  rfl
 
 end EthLib.Cryptography.Bls.HashToCurve

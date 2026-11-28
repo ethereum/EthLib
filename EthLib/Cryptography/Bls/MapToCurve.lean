@@ -247,13 +247,13 @@ It reuses the SSWU map, the 3-isogeny and the cofactor clearing of the hash to G
 
 So a zero denominator of that isogeny also gives the identity point.
 
-The error is the case where the SSWU map finds no square root, which the RFC excludes. -/
-def mapToG2 (u : Fp2 F) : Except BlsError (G2 F) := do
-  -- §6.6.3 step 1: `(x', y')` is the image of `u` by the simplified SWU map, a point of `E'`.
-  let (xp, yp) ← HashToCurve.simpleSwu u
-  -- Step 2: `(x, y)` is the image of `(x', y')` by the isogeny, a point of `E`.
+It never fails: the result type keeps the interface of the map to G1. -/
+def mapToG2 (u : Fp2 F) : Except BlsError (G2 F) :=
+  -- §6.6.3 step 1: the image of `u` by the simplified SWU map, a point of `E'`.
   --
-  -- Step 3 returns `(x, y)`; the field-to-curve document of EIP-2537 then clears the cofactor.
-  return HashToCurve.clearCofactor (HashToCurve.isoMapG2 xp yp)
+  -- Step 2: its image by the isogeny, a point of `E`.
+  --
+  -- Step 3 returns that point; the field-to-curve document of EIP-2537 then clears the cofactor.
+  return HashToCurve.clearCofactor (HashToCurve.isoMapG2 (HashToCurve.simpleSwu u))
 
 end EthLib.Cryptography.Bls.MapToCurve

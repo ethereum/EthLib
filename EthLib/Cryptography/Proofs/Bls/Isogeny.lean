@@ -24,6 +24,33 @@ open EthLib.Cryptography.Bls
 
 set_option maxRecDepth 8000
 
+/-! ## The isogeny as written -/
+
+namespace Affine
+
+/-- The 3-isogeny of [RFC 9380 Appendix E.3][iso], as written: affine, with two inversions.
+
+It is the reference for the isogeny of the specification, which computes the same point.
+
+[iso]: https://www.rfc-editor.org/rfc/rfc9380#appendix-E.3
+-/
+def isoMapG2 {F : Type} [BaseField F] (xp yp : Fp2 F) : G2 F :=
+  -- The powers `x'^2` and `x'^3`, shared by the four polynomials.
+  let xp2 := xp * xp
+  let xp3 := xp2 * xp
+  -- `x_num = k_(1,3) * x'^3 + k_(1,2) * x'^2 + k_(1,1) * x' + k_(1,0)`.
+  let xNum := k13 * xp3 + k12 * xp2 + k11 * xp + k10
+  -- `x_den = x'^2 + k_(2,1) * x' + k_(2,0)`.
+  let xDen := xp2 + k21 * xp + k20
+  -- `y_num = k_(3,3) * x'^3 + k_(3,2) * x'^2 + k_(3,1) * x' + k_(3,0)`.
+  let yNum := k33 * xp3 + k32 * xp2 + k31 * xp + k30
+  -- `y_den = x'^3 + k_(4,2) * x'^2 + k_(4,1) * x' + k_(4,0)`.
+  let yDen := xp3 + k42 * xp2 + k41 * xp + k40
+  -- `x = x_num / x_den` and `y = y' * y_num / y_den`, as the affine point with `Z = 1`.
+  if xDen.isZero || yDen.isZero then G2.zero else ⟨xNum / xDen, yp * yNum / yDen, Fp2.one⟩
+
+end Affine
+
 local notation "I" => (Fp2.i : Fp2)
 
 private def xn (x : Fp2) := x ^ 3 + (12 - 12 * I) * x ^ 2 - 24 * I * x + 304 + 304 * I
@@ -129,12 +156,12 @@ private theorem d_ne_zero {x y : Fp2} (h : y * y = swuG x) : d x ≠ 0 := by
 
 -- Off the pole, the isogeny gives the affine point of its rational map.
 private theorem isoMapG2_eq {x y : Fp2} (hd : d x ≠ 0) :
-    isoMapG2 x y = ⟨xn x / (9 * (d x) ^ 2), y * yn x / (27 * (d x) ^ 3), Fp2.one⟩ := by
+    Affine.isoMapG2 x y = ⟨xn x / (9 * (d x) ^ 2), y * yn x / (27 * (d x) ^ 3), Fp2.one⟩ := by
   have h2 : ((d x) ^ 2).isZero = false :=
     Bool.eq_false_iff.mpr fun h => pow_ne_zero 2 hd (Fp2.isZero_iff.mp h)
   have h3 : ((d x) ^ 3).isZero = false :=
     Bool.eq_false_iff.mpr fun h => pow_ne_zero 3 hd (Fp2.isZero_iff.mp h)
-  unfold isoMapG2
+  unfold Affine.isoMapG2
   dsimp only
   rw [xDen_eq, yDen_eq, xNum_eq, yNum_eq, h2, h3]
   simp only [Bool.or_self, Bool.false_eq_true, ↓reduceIte, G1.mk.injEq]
@@ -144,8 +171,8 @@ private theorem isoMapG2_eq {x y : Fp2} (hd : d x ≠ 0) :
 
 Its denominators never vanish on `E'`, so it never returns the identity there.
 -/
-theorem isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
-    ∃ a b, isoMapG2 x y = ⟨a, b, Fp2.one⟩ ∧ b * b = a * a * a + G2.bTwist := by
+theorem Affine.isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
+    ∃ a b, Affine.isoMapG2 x y = ⟨a, b, Fp2.one⟩ ∧ b * b = a * a * a + G2.bTwist := by
   have hd := d_ne_zero h
   refine ⟨_, _, isoMapG2_eq hd, ?_⟩
   have h9 : (9 : Fp2) ≠ 0 := by decide_eq_at_model []
@@ -161,14 +188,106 @@ theorem isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
   linear_combination 729 * ((yn x) ^ 2 * h + hp)
 
 /-- Mapping a source-curve point produces a nonsingular `G2` point. -/
-theorem isoMapG2_valid {x y : Fp2} (h : y * y = swuG x) : G2.Valid (isoMapG2 x y) := by
-  obtain ⟨a, b, he, hc⟩ := isoMapG2_curve_eq h
+theorem Affine.isoMapG2_valid {x y : Fp2} (h : y * y = swuG x) :
+    G2.Valid (Affine.isoMapG2 x y) := by
+  obtain ⟨a, b, he, hc⟩ := Affine.isoMapG2_curve_eq h
   rw [he]
   exact G2.valid_of_affine_equation hc
 
 /-- The isogeny sends every output of the SSWU map to a nonsingular `G2` point. -/
-theorem simpleSwu_isoMapG2_valid {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
-    G2.Valid (isoMapG2 p.1 p.2) :=
-  isoMapG2_valid (simpleSwu_curve_eq h)
+theorem Affine.simpleSwu_isoMapG2_valid {u : Fp2} {p : Fp2 × Fp2}
+    (h : Affine.simpleSwu u = .ok p) : G2.Valid (Affine.isoMapG2 p.1 p.2) :=
+  Affine.isoMapG2_valid (Affine.simpleSwu_curve_eq h)
+
+/-! ## The isogeny of the specification, in Jacobian coordinates -/
+
+-- The square of an element is its product by itself.
+private theorem square_eq_mul' (a : Fp2) : FieldOps.square a = a * a := by
+  rw [Cryptography.Fp2.fieldOps_square, Cryptography.Fp2.square_eq Fp.embedding]
+
+-- A triple `(Z^2 a, Z^3 b, Z)` is the affine point `(a, b)` scaled by `Z`.
+open WeierstrassCurve.Jacobian in
+private theorem rep_eq_smul (X Y Z a b : Fp2) (hX : X = Z ^ 2 * a) (hY : Y = Z ^ 3 * b) :
+    G2.rep ⟨X, Y, Z⟩ = Z • G2.rep ⟨a, b, Fp2.one⟩ := by
+  subst hX hY
+  rw [smul_fin3]
+  simp only [G2.rep_x, G2.rep_y, G2.rep_z, Fp2.one_eq_one, mul_one]
+  rfl
+
+-- At `(x t, t, y)`, the Jacobian isogeny is the affine point scaled by `x_den y_den`.
+open WeierstrassCurve.Jacobian in
+private theorem isoMapG2_jacobian (x t y : Fp2) (ht : t ≠ 0) (h : y * y = swuG x) :
+    G2.Valid (isoMapG2 (x * t, t, y)) ∧
+      G2.toPoint (isoMapG2 (x * t, t, y)) = G2.toPoint (Affine.isoMapG2 x y) := by
+  have hdx := d_ne_zero h
+  -- Each homogenized polynomial is the affine one times `t^3`.
+  have hB : (x * t * (x * t) + k21 * (x * t * t) + k20 * (t * t)) * t = t ^ 3 * d x ^ 2 := by
+    rw [← xDen_eq]; ring
+  have hD : x * t * (x * t) * (x * t) + k42 * (x * t * (x * t) * t) + k41 * (x * t * (t * t)) +
+      k40 * (t * t * t) = t ^ 3 * d x ^ 3 := by
+    rw [← yDen_eq]; ring
+  have hA : k13 * (x * t * (x * t) * (x * t)) + k12 * (x * t * (x * t) * t) +
+      k11 * (x * t * (t * t)) + k10 * (t * t * t) = t ^ 3 * (xn x / 9) := by
+    rw [← xNum_eq]; ring
+  have hC : k33 * (x * t * (x * t) * (x * t)) + k32 * (x * t * (x * t) * t) +
+      k31 * (x * t * (t * t)) + k30 * (t * t * t) = t ^ 3 * (yn x / 27) := by
+    rw [← yNum_eq]; ring
+  have hB0 : t ^ 3 * d x ^ 2 ≠ 0 := mul_ne_zero (pow_ne_zero 3 ht) (pow_ne_zero 2 hdx)
+  have hD0 : t ^ 3 * d x ^ 3 ≠ 0 := mul_ne_zero (pow_ne_zero 3 ht) (pow_ne_zero 3 hdx)
+  have hBz : (t ^ 3 * d x ^ 2).isZero = false :=
+    Bool.eq_false_iff.mpr fun h => hB0 (Fp2.isZero_iff.mp h)
+  have hDz : (t ^ 3 * d x ^ 3).isZero = false :=
+    Bool.eq_false_iff.mpr fun h => hD0 (Fp2.isZero_iff.mp h)
+  simp only [isoMapG2, square_eq_mul', hA, hB, hC, hD, hBz, hDz, Bool.or_self,
+    Bool.false_eq_true, ↓reduceIte]
+  rw [isoMapG2_eq hdx]
+  have hv : G2.Valid ⟨xn x / (9 * (d x) ^ 2), y * yn x / (27 * (d x) ^ 3), Fp2.one⟩ :=
+    isoMapG2_eq hdx ▸ Affine.isoMapG2_valid h
+  have hu : IsUnit (t ^ 3 * d x ^ 2 * (t ^ 3 * d x ^ 3)) := (mul_ne_zero hB0 hD0).isUnit
+  have h9 : (9 : Fp2) ≠ 0 := by decide_eq_at_model []
+  have h27 : (27 : Fp2) ≠ 0 := by decide_eq_at_model []
+  have hr := rep_eq_smul
+    (t ^ 3 * (xn x / 9) * (t ^ 3 * d x ^ 2) * (t ^ 3 * d x ^ 3 * (t ^ 3 * d x ^ 3)))
+    (y * (t ^ 3 * (yn x / 27)) * (t ^ 3 * d x ^ 3 * (t ^ 3 * d x ^ 3)) *
+      (t ^ 3 * d x ^ 2 * (t ^ 3 * d x ^ 2) * (t ^ 3 * d x ^ 2)))
+    (t ^ 3 * d x ^ 2 * (t ^ 3 * d x ^ 3)) (xn x / (9 * (d x) ^ 2))
+    (y * yn x / (27 * (d x) ^ 3)) (by field_simp) (by field_simp)
+  refine ⟨?_, ?_⟩
+  · show G2.curve.Nonsingular (G2.rep _)
+    rw [hr, nonsingular_smul _ hu]
+    exact hv
+  · show Point.toAffine G2.curve (G2.rep _) = Point.toAffine G2.curve (G2.rep _)
+    rw [hr]
+    exact Point.toAffine_of_equiv (smul_equiv _ hu)
+
+/-- At a point `(xn / xd, y)` of `E'`, the Jacobian isogeny gives the point of the affine one. -/
+theorem isoMapG2_valid_toPoint {p : Fp2 × Fp2 × Fp2} (hd : p.2.1 ≠ 0)
+    (h : p.2.2 * p.2.2 = swuG (p.1 / p.2.1)) :
+    G2.Valid (isoMapG2 p) ∧
+      G2.toPoint (isoMapG2 p) = G2.toPoint (Affine.isoMapG2 (p.1 / p.2.1) p.2.2) := by
+  obtain ⟨n, t, y⟩ := p
+  dsimp only at hd h ⊢
+  have he := isoMapG2_jacobian (n / t) t y hd h
+  rwa [div_mul_cancel₀ n hd] at he
+
+/-- The isogeny sends every output of the SSWU map to a nonsingular `G2` point. -/
+theorem simpleSwu_isoMapG2_valid (u : Fp2) : G2.Valid (isoMapG2 (simpleSwu u)) :=
+  (isoMapG2_valid_toPoint (simpleSwu_xd_ne_zero u) (simpleSwu_curve_eq u)).1
+
+-- Stated on a variable triple, so that neither the elaborator nor the kernel unfolds the map.
+private theorem exists_affine_of {u : Fp2} {p : Fp2 × Fp2 × Fp2}
+    (h : Affine.simpleSwu u = .ok (p.1 / p.2.1, p.2.2)) (hd : p.2.1 ≠ 0)
+    (hc : p.2.2 * p.2.2 = swuG (p.1 / p.2.1)) :
+    ∃ q, Affine.simpleSwu u = .ok q ∧
+      G2.toPoint (isoMapG2 p) = G2.toPoint (Affine.isoMapG2 q.1 q.2) :=
+  ⟨_, h, (isoMapG2_valid_toPoint hd hc).2⟩
+
+/-- The SSWU map then the isogeny give the point of §6.6.2 and Appendix E.3 as written.
+
+Both points are valid, by the two theorems above. -/
+theorem toPoint_isoMapG2_simpleSwu (u : Fp2) :
+    ∃ p, Affine.simpleSwu u = .ok p ∧
+      G2.toPoint (isoMapG2 (simpleSwu u)) = G2.toPoint (Affine.isoMapG2 p.1 p.2) :=
+  exists_affine_of (simpleSwu_eq_affine u) (simpleSwu_xd_ne_zero u) (simpleSwu_curve_eq u)
 
 end EthLib.Cryptography.Bls.HashToCurve

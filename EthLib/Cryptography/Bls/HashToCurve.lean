@@ -236,50 +236,83 @@ def Aprime : Fp2 F := ⟨BaseField.zero, BaseField.ofNat 240⟩
 -/
 def Bprime : Fp2 F := Fp2.ofNats 1012 1012
 
-/-- The simplified SWU map of [RFC 9380 §6.6.2][sswu]: a point of `E' : y^2 = g(x)` for `u`.
+/-- The exponent `(p - 3) / 4`: one power by it gives a square root and an inverse.
 
-Here `g(x) = x^3 + A' * x + B'`.
+For `a ≠ 0` and `r = a^((p - 3) / 4)`, `r a` squares to `a` or `-a`, and `r^2 a` is 1 or -1. -/
+def rootExponent : Nat := (Fp.modulus - 3) / 4
 
-Each step of the RFC is marked in the body by its number.
+/-- A square root of `-N(Z) = -5` in the base field, where `N(Z)` is the norm of `Z`. -/
+def sqrtNegNormZ : F := BaseField.ofNat
+  0x186417302d5a65347a88b0f999ab2b504614aa5e2eebdeb1a014c40bceb7d2306c12a6d436befcf94d39c9db7b263cd4
 
-`Z` is not a square in `Fp2`, so `g(x1)` or `g(x2)` is a square.
+/-- `sqrt_ratio(u, v)` of [RFC 9380 Appendix F.2.1][ratio], for `v ≠ 0`, with no inversion of `v`.
 
-The error is the case where neither is, which that choice of `Z` excludes.
+- If `u / v` is a square, it returns `true` and a square root of `u / v`.
+- Otherwise it returns `false` and a square root of `Z u / v`.
 
-[sswu]: https://www.rfc-editor.org/rfc/rfc9380#section-6.6.2
+That is the output of Appendix F.2.1.1, and [§4][utils] fixes no root, since the map sets the sign.
+
+It takes one power of the base field for the norms, then the root of the complex method.
+
+[ratio]: https://www.rfc-editor.org/rfc/rfc9380#appendix-F.2.1
+[utils]: https://www.rfc-editor.org/rfc/rfc9380#section-4
 -/
-def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
-  let u2 := u * u
-  let zu2 := Z * u2
-  -- The denominator `Z^2 * u^4 + Z * u^2` of step 1.
-  let denom := zu2 * zu2 + zu2
-  let x1 :=
-    -- Step 1: `tv1 = inv0(Z^2 * u^4 + Z * u^2)`, which is 0 exactly when the denominator is.
-    if denom.isZero then
-      -- Step 3: if `tv1 = 0`, then `x1 = B' / (Z * A')`.
-      --
-      -- The denominator is 0 when `Z * u^2` is 0 or -1.
-      Bprime / (Z * Aprime)
-    else
-      -- Step 2: `x1 = (-B' / A') * (1 + tv1)`.
-      (-Bprime / Aprime) * (Fp2.one + denom.inverse)
-  -- Step 4: `gx1 = x1^3 + A' * x1 + B'`.
-  let gx1 : Fp2 F := x1 * x1 * x1 + Aprime * x1 + Bprime
-  match Fp2.sqrt gx1 with
-  | some y =>
-    -- Step 7: `gx1` is a square, so `x = x1` and `y = sqrt(gx1)`.
-    --
-    -- Step 9: if `sgn0(u) ≠ sgn0(y)`, then `y = -y`.
-    return (x1, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
-  | none =>
-    -- Step 5: `x2 = Z * u^2 * x1`, needed only when `gx1` is not a square.
-    let x2 := zu2 * x1
-    -- Steps 6 and 8: `x = x2` and `y = sqrt(gx2)`, with `gx2 = x2^3 + A' * x2 + B'`.
-    match Fp2.sqrt (x2 * x2 * x2 + Aprime * x2 + Bprime : Fp2 F) with
-    | none => .error .notASquare
-    | some y =>
-      -- Step 9: if `sgn0(u) ≠ sgn0(y)`, then `y = -y`.
-      return (x2, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
+def sqrtRatio (u v : Fp2 F) : Bool × Fp2 F :=
+  -- The norms `N(u)` and `N(v)`, in the base field.
+  let nu := u.c0 * u.c0 + u.c1 * u.c1
+  let nv := v.c0 * v.c0 + v.c1 * v.c1
+  -- `u / v = (u v) / v^2`, so `sqrt(u / v) = sqrt(u v) / v`, and `N(u v) = N(u) N(v)`.
+  let alpha := nu * nv
+  -- `u = 0`: the ratio is the square 0.
+  if BaseField.isZero alpha then (true, Fp2.zero) else
+    -- `r = alpha^((p - 3) / 4)`, and `e = r^2 alpha = alpha^((p - 1) / 2)` is 1 or -1.
+    let r := BaseField.powNat alpha rootExponent
+    let e := r * r * alpha
+    -- `u v` is a square of `Fp2` exactly when its norm `alpha` is a square of the base field.
+    let isQR := BaseField.beq e BaseField.one
+    -- `s = r alpha` squares to `e alpha`: a root of `alpha`, or of `-alpha` when `isQR` fails.
+    let s := r * alpha
+    -- `1 / N(v) = N(u) / alpha`, and `1 / alpha = r^2 e`.
+    let invNv := nu * (r * r) * e
+    -- Otherwise the root is that of `Z u v`, whose norm `N(Z) alpha` has the root `sqrt(-N(Z)) s`.
+    let w := if isQR then Fp2.sqrtOfNormRoot (u * v) s
+      else Fp2.sqrtOfNormRoot (Z * (u * v)) (sqrtNegNormZ * s)
+    -- `1 / v = conj(v) / N(v)`.
+    (isQR, w * v.conjugate.mulFp invNv)
+
+/-- The simplified SWU map of [RFC 9380 Appendix F.2][f2]: a point of `E'` for `u`.
+
+The result `(xn, xd, y)` is the point `(xn / xd, y)`, with `xd ≠ 0`.
+
+[f2]: https://www.rfc-editor.org/rfc/rfc9380#appendix-F.2
+-/
+def simpleSwu (u : Fp2 F) : Fp2 F × Fp2 F × Fp2 F :=
+  -- Steps 1 and 2: `tv1 = Z * u^2`.
+  let tv1 := Z * FieldOps.square u
+  -- Steps 3 and 4: `tv2 = tv1^2 + tv1`.
+  let tv2 := FieldOps.square tv1 + tv1
+  -- Steps 5 and 6: `tv3 = B' * (tv2 + 1)`.
+  let tv3 := Bprime * (tv2 + Fp2.one)
+  -- Steps 7 and 8: `tv4 = A' * (tv2 ≠ 0 ? -tv2 : Z)`, so `x1 = tv3 / tv4`.
+  let tv4 := Aprime * (if tv2.isZero then Z else -tv2)
+  -- Step 10: `tv6 = tv4^2`.
+  let tv6 := FieldOps.square tv4
+  -- Steps 9, 11 to 13, 15 and 16: `gx1 = tv3^3 + A' tv3 tv4^2 + B' tv4^3 = g(x1) tv4^3`.
+  --
+  -- Here `g(x) = x^3 + A' * x + B'`, so `E' : y^2 = g(x)`.
+  let gx1 := (FieldOps.square tv3 + Aprime * tv6) * tv3 + Bprime * (tv6 * tv4)
+  -- Step 14: `tv6 = tv4^3`.
+  let tv6 := tv6 * tv4
+  -- Step 18: `y1 = sqrt(g(x1))`, or `sqrt(Z g(x1))` when `g(x1)` is not a square.
+  let (isGx1Square, y1) := sqrtRatio gx1 tv6
+  -- Steps 17 and 21: `x = x1 = tv3 / tv4`, or `x = x2 = tv1 tv3 / tv4`.
+  let xn := if isGx1Square then tv3 else tv1 * tv3
+  -- Steps 19, 20 and 22: `y = y1`, or `y = tv1 u y1`, a root of `g(x2) = tv1^3 g(x1)`.
+  let y := if isGx1Square then y1 else tv1 * u * y1
+  -- Steps 23 and 24: if `sgn0(u) ≠ sgn0(y)`, then `y = -y`.
+  --
+  -- Step 25, the division `x = xn / tv4`, is left to the isogeny, which needs none.
+  (xn, tv4, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
 
 /-! ## 3-isogeny map `E' → E` (RFC 9380 Appendix E.3)
 
@@ -360,30 +393,44 @@ def k42 : Fp2 F := Fp2.ofNats
   0x12
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa99
 
-/-- The 3-isogeny of [RFC 9380 Appendix E.3][iso], from `(x', y')` on `E'` to `E`.
+/-- The 3-isogeny of [RFC 9380 Appendix E.3][iso], from the point `(xn / xd, y')` of `E'` to `E`.
 
-- `x = x_num / x_den`, where `x_den` is monic of degree 2.
-- `y = y' * y_num / y_den`, where `y_den` is monic of degree 3.
+The result is in Jacobian coordinates, by [Appendix G.1][g1], so it needs no inversion.
 
-A zero denominator gives the identity point, as [§6.6.3][ab0] requires.
+A zero denominator gives the identity point, as [§6.6.3][ab0] requires, and so does `xd = 0`.
 
 [iso]: https://www.rfc-editor.org/rfc/rfc9380#appendix-E.3
+[g1]: https://www.rfc-editor.org/rfc/rfc9380#appendix-G.1
 [ab0]: https://www.rfc-editor.org/rfc/rfc9380#section-6.6.3
 -/
-def isoMapG2 (xp yp : Fp2 F) : G2 F :=
-  -- The powers `x'^2` and `x'^3`, shared by the four polynomials.
-  let xp2 := xp * xp
-  let xp3 := xp2 * xp
+def isoMapG2 (p : Fp2 F × Fp2 F × Fp2 F) : G2 F :=
+  let xn := p.1
+  let xd := p.2.1
+  -- The monomials of degree 2 and 3 in `xn` and `xd`, shared by the four polynomials.
+  let xn2 := FieldOps.square xn
+  let xd2 := FieldOps.square xd
+  let xn3 := xn2 * xn
+  let xn2xd := xn2 * xd
+  let xnxd2 := xn * xd2
+  let xd3 := xd2 * xd
+  -- Each polynomial at `x' = xn / xd`, times `xd^3`.
+  --
   -- `x_num = k_(1,3) * x'^3 + k_(1,2) * x'^2 + k_(1,1) * x' + k_(1,0)`.
-  let xNum := k13 * xp3 + k12 * xp2 + k11 * xp + k10
-  -- `x_den = x'^2 + k_(2,1) * x' + k_(2,0)`.
-  let xDen := xp2 + k21 * xp + k20
-  -- `y_num = k_(3,3) * x'^3 + k_(3,2) * x'^2 + k_(3,1) * x' + k_(3,0)`.
-  let yNum := k33 * xp3 + k32 * xp2 + k31 * xp + k30
+  let xNum := k13 * xn3 + k12 * xn2xd + k11 * xnxd2 + k10 * xd3
+  -- `x_den = x'^2 + k_(2,1) * x' + k_(2,0)`, of degree 2, so times `xd^2`, then times `xd`.
+  let xDen := (xn2 + k21 * (xn * xd) + k20 * xd2) * xd
+  -- `y_num = k_(3,3) * x'^3 + k_(3,2) * x'^2 + k_(3,1) * x' + k_(3,0)`, times `y'`.
+  let yNum := p.2.2 * (k33 * xn3 + k32 * xn2xd + k31 * xnxd2 + k30 * xd3)
   -- `y_den = x'^3 + k_(4,2) * x'^2 + k_(4,1) * x' + k_(4,0)`.
-  let yDen := xp3 + k42 * xp2 + k41 * xp + k40
-  -- `x = x_num / x_den` and `y = y' * y_num / y_den`, as the affine point with `Z = 1`.
-  if xDen.isZero || yDen.isZero then G2.zero else ⟨xNum / xDen, yp * yNum / yDen, Fp2.one⟩
+  let yDen := xn3 + k42 * xn2xd + k41 * xnxd2 + k40 * xd3
+  -- So `x = xNum / xDen` and `y = yNum / yDen`.
+  --
+  -- `x_den` is monic of degree 2, and `y_den` is monic of degree 3.
+  if xDen.isZero || yDen.isZero then G2.zero else
+    -- Appendix G.1: `(X, Y, Z) = (xn * xd * yd^2, yn * yd^2 * xd^3, xd * yd)`.
+    let yDen2 := FieldOps.square yDen
+    let z := xDen * yDen
+    ⟨xNum * xDen * yDen2, yNum * yDen2 * (FieldOps.square xDen * xDen), z⟩
 
 /-! ## Cofactor clearing (RFC 9380 Appendix G.3)
 
@@ -490,14 +537,13 @@ Each step of the RFC is marked in the body by its number.
 def hashToG2 (msg : ByteArray) (dst : ByteArray) : Except BlsError (G2 F) := do
   -- Step 1: `u` is the pair of elements of `Fp2` that the hash to the field gives for `msg`.
   let us ← hashToFieldFp2 msg dst 2
-  -- Steps 2 and 3, first half: the simplified SWU map of `u[0]` and `u[1]` to `E'`.
-  let (x0, y0) ← simpleSwu us[0]
-  let (x1, y1) ← simpleSwu us[1]
-  -- Steps 2 and 3, second half: `Q0` and `Q1` are the images on `E` by the 3-isogeny.
+  -- Steps 2 and 3: `Q0` and `Q1` are the images of `u[0]` and `u[1]` on `E`.
+  --
+  -- Each is the image by the SSWU map to `E'`, then by the 3-isogeny to `E`.
   --
   -- Step 4: `R = Q0 + Q1`.
   --
   -- Steps 5 and 6: the output `P` is `R` with its cofactor cleared.
-  return clearCofactor (G2.add (isoMapG2 x0 y0) (isoMapG2 x1 y1))
+  return clearCofactor (G2.add (isoMapG2 (simpleSwu us[0])) (isoMapG2 (simpleSwu us[1])))
 
 end EthLib.Cryptography.Bls.HashToCurve

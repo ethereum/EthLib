@@ -273,28 +273,21 @@ theorem sqrt_eq_some_cases {a c : Fp2 F} (h : Fp2.sqrt a = some c) :
       let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * r)
       (BaseField.beq (r * r) u = true ∧ c = ⟨r, d⟩) ∨
         (BaseField.beq (r * r) u = false ∧ c = ⟨d, r⟩)) := by
-  unfold Fp2.sqrt at h
-  split at h
-  · rename_i hz
-    refine Or.inl ⟨hz, ?_⟩
-    dsimp only at h
-    split at h
-    · rename_i hc
-      exact Or.inl ⟨hc, Option.some.inj h.symm⟩
-    · rename_i hc
-      exact Or.inr ⟨Bool.eq_false_iff.mpr hc, Option.some.inj h.symm⟩
-  · rename_i hz
-    refine Or.inr ⟨Bool.eq_false_iff.mpr hz, ?_⟩
-    split at h
-    · cases h
-    · rename_i s hs
-      refine ⟨s, hs, ?_⟩
-      dsimp only at h ⊢
-      split at h
-      · rename_i hc
-        exact Or.inl ⟨hc, Option.some.inj h.symm⟩
-      · rename_i hc
-        exact Or.inr ⟨Bool.eq_false_iff.mpr hc, Option.some.inj h.symm⟩
+  by_cases hz : BaseField.isZero a.c1 = true
+  · refine Or.inl ⟨hz, ?_⟩
+    simp only [Fp2.sqrt, Fp2.sqrtOfNormRoot, hz, ↓reduceIte, Option.some.injEq] at h
+    subst h
+    split <;> rename_i hc
+    · exact Or.inl ⟨hc, rfl⟩
+    · exact Or.inr ⟨Bool.eq_false_iff.mpr hc, rfl⟩
+  · refine Or.inr ⟨Bool.eq_false_iff.mpr hz, ?_⟩
+    simp only [Fp2.sqrt, hz, Bool.false_eq_true, ↓reduceIte, Option.map_eq_some_iff] at h
+    obtain ⟨s, hs, rfl⟩ := h
+    refine ⟨s, hs, ?_⟩
+    simp only [Fp2.sqrtOfNormRoot, hz, Bool.false_eq_true, ↓reduceIte]
+    split <;> rename_i hc
+    · exact Or.inl ⟨hc, rfl⟩
+    · exact Or.inr ⟨Bool.eq_false_iff.mpr hc, rfl⟩
 
 /-- The square root in `Fp2` succeeds when the norm has a root, over any base field. -/
 theorem sqrt_isSome_of_norm {a : Fp2 F}
@@ -303,11 +296,9 @@ theorem sqrt_isSome_of_norm {a : Fp2 F}
   obtain ⟨s, hs⟩ := hn
   unfold Fp2.sqrt
   split
-  · dsimp only
-    split <;> exact ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
   · rw [hs]
-    dsimp only
-    split <;> exact ⟨_, rfl⟩
+    exact ⟨_, rfl⟩
 
 end Sqrt
 

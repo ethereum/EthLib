@@ -195,8 +195,14 @@ Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -
 @[inline] def beq (a b : Fp) : Bool := a == b
 @[inline] def isZero (a : Fp) : Bool := a == zero
 
-/-- Square-and-multiply modular exponentiation. -/
-@[inline] def powNat (base : Fp) (e : Nat) : Fp := Montgomery.pow base e
+/-- Modular exponentiation.
+
+An exponent below `p` is read as twelve limbs, four bits at a time. -/
+@[inline] def powNat (base : Fp) (e : Nat) : Fp :=
+  -- The window reads fixed limbs, so it never divides the exponent, a large integer, bit by bit.
+  if e < modulus then Montgomery.powLimbs base (Montgomery.Limbs.ofNat e : Montgomery.Limbs.T 12)
+  -- Larger exponents keep the square and multiply.
+  else Montgomery.pow base e
 
 /-- Multiplicative inverse, by Fermat's little theorem: `a ^ (p - 2)`.
 
