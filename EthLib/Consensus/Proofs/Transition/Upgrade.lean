@@ -680,6 +680,21 @@ theorem upgradeToGloas_builderFields {pre : BeaconState preset .fusaka}
   obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
   exact ⟨rfl, rfl, rfl⟩
 
+/-- After the upgrade to Gloas, the payload of a recent slot counts as available.
+
+The one exception is the fork slot: its bit is the only one that is clear. -/
+theorem upgradeToGloas_executionPayloadAvailability {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok after)
+    (i : Fin preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    (after.executionPayloadAvailability (by decide)).bits[i] = true ↔
+      i.val ≠ (pre.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat := by
+  unfold upgradeToGloas at computed
+  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
+  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+  simp [upgradeFields]
+
 /-- The upgraded bid keeps every field of the Gloas bid, and sets no inclusion list bit. -/
 theorem upgradeBidToHeze_spec (bid : ExecutionPayloadBid preset .glamsterdam) :
     (upgradeBidToHeze bid).parentBlockHash = bid.parentBlockHash ∧

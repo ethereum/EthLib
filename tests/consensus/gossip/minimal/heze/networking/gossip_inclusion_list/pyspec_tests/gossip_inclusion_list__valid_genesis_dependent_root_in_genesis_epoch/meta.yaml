@@ -1,8 +1,8 @@
 topic: inclusion_list
 blocks:
 - {block: 
-    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+    block_0xa571ebd8a51f50fcb998488a43db9fecd4c5b65d7b09ed1e3df653db2b61df2a}
 messages:
 - {current_time_ms: 100, message: 
-    inclusion_list_0xb9f6bc464d1edf7d4c27354f49b580e5a00ba2f4f093f32a714556027eb86aee,
+    inclusion_list_0x7364c7166afe7652b4ccac253ba7156e5ae5f29b428a869f9507ff1ba6a5eecd,
   expected: valid}

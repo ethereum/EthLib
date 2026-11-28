@@ -67,8 +67,8 @@ HANDLERS = {
 
 # The release archives, and the forks whose archived cases this file runs.
 ARCHIVES = {
-    "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
-    "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
+    "minimal": "consensus-specs/v1.7.0-beta.5/minimal",
+    "mainnet": "consensus-specs/v1.7.0-beta.5/mainnet",
 }
 ARCHIVE_FORKS = ("electra", "fulu", "gloas", "heze")
 

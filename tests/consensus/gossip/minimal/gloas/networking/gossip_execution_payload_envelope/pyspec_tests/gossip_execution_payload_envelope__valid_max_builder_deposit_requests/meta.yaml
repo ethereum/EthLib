@@ -1,10 +1,10 @@
 topic: execution_payload
 blocks:
 - {block: 
-    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
 - {block: 
-    block_0xa5c24e5cf0fae9165d49f85225b8c00aadc57fb65d991b4a07abe74cf302c784}
+    block_0x2ec2dfd35bcb51ee475b39e8c864875f8f859e6d8680a611123e9b307743a121}
 messages:
 - {message: 
-    execution_payload_envelope_0xd669ae5dc2802547d53f21bc45a16117dbf72751ca1e132bf3ed218030d614b6,
+    execution_payload_envelope_0x671b42d4b1763701041dd3d65abceddddc3223fe093658f8f2b66f31f8399996,
   expected: valid}

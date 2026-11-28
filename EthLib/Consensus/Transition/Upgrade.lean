@@ -35,7 +35,9 @@ The hash of that header becomes the latest block hash, and its fields seed the l
 
 That bid is a self-build for the slot of the latest block, with no value.
 
-The new builder fields start empty, and every payload of the recent slots counts as available.
+The new builder fields start empty.
+
+Every recent payload counts as available, except that of the fork slot.
 
 The window of payload committees is computed for the current epoch and the lookahead.
 
@@ -426,7 +428,9 @@ def upgradeBid (pre : BeaconState preset .fusaka) (requestsRoot : Root) :
 
 /-- The Gloas state of a Fulu state, with its fields carried over and the new fields added.
 
-The new fields are those of an empty registry of builders and of a self-built latest payload. -/
+The new fields are those of an empty registry of builders and of a self-built latest payload.
+
+Every recent payload counts as available, except that of the fork slot. -/
 def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requestsRoot : Root) :
     BeaconState preset .glamsterdam :=
   let header := pre.latestExecutionPayloadHeader (by decide)
@@ -478,7 +482,13 @@ def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requests
     proposerLookahead := fun _ => pre.proposerLookahead (by decide)
     builders := fun _ => ⟨#[]⟩
     nextWithdrawalBuilderIndex := fun _ => 0
-    executionPayloadAvailability := fun _ => ⟨Vector.replicate _ true⟩
+    -- The payloads before the fork count as available.
+    --
+    -- The step before a slot clears its bit, but the step before the fork slot ran under Fulu.
+    --
+    -- So the bit of the fork slot `s`, at `s mod SLOTS_PER_HISTORICAL_ROOT`, is cleared here.
+    executionPayloadAvailability := fun _ =>
+      ⟨Vector.ofFn fun i => i.val != (pre.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat⟩
     builderPendingPayments := fun _ => payments
     builderPendingWithdrawals := fun _ => ⟨#[]⟩
     latestExecutionPayloadBid := fun _ => upgradeBid pre requestsRoot

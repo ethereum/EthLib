@@ -1,12 +1,12 @@
 topic: partial_data_column_sidecar
 blocks:
 - {block: 
-    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
 - {block: 
-    block_0xf97e1966d9d5e9fcdf28e953ce45503f5f3c9125eab762e125f2c22c68961e58}
+    block_0x676ce6eeaa157177ec58f2926f28f8f07f05a9d0e906b4ca387d361918ce626d}
 messages:
 - {group_id: 
-    partial_data_column_group_id_0x38c73622fdb3277b7d406a027bbd30f7f140ec0a31fa0a09a2849ff8136e2e6f,
+    partial_data_column_group_id_0xb99a435cac8c52c8bb679d3d60b610837e450afba9210b4d17432482b1399d96,
   column_index: 0, message: 
     partial_data_column_sidecar_0x817f79436e74aa341211a56aa6e19e2464f803e0401ca72129d596b3a46ca2c5,
   expected: reject, reason: number of cells does not match number of set bits}

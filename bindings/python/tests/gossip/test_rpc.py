@@ -830,7 +830,7 @@ def test_experimental_extension_fields_are_skipped() -> None:
     )
 
 
-# The consensus-specs pin is v1.7.0-beta.4, file specs/phase0/p2p-interface.md.
+# The consensus-specs pin is v1.7.0-beta.5, file specs/phase0/p2p-interface.md.
 # Its section "Gossipsub size limits" makes clients reject an RPC above the largest message size.
 # The protobuf framing counts, but the length prefix of the stream is not part of the RPC.
 # Its section "Maximum message sizes" derives that size from the worst-case compression of the cap.

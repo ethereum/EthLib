@@ -1,4 +1,4 @@
-# Source: ethereum/consensus-specs at aa16bb4c156184e9548a997d53efaf2a228a6304
+# Source: ethereum/consensus-specs at 36888ee87b0faa6ad7804b017a0184e8e6e6a1c6
 9643d3e6394128b62fa2c6c1157572c90076cfee1e7500d04ed08662a07369ff  mainnet/altair/ssz_static/AggregateAndProof/ssz_random/case_0/roots.yaml
 0862a1492945b12064fc8f8e5ccf103fb81c1971701eb1469d6c7f07cd84beec  mainnet/altair/ssz_static/AggregateAndProof/ssz_random/case_0/serialized.ssz_snappy
 f2453d1b11b7861a558bb8b5896be33a94c7e595a31964f2679c1c95aa547c7d  mainnet/altair/ssz_static/Attestation/ssz_random/case_0/roots.yaml
