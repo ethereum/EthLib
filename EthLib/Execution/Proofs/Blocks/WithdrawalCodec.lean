@@ -21,8 +21,7 @@ open EthLib.Serialization.Rlp
 instance : LawfulCodec Withdrawal where
   ofItem_toItem w := by
     show Withdrawal.ofItem (Withdrawal.toItem w) = _
-    simp only [Withdrawal.ofItem, Withdrawal.toItem, Item.fields, Item.toItems, List.length_cons,
-      List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind, pure, Except.pure]
+    simp_record_roundtrip Withdrawal.ofItem Withdrawal.toItem
   toItem_of_ofItem {item w} hDecode := by
     change Withdrawal.ofItem item = .ok w at hDecode
     unfold Withdrawal.ofItem at hDecode

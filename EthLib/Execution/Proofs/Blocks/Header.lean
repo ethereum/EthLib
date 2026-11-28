@@ -73,12 +73,8 @@ instance : LawfulCodec (Header fork) where
     change Header.ofItem item = .ok h at hDecode
     unfold Header.ofItem at hDecode
     dsimp only at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
-    have hItem := Item.fields_eq_ok.mp hFields
-    -- Each read takes the items of one field from the front of the rest.
-    iterate 15
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
-      have := Item.eq_of_readField hRead
+    peel_decode_fields hDecode 15 with hItem hDecode
+    -- From its fork on, each field takes one item from the front of the rest, and none before.
     iterate 7
       obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readSince hRead
