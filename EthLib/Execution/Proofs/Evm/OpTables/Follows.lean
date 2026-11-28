@@ -67,4 +67,15 @@ def StepResult.FollowsTables (takes leaves price : Nat) (before : Evm fork Meter
   | .next after => _root_.EthLib.Execution.Evm.FollowsTables takes leaves price before after
   | .child caller _ resume => FollowsTablesChild takes leaves price before caller resume
 
+/-- An error of a step from `before` that takes `takes` words and leaves `leaves`.
+
+A stack error comes only from the words of the tables, and a short stack never aborts the run. -/
+structure FailsByTables (takes leaves : Nat) (before : Evm fork Meter) (e : EvmError) : Prop where
+  /-- An underflow comes from a stack that holds fewer words than the step takes. -/
+  underflow : e = .stackUnderflow → before.stack.val.length < takes
+  /-- An overflow comes from words that would overflow the stack. -/
+  overflow : e = .stackOverflow → STACK_LIMIT + takes < before.stack.val.length + leaves
+  /-- On a stack that holds fewer words than the step takes, the error halts the frame. -/
+  short : before.stack.val.length < takes → e.aborts = false
+
 end EthLib.Execution.Evm
