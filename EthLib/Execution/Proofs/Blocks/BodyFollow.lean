@@ -64,18 +64,20 @@ That covers the system calls, each transaction that enters the block, and the wi
 
 Dencun is needed for the transactions, which then delete only accounts that they created. -/
 theorem keepsFollowable_rebuildableBlock {fork : Fork} (hfork : .dencun ≤ fork)
-    (env : BlockEnvironment fork) : KeepsFollowable env RebuildableBlock := by
+    (env : BlockEnvironment fork) : KeepsFollowable env RebuildableBlock fun _ => True := by
   have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
   refine ⟨?_, ?_, ?_⟩
   · intro block target data out hP h
-    exact ⟨systemCall_followable hsd hP.1 hP.2 h,
-      systemCall_rebuildable hsd hP.1 hP.2 h, systemCall_delegationsHaveNonce hsd hP.1 hP.2 h⟩
+    have follows := systemCall_followable hsd hP.1 hP.2 h
+    exact ⟨follows.parent, ⟨systemCall_rebuildable hsd hP.1 hP.2 h,
+      systemCall_delegationsHaveNonce hsd hP.1 hP.2 h⟩, fun _ => follows⟩
   · intro gas block tx included out hP _ h
     have valid := processTransaction_rebuildEnd hfork hP.1 hP.2 h
-    exact ⟨valid.followable, valid.rebuildableBlock⟩
+    exact ⟨valid.parent, valid.rebuildableBlock, fun _ => valid.followable⟩
   · intro block withdrawals tx hP h
-    exact ⟨withdrawalState_followable hP.1 h, withdrawalState_rebuildable hP.1 h,
-      withdrawalState_delegationsHaveNonce hP.2 h⟩
+    have follows := withdrawalState_followable hP.1 h
+    exact ⟨follows.parent, ⟨withdrawalState_rebuildable hP.1 h,
+      withdrawalState_delegationsHaveNonce hP.2 h⟩, fun _ => follows⟩
 
 /-- From Glamsterdam, the list that the header commits to rebuilds the state after the block.
 
@@ -114,7 +116,7 @@ theorem stateTransition_rebuild_of_rebuildableBlock {fork : Fork} {chain : Block
             (chain.state.getStorage address key) := by
   exact stateTransition_rebuild hFork
     (fun _ _ => keepsFollowable_rebuildableBlock (Nat.le_trans (by decide) hFork) _)
-    hstart hlength h
+    hstart hlength (fun _ _ _ _ _ _ => trivial) h
 
 /-- From Glamsterdam, the list that the header commits to gives each nonce after the block.
 
@@ -140,6 +142,6 @@ theorem stateTransition_rebuild_nonce_of_rebuildableBlock {fork : Fork} {chain :
             (UInt64.ofNat ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).nonce)) :=
   stateTransition_rebuild_nonce hFork
     (fun _ _ => keepsFollowable_rebuildableBlock (Nat.le_trans (by decide) hFork) _) hstart hlength
-    hfit h
+    (fun _ _ _ _ _ _ => trivial) hfit h
 
 end EthLib.Execution.Blocks
