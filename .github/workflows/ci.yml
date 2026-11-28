@@ -79,14 +79,6 @@ jobs:
       - name: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
-      # The C docstrings, the contract and the type stub must match the Lean docstrings and codes.
-      - name: binding contract
-        run: lake exe gen-bindings --check
-
-      # The Unicode table in Lean must match the pinned UnicodeData.txt.
-      - name: unicode table
-        run: uv run --no-project --python 3.12 python scripts/generate_unicode_nfkd.py --check
-
       - name: stage spec and export artifacts
         run: >-
           uv run --no-project --python 3.12 python scripts/proof_shards.py stage spec-exports
@@ -188,7 +180,12 @@ jobs:
       - name: build shard
         shell: bash
         run: |
-          read -r -a targets <<< "$(uv run --no-project --python 3.12 python scripts/proof_shards.py targets "${{ matrix.shard }}")"
+          listed=$(uv run --no-project --python 3.12 python scripts/proof_shards.py targets "${{ matrix.shard }}")
+          read -r -a targets <<< "$listed"
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "::error::shard ${{ matrix.shard }} has no targets"
+            exit 1
+          fi
           bash scripts/build_timing_report.sh run proofs_build "$BUILD_TIMING_RESULTS" -- lake build --wfail "${targets[@]}"
 
       - name: stage shard artifacts
@@ -205,8 +202,10 @@ jobs:
           retention-days: 1
 
   # Merge the disjoint proof shards, finish the top-level targets and run every verification check.
+  # It runs even when a shard fails: its full build then reports that shard's errors itself.
   build:
     needs: [spec-exports, proofs]
+    if: ${{ !cancelled() && needs.spec-exports.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -292,6 +291,16 @@ jobs:
       - name: exports
         id: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
+
+      # The C docstrings, the contract and the type stub must match the Lean docstrings and codes.
+      - name: binding contract
+        if: ${{ !cancelled() }}
+        run: lake exe gen-bindings --check
+
+      # The Unicode table in Lean must match the pinned UnicodeData.txt.
+      - name: unicode table
+        if: ${{ !cancelled() }}
+        run: uv run --no-project --python 3.12 python scripts/generate_unicode_nfkd.py --check
 
       # The build pipeline regressions below run in this Python environment.
       # The exports were built in `spec-exports` and verified above, so skip invoking Lake again.
@@ -453,6 +462,12 @@ jobs:
         run: |
           uv run --no-project --python 3.12 python scripts/proof_shards.py check
           uv run --no-project --python 3.12 python -m unittest discover -s scripts -p 'test_proof_shards.py'
+
+      - name: every proof shard passed
+        if: ${{ always() && needs.proofs.result != 'success' }}
+        run: |
+          echo "::error::a proof shard did not pass: ${{ needs.proofs.result }}"
+          exit 1
 
       # A failed run still publishes its logs and the status of each measured command.
       - name: build timing report

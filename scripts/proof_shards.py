@@ -1,10 +1,11 @@
 """Partition EthLib proof targets into disjoint CI shards and stage their build artifacts."""
 
 import argparse
-import re
 import shutil
 import sys
 from pathlib import Path
+
+from check_layers import imports
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,15 +30,11 @@ UNSHARDED_PROOFS = frozenset(
 # `PythonConversions` owns `EthLib.Base.Proofs.Exports.PyValue`, which `Exports` builds in stage 1.
 SPEC_EXPORTS_PROOF_MODULES = frozenset({"EthLib.Base.Proofs.Exports.PyValue"})
 
-IMPORT_RE = re.compile(r"^(?:public\s+|meta\s+)*import\s+([A-Za-z0-9_.]+)", re.MULTILINE)
-
 
 def direct_imports(root: Path, module: str) -> list[str]:
     """The direct `EthLib.*` imports of one Lean module, in source order."""
     path = root / Path(*module.split(".")).with_suffix(".lean")
-    return [
-        m for m in IMPORT_RE.findall(path.read_text()) if m == "EthLib" or m.startswith("EthLib.")
-    ]
+    return [m for m in imports(path.read_text()) if m == "EthLib" or m.startswith("EthLib.")]
 
 
 def shard_targets(root: Path, shard: str) -> list[str]:
