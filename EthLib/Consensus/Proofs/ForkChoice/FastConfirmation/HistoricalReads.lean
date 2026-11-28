@@ -386,9 +386,13 @@ It assumes preset parameters, positive slot duration, store/stake bounds and non
 
 It needs successful slot, start and head reads, with the head read from the next start to `last`.
 
-Honest stores start at the anchor; by `last` they lack its parent, with store epochs in the horizon.
+Honest stores start at the common anchor and, by `last`, hold only states before the next fork.
 
-By `last` their held states precede the next fork and meet the run and terminal stake floors. -/
+Through `last` they lack the anchor's parent, and each store epoch they read is at most the horizon.
+
+Runs from genesis via the anchor to their held states by `last` meet the horizon's run stake floor.
+
+Such held states of epochs from genesis plus two to the horizon plus one meet the terminal floor. -/
 public theorem Execution.finalized_ancestor_of_heads_or_evidence
     {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
