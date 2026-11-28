@@ -881,7 +881,10 @@ Every output of the maps to G1 and G2 is a valid point of that subgroup (`Proofs
 It covers the shortened DST of §5.3.3.
 It assumes a message shorter than 2^61 - 323 bytes and a DST shorter than 2^61 - 17 bytes.
 `hashToFieldFp2_eq_spec` proves that the hash to `Fp2` is `hash_to_field` of §5.2 under the same bounds, with each coordinate read in `ZMod p`.
-No theorem yet compares the SSWU map or the isogeny with a model of RFC 9380.
+`hashToG2_eq_affine` and `mapToG2_eq_affine` (`Proofs/Bls/HashToCurveAffine.lean`) prove that the maps to the curve in Jacobian coordinates give the points of the SSWU map of §6.6.2 and the isogeny of Appendix E.3 as written.
+`hashToG2_toAffine_eq_affine` and `mapToG2_toAffine_eq_affine` give the same affine coordinates, so the same encodings.
+Those references (`HashToCurve.Affine`, `MapToCurve.Affine`) are transcriptions of the RFC in the proof modules.
+No theorem yet compares them with a model of RFC 9380 in Mathlib.
 
 `sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
 `exists_aggregate_eq_error_iff` proves that aggregation fails exactly on an empty list, or on a signature that does not decode.

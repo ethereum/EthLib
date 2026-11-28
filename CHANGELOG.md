@@ -1392,6 +1392,26 @@ Not yet released.
   `keepsAt_foldlM_createEther`, `keepsAt_payRewards` and `keepsAt_applyDaoFork` no longer give `NonceLe`.
   So `HistoryStorage.ring_of_reaches` also covers a contract with nonce 0.
 
+- In Lean, the hash to G2 and the map to G2 of EIP-2537 no longer invert the denominator of the SSWU map nor those of the isogeny ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  The map follows RFC 9380, Appendices F.2 and G.1.
+  `HashToCurve.simpleSwu` (`Cryptography/Bls/HashToCurve.lean`) returns `(xn, xd, y)` for the point `(xn / xd, y)` and no longer fails.
+  It takes its root from the new `HashToCurve.sqrtRatio`, with the new constants `rootExponent` and `sqrtNegNormZ`.
+  `sqrtNegNormZ` was a private constant over `Fp` in the proofs, and is now public at any base field.
+  `sqrtRatio` inverts no element of `Fp2`, but its root takes two inversions of `Fp` through `Fp2.sqrtOfNormRoot`.
+  `HashToCurve.isoMapG2` takes that triple and returns a Jacobian point whose `z` is in general not 1.
+  `hashToG2` and `MapToCurve.mapToG2` give the same points as before, with other Jacobian coordinates.
+  `Fp2.sqrtOfNormRoot` (`Cryptography/Fp2.lean`) is new: the complex method from a root of the norm, which `Fp2.sqrt` now calls.
+  The previous definitions are now `HashToCurve.Affine.simpleSwu`, `Affine.isoMapG2`, `Affine.hashToG2` and `MapToCurve.Affine.mapToG2`, in the proof modules.
+  They are the maps of RFC 9380 §6.6.2 and Appendix E.3 as written.
+  `hashToG2_eq_affine`, `mapToG2_eq_affine`, `hashToG2_toAffine_eq_affine` and `mapToG2_toAffine_eq_affine` (`Cryptography/Proofs/Bls/HashToCurveAffine.lean`) state that both give valid points with the same group element and the same affine coordinates.
+  `simpleSwu_ok`, `isoMapG2_curve_eq` and `isoMapG2_valid` become `Affine.simpleSwu_ok`, `Affine.isoMapG2_curve_eq` and `Affine.isoMapG2_valid`.
+  The previous `simpleSwu_curve_eq` and `simpleSwu_isoMapG2_valid` become `Affine.simpleSwu_curve_eq` and `Affine.simpleSwu_isoMapG2_valid`.
+  `simpleSwu_curve_eq` and `simpleSwu_isoMapG2_valid` now take `u` alone, and `map_simpleSwu` and `map_isoMapG2` state the maps of the new forms.
+  The theorems `sqrtRatio_fst`, `sqrtRatio_snd`, `sqrtNegNormZ_sq`, `simpleSwu_eq_affine`, `simpleSwu_xd_ne_zero`, `isoMapG2_valid_toPoint`, `toPoint_isoMapG2_simpleSwu`, `map_sqrtRatio` and `map_sqrtNegNormZ` are new, as are `Fp2.sqrtOfNormRoot_mul_self` (`Cryptography/Proofs/Bls/Fp2.lean`) and `Fp2.map_sqrtOfNormRoot` (`Cryptography/Proofs/Bls/BaseFieldMap.lean`).
+  `hashToFieldFp2_two_ok` is now public.
+  `Bls.Fp.powNat` reads an exponent below `p` as twelve limbs, four bits at a time.
+  `Fp.toZMod_powNat` and `Fp.powNat_eq_pow` keep their statements, but `powNat_eq_pow` no longer holds by `rfl`.
+
 - In Lean, the product of the quadratic extension takes three products of its base field instead of four, by the Karatsuba method ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Fp2.mul` (`Cryptography/Fp2.lean`) computes the coefficient of `i` as `(a0 + a1)(b0 + b1) - a0 b0 - a1 b1`, over BLS12-381 and alt_bn128.
   The generic `Fp2.mul_c1` (`Cryptography/Proofs/Fp2.lean`) states that form, holds by `rfl`, and is no longer a simp lemma.
@@ -1566,7 +1586,6 @@ Not yet released.
   `checkBody_binding` also gives the parts that each body is read as, and its withdrawals as parts of the bodies.
   `checkBody_eq_ok` is replaced by `checkBodyM_eq_ok`, which takes the hash and gives the parts of the body in place of the items and the encodings.
   Migration: pass `keccak256`, whose checks are `checkBody` and the others; read the items of the parts with `Encoded.item_of_parts`, and their encodings with `Encoded.parts_eq_ok_iff`.
-
 
 - From Altair, gossip and the validator choose the sync committee from the slot of a message, not from the slot after the state, as consensus-specs v1.7.0-beta.5 does ([#4625](https://github.com/ethereum/EthLib/issues/4625)).
   The committee that signs in a slot `s` is the one of the period of `s + 1`.

@@ -379,18 +379,27 @@ theorem baseField_sqrt (a : Fp) : BaseField.sqrt a = (Fp.sqrt a).toOption := rfl
 @[simp] theorem baseField_sqrtCandidate (a : Fp) :
     BaseField.sqrtCandidate a = Fp.sqrtCandidate a := rfl
 
+-- The bound `2^384` of twelve limbs is a numeral that the elaborator compares.
+set_option exponentiation.threshold 400 in
+/-- The map to `ZMod p` sends a power to the power. -/
+theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n := by
+  unfold powNat
+  split
+  · rename_i h
+    have hl := Montgomery.toZMod_powLimbs a (Montgomery.Limbs.ofNat n : Montgomery.Limbs.T 12)
+    rw [Montgomery.Limbs.val_ofNat, Nat.mod_eq_of_lt (Nat.lt_trans h Fp.params.lt_radix)] at hl
+    exact hl
+  · exact toZMod_pow a n
+
 /-- The square root's power by limbs is the power by `(p + 1) / 4`. -/
 theorem powLimbs_sqrtExponent (a : Fp) :
     (Montgomery.powLimbs a sqrtExponent : Fp) = powNat a ((modulus + 1) / 4) := by
   apply toZMod_injective
-  rw [Montgomery.toZMod_powLimbs, val_sqrtExponent]
-  exact (toZMod_pow a _).symm
+  have hl := Montgomery.toZMod_powLimbs a sqrtExponent
+  rw [val_sqrtExponent] at hl
+  exact hl.trans (toZMod_powNat a _).symm
 
 /-! ## Bridge: spec operations = Mathlib operations -/
-
-/-- The map to `ZMod p` sends a power to the power. -/
-theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n :=
-  toZMod_pow a n
 
 /-- The inverse `a ^ (p - 2)` is the inverse of `ZMod p`, and both send `0` to `0`. -/
 theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ :=
@@ -423,7 +432,8 @@ theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := rfl
   map_ofNat toZMod n
 
 /-- The spec's `Fp.powNat` is Mathlib's monoid power. -/
-theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n := rfl
+theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n :=
+  toZMod_injective ((toZMod_powNat a n).trans (map_pow toZMod a n).symm)
 
 /-- The inverse of the specification is the field inverse, and both send `0` to `0`.
 
