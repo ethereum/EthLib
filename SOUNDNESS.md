@@ -8941,12 +8941,16 @@ The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSign
 The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
 The root of a bid (`getExecutionPayloadBidSignature_eq_of_requestSigningRoot`) assumes the same at the epoch of the slot of the bid; a builder that sends the fork of its head state before a fork gets the version of the old fork ([remote-signing-api#37](https://github.com/ethereum/remote-signing-api/issues/37)).
 
-From Glamsterdam, the list that a block commits to rebuilds the state after the block (`stateTransition_rebuild_of_rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
-The theorem assumes that, in the state before the block, no account with nonce 0 and no code holds storage (`Rebuildable`, `Execution/Proofs/State/Rebuild.lean`).
+From Glamsterdam, the list that a block commits to rebuilds the state after the block (`stateTransition_rebuild_of_wipeAllowed`, `Execution/Proofs/Blocks/BodyFollow.lean`).
+Of the state before the block, the theorem assumes only that each code matches its hash and that no account with nonce 0 has the code hash of a delegation indicator.
+It also assumes that the block wipes no storage of an account that had nonce 0, no code and storage before it (`WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`).
 A creation at such an account wipes its storage, and the list records no slot that the block does not touch, so the list cannot rebuild that state.
-Each transaction keeps the property (`RebuildEnd.rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
-The 28 mainnet accounts of that shape break it, so the theorem covers no mainnet block until a fork applies EIP-8253, which EthLib does not specify yet.
-A creation reaches none of them on mainnet without a spent nonce or a Keccak-256 preimage, as the paragraph on EIP-7610 under A1 explains, so a form of the theorem with an assumption on the creations of the run would cover mainnet.
+This is an assumption on the run of the block: the theorem reads it on the wipes that the body leaves in its block state.
+On mainnet, the accounts of that shape are the 28 of EIP-8253, and each holds a balance ([EIP-8253, `mainnet-prestate-alloc.json`](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/assets/eip-8253/mainnet-prestate-alloc.json)).
+Such an account loses ether only after it signs a transaction or an authorization, each of which raises its nonce, so none of the 28 becomes empty and is deleted as one.
+Only a creation at one of them wipes its storage, and a creation reaches none of them without a spent nonce or a Keccak-256 preimage, as the paragraph on EIP-7610 under A1 explains.
+So the assumption holds on every mainnet block where no creation lands on one of the 28 accounts.
+The earlier form (`stateTransition_rebuild_of_rebuildableBlock`) assumes instead that no such account exists, which gives the assumption on the run at once, and covers no mainnet block until a fork applies EIP-8253.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
@@ -9152,9 +9156,10 @@ The codeword searches of each scheme share the bullet of that scheme:
 
 When the message of a transaction succeeds, the refund counter that it settles is at least zero, so taking its natural number never changes it (`processMessageCall_refundCounter_nonneg`, `Execution/Proofs/Transactions/Refund.lean`).
 The theorem assumes that the message starts from a state with the rebuild property and no write of storage, which `TransactionRun.refundReady` gives for a run of a transaction.
-That holds when, in the block state, each code matches its hash and empty or missing accounts hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
-[EIP-7523](https://eips.ethereum.org/EIPS/eip-7523#specification) states that mainnet and the public testnets hold no empty account after the merge, and setting a delegation always raises the nonce of its account.
-A chain whose genesis allocates an empty account with storage, or a delegation at nonce 0, is outside the theorem.
+That holds when, in the block state, each code matches its hash, and accounts with nonce 0 and no code, missing ones too, hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
+Setting a delegation always raises the nonce of its account.
+The 28 mainnet accounts of EIP-8253 hold storage with nonce 0 and no code, so the theorem covers no mainnet transaction until a fork applies EIP-8253.
+A chain whose genesis allocates such an account, or a delegation at nonce 0, is outside the theorem too.
 There the counter can end below zero from Prague.
 An authorization that clears the code of an account with nonce 0 and balance 0 deletes its storage.
 A later write to a slot of that account then takes back a refund that no clear paid.

@@ -66,29 +66,18 @@ theorem storage_setCode {tx tx' : TransactionState} {address : Address}
     · exact .inl hs
     · exact .inr ⟨Except.ok.inj hf, hs⟩
 
-/-- Storage writes and wipes kept, or dropped at one address, keep the storage elsewhere. -/
-private theorem storage_of_ne {tx tx' : TransactionState} {address other : Address}
-    (hp : tx'.parent = tx.parent) (hne : other ≠ address)
+/-- Storage writes kept, or dropped at one address, keep the writes elsewhere. -/
+private theorem slot_of_ne {tx tx' : TransactionState} {address other : Address}
+    (hne : other ≠ address)
     (hs : (tx'.storageWrites = tx.storageWrites ∧ tx'.storageClears = tx.storageClears) ∨
       (tx'.storageWrites = tx.storageWrites.erase address ∧
         tx'.storageClears = tx.storageClears.insert address)) (key : Bytes32) :
-    tx'.storageWrites.slot other key = tx.storageWrites.slot other key ∧
-      tx'.getStorage other key = tx.getStorage other key := by
-  have hslot : tx'.storageWrites.slot other key = tx.storageWrites.slot other key := by
-    rcases hs with ⟨hw, -⟩ | ⟨hw, -⟩
-    · rw [hw]
-    · rw [hw]
-      simp only [StorageMap.slot, Std.ExtTreeMap.getElem?_erase, Std.compare_eq_iff_eq,
-        Ne.symm hne, ↓reduceIte]
-  have hmem : other ∈ tx'.storageClears ↔ other ∈ tx.storageClears := by
-    rcases hs with ⟨-, hc⟩ | ⟨-, hc⟩
-    · rw [hc]
-    · rw [hc]
-      simp [Std.ExtTreeSet.mem_insert, Ne.symm hne]
-  refine ⟨hslot, ?_⟩
-  unfold TransactionState.getStorage
-  rw [hslot, hp]
-  simp only [hmem]
+    tx'.storageWrites.slot other key = tx.storageWrites.slot other key := by
+  rcases hs with ⟨hw, -⟩ | ⟨hw, -⟩
+  · rw [hw]
+  · rw [hw]
+    simp only [StorageMap.slot, Std.ExtTreeMap.getElem?_erase, Std.compare_eq_iff_eq,
+      Ne.symm hne, ↓reduceIte]
 
 /-- Setting a code keeps each returned code under its hash. -/
 private theorem code_setCode {tx tx' : TransactionState} {address : Address} {code : ByteArray}
@@ -112,19 +101,9 @@ private theorem code_setCode {tx tx' : TransactionState} {address : Address} {co
   · rw [TransactionState.getCode_setCode_of_ne h heq] at hread
     exact hvalid hash bytes hread
 
-/-- An account with nonce 0 and no code that is empty once it takes a code was empty before. -/
-private theorem eq_empty_of_setCodeHash {account : Account} {hash : Hash32}
-    (hn : account.nonce = 0) (hc : account.codeHash = EMPTY_CODE_HASH)
-    (he : { account with codeHash := hash } = EMPTY_ACCOUNT) : account = EMPTY_ACCOUNT := by
-  obtain ⟨n, b, c⟩ := account
-  simp only at hn hc
-  subst hn hc
-  simp only [EMPTY_ACCOUNT, Account.mk.injEq] at he ⊢
-  exact ⟨trivial, he.2.1, trivial⟩
-
 /-- A delegation of an authority with no nonce or code keeps the rebuild property.
 
-Setting the code may delete the authority only when it is empty, and then it held no storage. -/
+Setting the code may delete the authority and wipe its storage, but it was plain in the block. -/
 private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : TransactionState}
     {authority : Address} {auth : Authorization} {refund : Nat}
     (valid : RebuildState block tx) (hplain : ¬HasNonceOrCode tx authority)
@@ -135,10 +114,6 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
   obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
   obtain ⟨rfl, -⟩ := h
-  have hn0 : (tx.getAccount authority).nonce = 0 :=
-    Nat.eq_zero_of_not_pos fun hpos => hplain (.inl hpos)
-  have hc0 : (tx.getAccount authority).codeHash = EMPTY_CODE_HASH :=
-    Classical.byContradiction fun hne => hplain (.inr hne)
   have hnc_self : HasNonceOrCode bumped authority := by
     left
     rw [hself]
@@ -153,8 +128,7 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       (TransactionState.createdAccounts_setCode hcode)
   have hstore : (bumped.storageWrites = tx.storageWrites ∧
         bumped.storageClears = tx.storageClears) ∨
-      (tx.getAccount authority = EMPTY_ACCOUNT ∧
-        bumped.storageWrites = tx.storageWrites.erase authority ∧
+      (bumped.storageWrites = tx.storageWrites.erase authority ∧
         bumped.storageClears = tx.storageClears.insert authority) := by
     have hbump : bumped.storageWrites = coded.storageWrites ∧
         bumped.storageClears = coded.storageClears := by
@@ -164,39 +138,30 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
         simp [EMPTY_ACCOUNT] at hn
     rw [hbump.1, hbump.2]
     -- From Paris, setting the code deletes an account that it leaves empty, with its storage.
-    rcases storage_setCode hcode with hs | ⟨he, hs⟩
-    · exact .inl hs
-    -- That can happen only to an account with nonce 0 and balance 0.
-    --
-    -- Its code is then empty or a delegation.
-    · exact .inr ⟨eq_empty_of_setCodeHash hn0 hc0 he, hs⟩
-  have hstore' : (bumped.storageWrites = tx.storageWrites ∧
-        bumped.storageClears = tx.storageClears) ∨
-      (bumped.storageWrites = tx.storageWrites.erase authority ∧
-        bumped.storageClears = tx.storageClears.insert authority) :=
-    hstore.imp id fun hs => hs.2
+    exact (storage_setCode hcode).imp id fun hs => hs.2
   -- The authority had neither a nonce nor code, so the new code and the new nonce keep both.
-  refine ⟨⟨⟨hp.trans valid.parent, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩,
+  refine ⟨⟨⟨hp.trans valid.parent, ?_, ?_, ?_, ?_⟩, ?_⟩,
     (keepsNonceOrCode_setCode_of_not_hasNonceOrCode hplain hcode).trans
       (keepsNonceOrCode_incrementNonce hnonce)⟩
   · intro hash bytes hread
     rw [TransactionState.getCode_modifyState hnonce] at hread
     exact code_setCode valid.code hcode hash bytes hread
-  · intro other hempty key
-    have hne : other ≠ authority := fun heq => hempty (heq ▸ hnc_self)
-    rw [(storage_of_ne hp hne hstore' key).2]
-    exact valid.emptyStorage other
-      (fun hc => hempty ((HasNonceOrCode.congr (hacc other hne)).mpr hc)) key
-  · intro other hmem key
-    rcases hstore with ⟨-, hc⟩ | ⟨hempty, -, hc⟩
-    · exact valid.clears other (hc ▸ hmem) key
+  · intro other hnot
+    have hne : other ≠ authority := fun heq => hnot (heq ▸ hnc_self)
+    have hnot' : ¬HasNonceOrCode tx other :=
+      fun hc => hnot ((HasNonceOrCode.congr (hacc other hne)).mpr hc)
+    obtain ⟨hb0, hslot⟩ := valid.plain other hnot'
+    refine ⟨hb0, fun key => ?_⟩
+    rw [slot_of_ne hne hstore key]
+    exact hslot key
+  · intro other hmem
+    rcases hstore with ⟨-, hc⟩ | ⟨-, hc⟩
+    · exact valid.clears other (hc ▸ hmem)
     · rw [hc, Std.ExtTreeSet.mem_insert, Std.compare_eq_iff_eq] at hmem
       rcases hmem with rfl | hmem
-      -- An empty account holds no storage.
-      --
-      -- So setting the code wipes no nonzero word.
-      · exact valid.blockStorage_of_not_hasNonceOrCode (fun hc => hc.ne_empty hempty) key
-      · exact valid.clears other hmem key
+      -- The wiped authority was plain, so it had no nonce or code in the block.
+      · exact (valid.plain _ hplain).1
+      · exact valid.clears other hmem
   · intro other code hn hc hv
     have hne : other ≠ authority := by
       rintro rfl
@@ -204,18 +169,8 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       exact Nat.succ_ne_zero _ hn
     rw [hacc other hne] at hn hc ⊢
     exact valid.delegations other code hn hc hv
-  · intro other hnot
-    have hne : other ≠ authority := fun heq => hnot (heq ▸ hnc_self)
-    have hnot' : ¬HasNonceOrCode tx other :=
-      fun hc => hnot ((HasNonceOrCode.congr (hacc other hne)).mpr hc)
-    obtain ⟨hb0, hbal, hslot⟩ := valid.plain other hnot'
-    refine ⟨hb0, ?_, fun key => ?_⟩
-    · rw [hacc other hne]
-      exact hbal
-    · rw [(storage_of_ne hp hne hstore' key).1]
-      exact hslot key
-  · intro other hmem key
-    exact valid.created other (hcreated ▸ hmem) key
+  · intro other hmem
+    exact valid.created other (hcreated ▸ hmem)
 
 /-- An authority that takes an authorization and has nonce 0 has no nonce or code.
 
@@ -450,50 +405,54 @@ theorem processMessageCall_rebuildState [LawfulGasMeter Meter]
 
 /-! ## The deletions -/
 
-/-- A wipe of one account whose storage was zero in the block keeps what the end needs.
+/-- Dropping the writes of one address keeps the writes of every other address. -/
+private theorem slot_erase (writes : StorageMap) (address other : Address) (key : Bytes32) :
+    StorageMap.slot (writes.erase address) other key =
+      if address = other then none else writes.slot other key := by
+  simp only [StorageMap.slot, Std.ExtTreeMap.getElem?_erase, Std.compare_eq_iff_eq]
+  split <;> rfl
 
-The account is left with no code, and every other account and its storage stay. -/
+/-- A wipe of one account with no nonce or code in the block keeps what the end needs.
+
+The account is left with no code and no writes, and every other account and its writes stay. -/
 private theorem _root_.EthLib.Execution.Evm.RebuildEnd.of_wipe
     {block : BlockState} {tx tx' : TransactionState}
     {address : Address} (valid : RebuildEnd block tx)
-    (hblock : ∀ key, (TransactionState.ofBlock block).getStorage address key = 0)
+    (hblock : ¬HasNonceOrCode (TransactionState.ofBlock block) address)
     (hp : tx'.parent = tx.parent) (hcode : tx'.getCode = tx.getCode)
     (hacc : ∀ other, other ≠ address → tx'.getAccount other = tx.getAccount other)
-    (hstore : ∀ other, other ≠ address → ∀ key,
-      tx'.getStorage other key = tx.getStorage other key)
-    (hzero : ∀ key, tx'.getStorage address key = 0)
+    (hslot : ∀ other key, tx'.storageWrites.slot other key =
+      if address = other then none else tx.storageWrites.slot other key)
     (hhash : (tx'.getAccount address).codeHash = EMPTY_CODE_HASH)
     (hclears : ∀ other, other ∈ tx'.storageClears →
       other = address ∨ other ∈ tx.storageClears) :
     RebuildEnd block tx' := by
   refine ⟨hp.trans valid.parent, fun hash code hread => valid.code hash code (hcode ▸ hread),
-    fun other hempty key => ?_, fun other hmem key => ?_, fun other code hn hc hv => ?_⟩
-  · by_cases hne : other = address
+    fun other hempty => ?_, fun other hmem => ?_, fun other code hn hc hv => ?_⟩
+  · by_cases hne : address = other
     · subst hne
-      exact hzero key
-    · rw [hstore other hne key]
-      exact valid.emptyStorage other
-        (fun hc => hempty ((HasNonceOrCode.congr (hacc other hne)).mpr hc)) key
+      exact ⟨hblock, fun key => by simp only [hslot, ↓reduceIte]⟩
+    · obtain ⟨hb0, hwrites⟩ := valid.plain other
+        (fun hc => hempty ((HasNonceOrCode.congr (hacc other (Ne.symm hne))).mpr hc))
+      exact ⟨hb0, fun key => by simp only [hslot, hne, ↓reduceIte, hwrites key]⟩
   · rcases hclears other hmem with rfl | hmem
-    · exact hblock key
-    · exact valid.clears other hmem key
+    · exact hblock
+    · exact valid.clears other hmem
   · have hne : other ≠ address := by
       rintro rfl
       exact hc hhash
     rw [hacc other hne] at hn hc ⊢
     exact valid.delegations other code hn hc hv
 
-/-- Deleting an account whose storage was zero in the block keeps what the end needs. -/
+/-- Deleting an account with no nonce or code in the block keeps what the end needs. -/
 private theorem _root_.EthLib.Execution.Evm.RebuildEnd.destroyAccount
     {block : BlockState} {tx : TransactionState}
     {address : Address} (valid : RebuildEnd block tx)
-    (hblock : ∀ key, (TransactionState.ofBlock block).getStorage address key = 0) :
+    (hblock : ¬HasNonceOrCode (TransactionState.ofBlock block) address) :
     RebuildEnd block (tx.destroyAccount address) := by
-  refine valid.of_wipe hblock rfl rfl (fun other hne => ?_) (fun other hne key => ?_)
-    (fun key => ?_) ?_ (fun other hmem => ?_)
+  refine valid.of_wipe hblock rfl rfl (fun other hne => ?_)
+    (fun other key => slot_erase _ _ _ _) ?_ (fun other hmem => ?_)
   · simp only [TransactionState.getAccount_destroyAccount, hne, ↓reduceIte]
-  · simp only [TransactionState.getStorage_destroyAccount, hne, ↓reduceIte]
-  · simp only [TransactionState.getStorage_destroyAccount, ↓reduceIte]
   · simp only [TransactionState.getAccount_destroyAccount, ↓reduceIte]
     rfl
   · simp only [TransactionState.destroyAccount, TransactionState.setAccount,
@@ -502,25 +461,30 @@ private theorem _root_.EthLib.Execution.Evm.RebuildEnd.destroyAccount
     · exact .inl rfl
     · exact .inr hmem
 
-/-- Clearing an account whose storage was zero in the block keeps what the end needs. -/
+/-- Clearing an account with no nonce or code in the block keeps what the end needs. -/
 private theorem _root_.EthLib.Execution.Evm.RebuildEnd.clearAccountPreservingBalance
     {block : BlockState}
     {tx tx' : TransactionState} {address : Address} (valid : RebuildEnd block tx)
-    (hblock : ∀ key, (TransactionState.ofBlock block).getStorage address key = 0)
+    (hblock : ¬HasNonceOrCode (TransactionState.ofBlock block) address)
     (h : tx.clearAccountPreservingBalance fork address = .ok tx') :
     RebuildEnd block tx' := by
   have hm : (tx.destroyStorage address).modifyState fork address
       (fun account => .ok { account with nonce := 0, codeHash := EMPTY_CODE_HASH }) = .ok tx' := h
   refine valid.of_wipe hblock (TransactionState.parent_clearAccountPreservingBalance h)
     (by rw [TransactionState.getCode_modifyState hm]; rfl) (fun other hne => ?_)
-    (fun other hne key => ?_) (TransactionState.getStorage_clearAccountPreservingBalance h) ?_
-    (fun other hmem => ?_)
+    (fun other key => ?_) ?_ (fun other hmem => ?_)
   · simp only [TransactionState.getAccount,
       TransactionState.getAccountOptional_modifyState_of_ne hm hne,
       TransactionState.getAccountOptional_destroyStorage]
-  · rw [TransactionState.getStorage_modifyState hm]
-    simp only [hne, false_and, ↓reduceIte]
-    exact TransactionState.getStorage_destroyStorage_of_ne _ hne key
+  -- The wipe drops the writes of the account, and a deletion after it drops them again.
+  · rcases storage_modifyState hm with ⟨hw, -⟩ | ⟨-, hw, -⟩
+    · rw [hw]
+      exact slot_erase _ _ _ _
+    · rw [hw, slot_erase]
+      by_cases hne : address = other
+      · simp only [hne, ↓reduceIte]
+      · simp only [hne, ↓reduceIte]
+        exact (slot_erase _ _ _ _).trans (by simp only [hne, ↓reduceIte])
   · rw [TransactionState.getAccount_clearAccountPreservingBalance h]
   · have hmid : ∀ x, x ∈ (tx.destroyStorage address).storageClears →
         x = address ∨ x ∈ tx.storageClears := by
@@ -539,10 +503,9 @@ private theorem _root_.EthLib.Execution.Evm.RebuildEnd.clearAccountPreservingBal
 
 /-- The deletions of a list of accounts keep what the end needs.
 
-Each account in the list held no nonzero storage word in the block. -/
+Each account in the list had no nonce or code in the block. -/
 private theorem foldlM_delete_rebuildEnd {block : BlockState} {l : List Address}
-    (hblock : ∀ address ∈ l, ∀ key,
-      (TransactionState.ofBlock block).getStorage address key = 0) :
+    (hblock : ∀ address ∈ l, ¬HasNonceOrCode (TransactionState.ofBlock block) address) :
     ∀ {l' : List Address} {init final : TransactionState}, l' ⊆ l →
       l'.foldlM (fun state address =>
         if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
@@ -553,12 +516,12 @@ private theorem foldlM_delete_rebuildEnd {block : BlockState} {l : List Address}
     exact valid
   | address :: rest, _, _, hsub, h, valid => by
     obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-    have hzero := hblock address (hsub List.mem_cons_self)
+    have hplain := hblock address (hsub List.mem_cons_self)
     have vmid : RebuildEnd block mid := by
       split at hmid
-      · exact valid.clearAccountPreservingBalance hzero hmid
+      · exact valid.clearAccountPreservingBalance hplain hmid
       · cases hmid
-        exact valid.destroyAccount hzero
+        exact valid.destroyAccount hplain
     exact foldlM_delete_rebuildEnd hblock (fun x hx => hsub (List.mem_cons_of_mem _ hx)) h vmid
 
 /-- Deleting the accounts of a transaction keeps what its end needs.
@@ -577,7 +540,7 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
     --
     -- The deletion keeps the block and each code under its hash.
     --
-    -- An empty or wiped account still holds no nonzero word.
+    -- Each wipe is still at an account with no nonce or code in the block.
     --
     -- It also keeps every account with nonce 0 off delegations.
     RebuildEnd block state' := by
@@ -586,11 +549,11 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
   rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hdeleted
-  -- Each account to delete held no storage in the block.
+  -- Each account to delete was created in the transaction.
   --
-  -- So its deletion wipes no nonzero word.
-  have hblock : ∀ address ∈ output.accountsToDelete.toList, ∀ key,
-      (TransactionState.ofBlock block).getStorage address key = 0 :=
+  -- So it had no nonce or code in the block.
+  have hblock : ∀ address ∈ output.accountsToDelete.toList,
+      ¬HasNonceOrCode (TransactionState.ofBlock block) address :=
     fun address hmem => valid.created address (hcreated address (Std.ExtTreeSet.mem_toList.mp hmem))
   have vdel := foldlM_delete_rebuildEnd hblock (List.Subset.refl _) hdeleted valid.toRebuildEnd
   have hnil : output.touchedAccounts.toList = [] := by
@@ -611,13 +574,15 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
 private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {included : Included}
     {tx : Transaction} {output : TransactionOutput}
-    (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : runTransaction Meter env block included tx = .ok output) :
     RebuildEnd block output.state := by
   obtain ⟨target, bought, message, out, settled, hTarget, hBought, hMessage, hOutput, -,
     hSettle, hDeleted⟩ := runTransaction_eq_ok h
   -- Buying the gas keeps the rebuild property of the state on its block.
-  obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock valid delegations) hBought
+  obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock code delegations) hBought
   have hcaller : HasNonceOrCode bought message.caller := by
     rw [caller_transactionMessage hMessage]
     exact .inl hnonce
@@ -650,19 +615,23 @@ private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencu
       address hmem
     simp at hstart
 
-/-- From Dencun, a transaction on a block state that can be rebuilt keeps what its end needs.
+/-- From Dencun, a transaction keeps what its end needs.
 
-The block state before it must hold no delegation at an account with nonce 0. -/
+Each code read in the block state before it must have its hash.
+
+That state must hold no delegation at an account with nonce 0. -/
 theorem processTransaction_rebuildEnd (hfork : .dencun ≤ fork) {env : BlockEnvironment fork}
     {block : BlockState} {included : Included} {tx : Transaction} {output : TransactionOutput}
-    (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : processTransaction env block included tx = .ok output) :
     RebuildEnd block output.state := by
   rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h
-  · exact runTransaction_rebuildEnd hfork valid delegations h
-  · exact runTransaction_rebuildEnd hfork valid delegations h
+  · exact runTransaction_rebuildEnd hfork code delegations h
+  · exact runTransaction_rebuildEnd hfork code delegations h
 
 end EthLib.Execution.Transactions

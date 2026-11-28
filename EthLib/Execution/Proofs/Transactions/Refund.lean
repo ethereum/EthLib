@@ -9,7 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.StorageAt
 
 The message of a transaction starts with no cleared slot, so its counter ends at least at zero.
 
-That needs a block state where empty or missing accounts hold no storage, as EIP-7523 gives.
+That needs a block state where accounts with nonce 0 and no code, missing ones too, hold no storage.
 
 It also needs every delegation indicator to come with a nonce.
 
@@ -83,9 +83,12 @@ theorem NoStorageWrite.prepareFirstFrame {chainId : Nat} {message : Message fork
 
 /-- Under the rebuild property, a state with no write of storage has no cleared slot.
 
+No account with nonce 0 and no code may hold storage in the block state.
+
 A word that was not zero before the transaction comes from the block, and no wipe hid it. -/
 theorem clearedSlots_eq_empty {block : BlockState} {tx : TransactionState}
-    (valid : RebuildState block tx) (hw : NoStorageWrite tx) : tx.clearedSlots = ∅ := by
+    (valid : RebuildState block tx) (empty : Rebuildable block) (hw : NoStorageWrite tx) :
+    tx.clearedSlots = ∅ := by
   ext ⟨address, key⟩
   simp only [TransactionState.mem_clearedSlots, Finset.notMem_empty, iff_false, not_and]
   intro horig hzero
@@ -99,16 +102,22 @@ theorem clearedSlots_eq_empty {block : BlockState} {tx : TransactionState}
     simp only [TransactionState.getStorageOriginal, hcreated, ite_false]
     simp [TransactionState.getStorage, TransactionState.ofBlock, StorageMap.slot]
     rfl
+  -- A wipe is at an account with no nonce or code in the block, which holds no storage there.
+  have hwipe : ∀ other, other ∈ tx.storageClears →
+      ∀ key, (TransactionState.ofBlock block).getStorage other key = 0 := fun other hmem =>
+    empty.storage other (not_hasNonceOrCode_iff.mp (valid.clears other hmem)).1
+      (not_hasNonceOrCode_iff.mp (valid.clears other hmem)).2
   -- With no write, the word now is the word of the block too.
-  have hnow := valid.getStorage_of_slot_eq_none (hw address key)
+  have hnow := valid.getStorage_of_slot_eq_none hwipe (hw address key)
   rw [hnow, ← hblock] at hzero
   exact horig hzero
 
 /-- Under the rebuild property, a state with no write of storage counts no cleared slot. -/
 theorem nonceOrCodeClearedSlots_eq_empty {block : BlockState} {tx : TransactionState}
-    (valid : RebuildState block tx) (hw : NoStorageWrite tx) : nonceOrCodeClearedSlots tx = ∅ := by
+    (valid : RebuildState block tx) (empty : Rebuildable block) (hw : NoStorageWrite tx) :
+    nonceOrCodeClearedSlots tx = ∅ := by
   unfold nonceOrCodeClearedSlots nonceOrCodeSlots
-  rw [clearedSlots_eq_empty valid hw]
+  rw [clearedSlots_eq_empty valid empty hw]
   rfl
 
 /-! ## The message -/
@@ -117,13 +126,15 @@ theorem nonceOrCodeClearedSlots_eq_empty {block : BlockState} {tx : TransactionS
 
 The state that the message starts from must have the rebuild property and no write of storage.
 
+No account with nonce 0 and no code may hold storage in its block state.
+
 The substate must start with a counter of at least zero.
 
 The caller must have a nonce or code, and a call must run at its recipient. -/
 theorem prepareFirstFrame_refundCounter_nonneg [LawfulGasMeter Meter] {block : BlockState}
     {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
-    (valid : RebuildState block state) (hw : NoStorageWrite state)
+    (valid : RebuildState block state) (empty : Rebuildable block) (hw : NoStorageWrite state)
     (hcaller : HasNonceOrCode state message.caller)
     (htarget : ∀ target, message.target = some target → message.currentTarget = target)
     (hsub : 0 ≤ substate.refundCounter)
@@ -151,7 +162,7 @@ theorem prepareFirstFrame_refundCounter_nonneg [LawfulGasMeter Meter] {block : B
   obtain ⟨vfirst, -, hdep, hcode⟩ := prepareFirstFrame_rebuildState valid hcaller htarget hfirst
   have hzero : clearedRefund fork first.state = 0 := by
     unfold clearedRefund
-    rw [nonceOrCodeClearedSlots_eq_empty vfirst (hw.prepareFirstFrame hfirst)]
+    rw [nonceOrCodeClearedSlots_eq_empty vfirst empty (hw.prepareFirstFrame hfirst)]
     simp
   have hclear : ∀ (s : TransactionState), 0 ≤ clearedRefund fork s := fun s =>
     Int.mul_nonneg (Int.natCast_nonneg _) (Int.natCast_nonneg _)
@@ -177,7 +188,7 @@ The hypotheses on the state are those of the frame. -/
 theorem processMessageCall_refundCounter_nonneg [LawfulGasMeter Meter] {block : BlockState}
     {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
-    (valid : RebuildState block state) (hw : NoStorageWrite state)
+    (valid : RebuildState block state) (empty : Rebuildable block) (hw : NoStorageWrite state)
     (hcaller : HasNonceOrCode state message.caller)
     (htarget : ∀ target, message.target = some target → message.currentTarget = target)
     (hsub : 0 ≤ substate.refundCounter)
@@ -210,7 +221,7 @@ theorem processMessageCall_refundCounter_nonneg [LawfulGasMeter Meter] {block : 
   rw [hfirst] at h
   dsimp only at h
   obtain ⟨hcall, hcreate⟩ :=
-    prepareFirstFrame_refundCounter_nonneg valid hw hcaller htarget hsub hfirst
+    prepareFirstFrame_refundCounter_nonneg valid empty hw hcaller htarget hsub hfirst
   -- A frame that succeeds passes on its counter, which is not negative.
   have hframe : ∀ (evm : Evm fork Meter) (refund : Nat) (touched : Std.ExtTreeSet Address),
       (CallOutput.ofFrame evm refund touched).error = none →
@@ -246,7 +257,7 @@ theorem processMessageCall_refundCounter_nonneg [LawfulGasMeter Meter] {block : 
 
 It has the rebuild property and no write of storage, and its sender has a nonce.
 
-The block state before it must hold no storage at an empty or missing account.
+The block state before it must hold no storage at an account with nonce 0 and no code.
 
 It must hold no delegation indicator at an account with nonce 0. -/
 theorem buyGas_refundReady {env : BlockEnvironment fork} {block : BlockState}
@@ -254,12 +265,12 @@ theorem buyGas_refundReady {env : BlockEnvironment fork} {block : BlockState}
     (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : buyGas env (.ofBlock block) sender tx = .ok bought) :
     RebuildState block bought ∧ NoStorageWrite bought ∧ HasNonceOrCode bought sender := by
-  obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock valid delegations) h
+  obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock valid.code delegations) h
   exact ⟨vb, (noStorageWrite_ofBlock block).buyGas h, .inl hnonce⟩
 
 /-- A run of a transaction meets the hypotheses on the start of its message.
 
-Its block state must hold no storage at an empty or missing account.
+Its block state must hold no storage at an account with nonce 0 and no code.
 
 It must hold no delegation indicator at an account with nonce 0.
 
