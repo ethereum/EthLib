@@ -15,8 +15,6 @@ import Mathlib.Tactic.Ring
 
 Four words determine their integer, and their integer determines them.
 
-The bit that a shift and a mask read from the words is the bit of their integer.
-
 Four words and the eight 32-bit limbs of the shared Montgomery field hold the same integer.
 
 So a field on four words takes its laws from the shared field.
@@ -57,49 +55,6 @@ theorem Raw.val_injective : Function.Injective Raw.val := by
   simp only [Raw.mk.injEq]
   exact ⟨UInt64.toNat_inj.mp e0, UInt64.toNat_inj.mp e1, UInt64.toNat_inj.mp e2,
     UInt64.toNat_inj.mp e3⟩
-
-/-- Bit `r` of a word, by a shift and a mask, is bit `r` of its value. -/
-private theorem wordBit (w : UInt64) (r : Nat) (hr : r < 64) :
-    ((w >>> r.toUInt64) &&& 1 != 0) = w.toNat.testBit r := by
-  have hr' : r.toUInt64.toNat % 64 = r := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat']
-    omega
-  have h : ((w >>> r.toUInt64) &&& 1).toNat = (w.toNat >>> r) % 2 := by
-    rw [UInt64.toNat_and, UInt64.toNat_shiftRight, UInt64.toNat_one, Nat.and_one_is_mod, hr']
-  rw [Nat.testBit_eq_decide_div_mod_eq, ← Nat.shiftRight_eq_div_pow, Bool.eq_iff_iff,
-    bne_iff_ne, ne_eq, decide_eq_true_iff, ← UInt64.toNat_inj, h, UInt64.toNat_zero]
-  omega
-
-/-- The bit read from four words is the bit of their value. -/
-theorem Raw.bit_iff (k : Raw) (s : Nat) : k.bit s = true ↔ (k.val >>> s) % 2 = 1 := by
-  have h0 := k.w0.toNat_lt
-  have h1 := k.w1.toNat_lt
-  have h2 := k.w2.toNat_lt
-  have hb : ((k.val >>> s) % 2 = 1) ↔ k.val.testBit s = true := by
-    rw [Nat.testBit_eq_decide_div_mod_eq, ← Nat.shiftRight_eq_div_pow, decide_eq_true_iff]
-  rw [hb, Raw.val_nested, Nat.testBit_two_pow_mul_add _ h0]
-  simp only [Raw.bit]
-  split_ifs with c0 c1 c2 c3
-  · rw [wordBit _ _ (by omega), Nat.mod_eq_of_lt c0]
-  · rw [Nat.testBit_two_pow_mul_add _ h1, ite_eq_left (by omega), show s % 64 = s - 64 by omega,
-      wordBit _ _ (by omega)]
-  · rw [Nat.testBit_two_pow_mul_add _ h1, ite_eq_right (by omega),
-      Nat.testBit_two_pow_mul_add _ h2, ite_eq_left (by omega),
-      show s % 64 = s - 64 - 64 by omega, wordBit _ _ (by omega)]
-  · rw [Nat.testBit_two_pow_mul_add _ h1, ite_eq_right (by omega),
-      Nat.testBit_two_pow_mul_add _ h2, ite_eq_right (by omega),
-      show s % 64 = s - 64 - 64 - 64 by omega, wordBit _ _ (by omega)]
-  · rw [Nat.testBit_two_pow_mul_add _ h1, ite_eq_right (by omega),
-      Nat.testBit_two_pow_mul_add _ h2, ite_eq_right (by omega),
-      Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le k.w3.toNat_lt
-        (Nat.pow_le_pow_right (by decide) (by omega)))]
-    simp only [UInt64.zero_shiftRight, UInt64.zero_and, bne_self_eq_false]
-
-/-- Reading the bits of four words is reading the bits of their value. -/
-theorem Raw.bit_eq_testBit (k : Raw) : k.bit = k.val.testBit := by
-  funext s
-  apply Bool.eq_iff_iff.mpr
-  rw [Raw.bit_iff, Nat.testBit_eq_decide_div_mod_eq, decide_eq_true_eq, Nat.shiftRight_eq_div_pow]
 
 /-! ## Four words and eight limbs
 

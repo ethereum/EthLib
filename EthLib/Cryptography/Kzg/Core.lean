@@ -213,9 +213,10 @@ def verifyKzgProofWith (s : G2)
   --
   -- So the product by `z` runs in `G1`, over `Fp`, and not in `G2`, over `Fp2`.
   --
-  -- `P - [y]_1 + [z] proof = P + (-y) [1]_1 + [z] proof`, on decoded points.
-  let P_minus_y : G1 := Bls.G1.add commitmentG1 (Bls.G1.mul Bls.G1.generator (-y))
-  let lhs : G1 := Bls.G1.add P_minus_y (Bls.G1.mul proofG1 z)
+  -- `P - [y]_1 + [z] proof = P + ((-y) [1]_1 + [z] proof)`, on decoded points.
+  --
+  -- The two products share one chain of doublings.
+  let lhs : G1 := Bls.G1.add commitmentG1 (Bls.G1.mulAdd Bls.G1.generator (-y) proofG1 z)
   -- Here `[s]_2` is entry 1 of the monomial form of the `G2` setup, which the caller passes.
   --
   -- The proof is valid when `e(P - [y]_1 + [z] proof, -[1]_2) * e(proof, [s]_2) = 1`.

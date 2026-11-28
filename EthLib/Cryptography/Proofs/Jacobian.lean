@@ -74,37 +74,6 @@ theorem toZ_injective : Function.Injective (toZ (m := m)) := by
 
 namespace Coords
 
-section Steps
-
-variable {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
-
-/-- Starting one bit later is reading both scalars one bit later. -/
-theorem mulAddBits_succ_start (a : F) (p q pq : Coords F)
-    (kb lb : Nat → Bool) (fuel s : Nat) :
-    mulAddBits a p q pq kb lb fuel (s + 1) =
-      mulAddBits a p q pq (fun i => kb (i + 1)) (fun i => lb (i + 1)) fuel s := by
-  induction fuel generalizing s with
-  | zero => rfl
-  | succ fuel ih => simp only [mulAddBits, ih]
-
-/-- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`. -/
-theorem mulAddAux_succ (a : F) (p q pq : Coords F)
-    (fuel k l : Nat) :
-    mulAddAux a p q pq (fuel + 1) k l =
-      let acc := double a (mulAddAux a p q pq fuel (k / 2) (l / 2))
-      if k % 2 = 1 then
-        if l % 2 = 1 then add a acc pq else add a acc p
-      else if l % 2 = 1 then add a acc q else acc := by
-  -- Bit `i + 1` of a scalar is bit `i` of its half.
-  have hk : (fun i => k.testBit (i + 1)) = (k / 2).testBit :=
-    funext fun i => (Nat.testBit_div_two k i).symm
-  have hl : (fun i => l.testBit (i + 1)) = (l / 2).testBit :=
-    funext fun i => (Nat.testBit_div_two l i).symm
-  simp only [mulAddAux, mulAddBits, mulAddBits_succ_start, hk, hl, Nat.testBit_zero,
-    decide_eq_true_eq]
-
-end Steps
-
 /-! ## A change of field representation
 
 A change of field representation commutes with every formula, on every form.
@@ -195,20 +164,11 @@ theorem map_mulNat (a : F) (k : Nat) (p : Coords F) :
   rw [mulNat, mulNat, ScalarProduct.map_naf (map f) (map_double hf a) (map_add hf a),
     map_infinity hf, map_neg hf]
 
-/-- The simultaneous chain commutes with the change of representation, for every bit. -/
-theorem map_mulAddAux (a : F) (p q pq : Coords F) (fuel k l : Nat) :
-    (mulAddAux a p q pq fuel k l).map f =
-      mulAddAux (f a) (p.map f) (q.map f) (pq.map f) fuel k l := by
-  induction fuel generalizing k l with
-  | zero => exact map_infinity hf
-  | succ fuel ih =>
-    simp only [mulAddAux_succ]
-    split_ifs <;> simp only [map_add hf, map_double hf, ih]
-
 /-- Two products with shared doublings commute with the change of representation. -/
-theorem map_mulAdd (a : F) (fuel k : Nat) (p : Coords F) (l : Nat) (q : Coords F) :
-    (mulAdd a fuel k p l q).map f = mulAdd (f a) fuel k (p.map f) l (q.map f) := by
-  simp only [mulAdd, map_mulAddAux hf, map_add hf]
+theorem map_mulAdd (a : F) (k : Nat) (p : Coords F) (l : Nat) (q : Coords F) :
+    (mulAdd a k p l q).map f = mulAdd (f a) k (p.map f) l (q.map f) := by
+  rw [mulAdd, mulAdd, ScalarProduct.map_joint (map f) (map_double hf a) (map_add hf a),
+    map_infinity hf, map_neg hf, map_neg hf]
 
 /-- Normalizing and then reading the result is normalizing the read form, given the inverse. -/
 theorem map_toAffine {inv : F → F} {inv' : G → G} (hinv : ∀ x, f (inv x) = inv' (f x))
@@ -233,24 +193,6 @@ theorem toAffine_eq [NeZero m] (p : Jacobian m) :
         let zi := Fin.inverse p.z
         let zi2 := zi * zi
         some (p.x * zi2, p.y * zi2 * zi) := rfl
-
-/-- No bits leave the point at infinity. -/
-theorem mulAddAux_zero [NeZero m] (a : Fin m) (p q pq : Jacobian m) (k l : Nat) :
-    mulAddAux a p q pq 0 k l = infinity := rfl
-
-/-- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`. -/
-theorem mulAddAux_succ [NeZero m] (a : Fin m) (p q pq : Jacobian m) (fuel k l : Nat) :
-    mulAddAux a p q pq (fuel + 1) k l =
-      let acc := double a (mulAddAux a p q pq fuel (k / 2) (l / 2))
-      if k % 2 = 1 then
-        if l % 2 = 1 then add a acc pq else add a acc p
-      else if l % 2 = 1 then add a acc q else acc := by
-  simp only [mulAddAux, Coords.mulAddAux_succ]
-  split_ifs <;> rfl
-
-/-- The chain starts from `P + Q`. -/
-theorem mulAdd_eq [NeZero m] (a : Fin m) (fuel k : Nat) (p : Jacobian m) (l : Nat)
-    (q : Jacobian m) : mulAdd a fuel k p l q = mulAddAux a p q (add a p q) fuel k l := rfl
 
 /-! ## The point of a form over a field -/
 
@@ -522,64 +464,25 @@ theorem toPoint_mulNat (k : Nat) {p : Coords K} (hp : OnCurve A B p) :
     toPoint A B (mulNat A k p) = k • toPoint A B p :=
   (mulNat_spec h2 k hp).2
 
-/-- The joint chain stays on the curve. -/
-theorem onCurve_mulAddAux {p q pq : Coords K} (hp : OnCurve A B p) (hq : OnCurve A B q)
-    (hpq : OnCurve A B pq) (fuel k l : Nat) : OnCurve A B (mulAddAux A p q pq fuel k l) := by
-  induction fuel generalizing k l with
-  | zero => exact onCurve_infinity
-  | succ fuel ih =>
-    have hacc := (double_spec h2 (ih (k / 2) (l / 2))).1
-    simp only [mulAddAux_succ]
-    split_ifs
-    · exact (add_spec h2 hacc hpq).1
-    · exact (add_spec h2 hacc hp).1
-    · exact (add_spec h2 hacc hq).1
-    · exact hacc
+/-- Two products with shared doublings stay on the curve, and they compute `k P + l Q`. -/
+theorem mulAdd_spec (k l : Nat) {p q : Coords K} (hp : OnCurve A B p) (hq : OnCurve A B q) :
+    OnCurve A B (mulAdd A k p l q) ∧
+      toPoint A B (mulAdd A k p l q) = k • toPoint A B p + l • toPoint A B q :=
+  ScalarProduct.joint_spec (OnCurve A B) (toPoint A B) (fun _ hq => double_spec h2 hq)
+    (fun _ _ hq hr => add_spec h2 hq hr) onCurve_infinity
+    (toPoint_of_z_eq_zero (rfl : (infinity : Coords K).z = 0)) hp (neg_spec hp).1
+    (neg_spec hp).2 hq (neg_spec hq).1 (neg_spec hq).2 k l
 
-/-- The joint chain computes `k P + l Q`, when `pq` is `P + Q` and `k, l < 2^fuel`. -/
-theorem toPoint_mulAddAux {p q pq : Coords K} (hp : OnCurve A B p) (hq : OnCurve A B q)
-    (hpq : OnCurve A B pq) (hsum : toPoint A B pq = toPoint A B p + toPoint A B q)
-    (fuel k l : Nat) (hk : k < 2 ^ fuel) (hl : l < 2 ^ fuel) :
-    toPoint A B (mulAddAux A p q pq fuel k l) = k • toPoint A B p + l • toPoint A B q := by
-  induction fuel generalizing k l with
-  | zero =>
-    obtain rfl : k = 0 := by simpa using hk
-    obtain rfl : l = 0 := by simpa using hl
-    simp [mulAddAux, mulAddBits, toPoint_of_z_eq_zero (rfl : (infinity : Coords K).z = 0)]
-  | succ fuel ih =>
-    have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
-    have hl2 : l / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hl; omega
-    have hrest := onCurve_mulAddAux h2 hp hq hpq fuel (k / 2) (l / 2)
-    obtain ⟨hacc, hdbl⟩ := double_spec h2 hrest
-    rw [ih (k / 2) (l / 2) hk2 hl2] at hdbl
-    -- `k = 2 (k / 2) + k mod 2`, and likewise for `l`.
-    have ek := Nat.div_add_mod k 2
-    have el := Nat.div_add_mod l 2
-    simp only [mulAddAux_succ]
-    split_ifs with hk1 hl1 hl1
-    · rw [(add_spec h2 hacc hpq).2, hdbl, hsum]
-      conv_rhs => rw [← ek, ← el, hk1, hl1]
-      module
-    · rw [(add_spec h2 hacc hp).2, hdbl]
-      conv_rhs => rw [← ek, ← el, hk1, show l % 2 = 0 by omega]
-      module
-    · rw [(add_spec h2 hacc hq).2, hdbl]
-      conv_rhs => rw [← ek, ← el, show k % 2 = 0 by omega, hl1]
-      module
-    · rw [hdbl]
-      conv_rhs => rw [← ek, ← el, show k % 2 = 0 by omega, show l % 2 = 0 by omega]
-      module
+/-- Two products with shared doublings stay on the curve. -/
+theorem onCurve_mulAdd (k l : Nat) {p q : Coords K} (hp : OnCurve A B p)
+    (hq : OnCurve A B q) : OnCurve A B (mulAdd A k p l q) :=
+  (mulAdd_spec h2 k l hp hq).1
 
-/-- Simultaneous multiplication stays on the curve. -/
-theorem onCurve_mulAdd (fuel k l : Nat) {p q : Coords K} (hp : OnCurve A B p)
-    (hq : OnCurve A B q) : OnCurve A B (mulAdd A fuel k p l q) :=
-  onCurve_mulAddAux h2 hp hq (add_spec h2 hp hq).1 fuel k l
-
-/-- Simultaneous multiplication computes `k P + l Q`, when `k, l < 2^fuel`. -/
-theorem toPoint_mulAdd (fuel k l : Nat) {p q : Coords K} (hp : OnCurve A B p)
-    (hq : OnCurve A B q) (hk : k < 2 ^ fuel) (hl : l < 2 ^ fuel) :
-    toPoint A B (mulAdd A fuel k p l q) = k • toPoint A B p + l • toPoint A B q :=
-  toPoint_mulAddAux h2 hp hq (add_spec h2 hp hq).1 (add_spec h2 hp hq).2 fuel k l hk hl
+/-- Two products with shared doublings compute `k P + l Q`. -/
+theorem toPoint_mulAdd (k l : Nat) {p q : Coords K} (hp : OnCurve A B p)
+    (hq : OnCurve A B q) :
+    toPoint A B (mulAdd A k p l q) = k • toPoint A B p + l • toPoint A B q :=
+  (mulAdd_spec h2 k l hp hq).2
 
 end Field
 
@@ -714,13 +617,12 @@ theorem map_mulNat (k : Nat) (p : Jacobian m) :
 
 omit [(ShortWeierstrass.curve A B).IsElliptic] in
 include ha in
-/-- The joint chain commutes with the value in `ZMod m`. -/
-theorem map_mulAddAux (p q pq : Jacobian m) (fuel k l : Nat) :
-    (mulAddAux a p q pq fuel k l).toCoords.map toZ =
-      Coords.mulAddAux A (p.toCoords.map toZ) (q.toCoords.map toZ) (pq.toCoords.map toZ)
-        fuel k l := by
+/-- Two products with shared doublings commute with the value in `ZMod m`. -/
+theorem map_mulAdd (k : Nat) (p : Jacobian m) (l : Nat) (q : Jacobian m) :
+    (mulAdd a k p l q).toCoords.map toZ =
+      Coords.mulAdd A k (p.toCoords.map toZ) l (q.toCoords.map toZ) := by
   rw [← ha]
-  exact Coords.map_mulAddAux toZ_embedding a p.toCoords q.toCoords pq.toCoords fuel k l
+  exact Coords.map_mulAdd toZ_embedding a k p.toCoords l q.toCoords
 
 include ha h2
 
@@ -754,33 +656,18 @@ theorem toPoint_mulNat (k : Nat) {p : Jacobian m} (hp : OnCurve A B p) :
 
 /-! ## Two scalar multiplications with shared doublings -/
 
-/-- The joint chain stays on the curve. -/
-theorem onCurve_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q)
-    (hpq : OnCurve A B pq) (fuel k l : Nat) : OnCurve A B (mulAddAux a p q pq fuel k l) := by
-  rw [onCurve_iff, map_mulAddAux ha]
-  exact Coords.onCurve_mulAddAux h2 (onCurve_iff.mp hp) (onCurve_iff.mp hq) (onCurve_iff.mp hpq)
-    fuel k l
+/-- Two products with shared doublings stay on the curve. -/
+theorem onCurve_mulAdd (k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
+    (hq : OnCurve A B q) : OnCurve A B (mulAdd a k p l q) := by
+  rw [onCurve_iff, map_mulAdd ha]
+  exact Coords.onCurve_mulAdd h2 k l (onCurve_iff.mp hp) (onCurve_iff.mp hq)
 
-/-- The joint chain computes `k P + l Q`, when `pq` is `P + Q` and `k, l < 2^fuel`. -/
-theorem toPoint_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q)
-    (hpq : OnCurve A B pq) (hsum : toPoint A B pq = toPoint A B p + toPoint A B q)
-    (fuel k l : Nat) (hk : k < 2 ^ fuel) (hl : l < 2 ^ fuel) :
-    toPoint A B (mulAddAux a p q pq fuel k l) = k • toPoint A B p + l • toPoint A B q := by
-  rw [toPoint_eq, toPoint_eq, toPoint_eq, map_mulAddAux ha]
-  rw [toPoint_eq, toPoint_eq, toPoint_eq] at hsum
-  exact Coords.toPoint_mulAddAux h2 (onCurve_iff.mp hp) (onCurve_iff.mp hq) (onCurve_iff.mp hpq)
-    hsum fuel k l hk hl
-
-/-- Simultaneous multiplication stays on the curve. -/
-theorem onCurve_mulAdd (fuel k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
-    (hq : OnCurve A B q) : OnCurve A B (mulAdd a fuel k p l q) :=
-  onCurve_mulAddAux ha h2 hp hq (add_spec ha h2 hp hq).1 fuel k l
-
-/-- Simultaneous multiplication computes `k P + l Q`, when `k, l < 2^fuel`. -/
-theorem toPoint_mulAdd (fuel k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
-    (hq : OnCurve A B q) (hk : k < 2 ^ fuel) (hl : l < 2 ^ fuel) :
-    toPoint A B (mulAdd a fuel k p l q) = k • toPoint A B p + l • toPoint A B q :=
-  toPoint_mulAddAux ha h2 hp hq (add_spec ha h2 hp hq).1 (add_spec ha h2 hp hq).2 fuel k l hk hl
+/-- Two products with shared doublings compute `k P + l Q`. -/
+theorem toPoint_mulAdd (k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
+    (hq : OnCurve A B q) :
+    toPoint A B (mulAdd a k p l q) = k • toPoint A B p + l • toPoint A B q := by
+  rw [toPoint_eq, toPoint_eq, toPoint_eq, map_mulAdd ha]
+  exact Coords.toPoint_mulAdd h2 k l (onCurve_iff.mp hp) (onCurve_iff.mp hq)
 
 end Law
 
