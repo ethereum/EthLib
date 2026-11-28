@@ -1666,7 +1666,7 @@ private theorem block_flip_balance {engine : ExecutionEngine preset fork}
         (CompKept.of_ledger (BlockLedger.ledger_processRandao hu3)).trans
           (CompKept.of_ledger (BlockLedger.ledger_processEth1Data hu4))
   have toRequests : CompKept u4 u12 := BlockCredits.compoundingKept_beforeConsolidations
-    early fulu electra matchedInput f5 f6 f7 f8 (by rw [Array.foldlM_toList]; exact hu9) hu10
+    early electra matchedInput f5 f6 f7 f8 (by rw [Array.foldlM_toList]; exact hu9) hu10
     (by rw [Array.foldlM_toList]; exact hu11) (by rw [Array.foldlM_toList]; exact hu12)
   obtain ⟨v0, found0, same0⟩ := (toInput.trans toRequests) key v found
   -- The consolidation requests, then the sync aggregate.

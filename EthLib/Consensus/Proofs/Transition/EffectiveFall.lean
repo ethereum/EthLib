@@ -2122,7 +2122,6 @@ theorem effectiveFall_le
     base seatReward seats sync score delay inactivity penalty syncP partials fall
     maskCap creditBound
   have altairP : .altair ≤ P.fork := Nat.le_trans (by decide) electra
-  have electraP : .pectra ≤ P.fork := electra
   have delayPos : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := withdrawDelay
   -- The branch of `y` leaves the epoch at one slot.
   have nextT : (getCurrentEpoch y.state).toNat = (getCurrentEpoch T.state).toNat + 1 := by
@@ -2133,7 +2132,7 @@ theorem effectiveFall_le
   have PT : P.fork = T.fork :=
     Run.fork_eq_of_same_epoch tailP (callEpoch.trans boundaryEpoch.symm)
   have ZT : z.fork = T.fork := Run.fork_eq_of_same_epoch toZ zEpoch
-  have electraT : .pectra ≤ T.fork := PT ▸ electraP
+  have electraT : .pectra ≤ T.fork := PT ▸ electra
   -- The registries on the branch of `y` are within the limit.
   have withinT : T.state.RegistryWithinLimit := Nat.le_trans tailS.registryLifecycle.size_le within
   have withinZ : z.state.RegistryWithinLimit :=
@@ -2190,7 +2189,7 @@ theorem effectiveFall_le
           caps val (Array.mem_of_getElem? read)
         have top : withdrawalMaxEffectiveBalance preset P.fork val ≤
             preset.MAX_EFFECTIVE_BALANCE_ELECTRA := by
-          simp only [withdrawalMaxEffectiveBalance, electraP, ↓reduceIte, getMaxEffectiveBalance]
+          simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
           split
           · exact UInt64.le_refl _
           · exact caps.compounding
@@ -2201,7 +2200,7 @@ theorem effectiveFall_le
       _ = owed.card * (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
           preset.MIN_ACTIVATION_BALANCE.toNat) := by simp
       _ ≤ maskCap := by
-        simp only [maskCap, electraP, ↓reduceIte]
+        simp only [maskCap, electra, ↓reduceIte]
         exact Nat.mul_le_mul_right _ owedCard
   · intro v activeV clearY
     -- The validator is not slashed at `y`, so at no state before it.

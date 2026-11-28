@@ -823,7 +823,7 @@ Not yet released.
   The pin's balance bound for a key that switches to compounding on the counting branch reads both.
 
 - `compoundingKept_beforeConsolidations` says that the operations of a block before its consolidation requests keep whether each validator compounds.
-  It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Fulu before Gloas.
+  It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Electra before Gloas.
   `ledger_depositWithdrawalRequests` says that the deposit requests and then the withdrawal requests of a payload move no balance and keep the credentials.
   `ledger_processConsolidationRequest` says that a consolidation request converts at most one validator and moves no other balance.
   `recordBalance_single` says that a recorded operation that succeeds runs its action at the input state and appends one event with its source, states and limits.
@@ -1379,14 +1379,15 @@ Not yet released.
 ### Changes that break callers
 
 - In Lean, the quorum drift bound and the effective-balance bounds that it reads hold from Electra, not only from Fulu (part of [#2056](https://github.com/ethereum/EthLib/issues/2056)).
-  Eight theorems take `(electra : .pectra ≤ _)` in place of `(fulu : .fusaka ≤ _)`, with the same position, premises and conclusion.
+  Eight theorems take `(electra : .pectra ≤ _)` in place of `(fulu : .fusaka ≤ _)`, with the same position, other premises and conclusion.
   They are `block_balances` and `processOperations_floor` (`Consensus/Proofs/Transition/BlockCredits.lean`), and `Run.withdrawableKept_of_same_epoch` and `Run.balanceCorrections_of_same_epoch` (`BranchLedger.lean`).
   They are also `effectiveFall_le` (`EffectiveFall.lean`), `effectiveRise_le` (`EffectiveRise.lean`), `quorumDrift_le_quorumReserve` (`Consensus/Proofs/ForkChoice/FastConfirmation/QuorumDriftBound.lean`) and `Execution.quorumDriftWithin` (`QuorumDrift.lean`).
   `Execution.confirmedRoot_covers` (`ConfirmedCallStep.lean`) takes `(beforeElectra : fork < .pectra → QuorumDriftWithin (e := e) horizon limit)` in place of `(fusaka : .fusaka ≤ fork)`.
   It derives quorum drift from Electra and takes it as that condition before Electra, so it holds at every fork under its other hypotheses.
   `ConfirmedCalls.StepCtx` drops its field `fusaka`.
+  `BlockCredits.compoundingKept_beforeConsolidations` (`BlockCredits.lean`) drops its unused binder `(fulu : .fusaka ≤ fork)` and holds from Electra and before Gloas.
   Migration: with `fulu` the former proof of `.fusaka ≤ _`, pass `Nat.le_trans (by decide : Fork.pectra ≤ .fusaka) fulu` to each of the eight.
-  For `Execution.confirmedRoot_covers`, pass `beforeElectra := fun h => absurd h (Nat.not_lt_of_ge (Nat.le_trans (by decide : Fork.pectra ≤ .fusaka) fulu))`, and build a `StepCtx` without `fusaka`.
+  For `Execution.confirmedRoot_covers`, pass `beforeElectra := fun h => absurd h (Nat.not_lt_of_ge (Nat.le_trans (by decide : Fork.pectra ≤ .fusaka) fulu))`, build a `StepCtx` without `fusaka`, and delete the `fulu` argument of `compoundingKept_beforeConsolidations`.
 
 - In Lean, the rebuild property of a transaction state no longer speaks of storage words ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Evm.RebuildEnd` (`Execution/Proofs/Evm/Call/Rebuild.lean`) loses `emptyStorage`; its `plain` field, moved from `Evm.RebuildState`, loses the balance, and its `clears`, like `RebuildState.created`, now says that the account had no nonce or code in the block state.

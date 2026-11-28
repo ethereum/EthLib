@@ -1083,7 +1083,6 @@ theorem effectiveRise_le
     proposers depositRecipients recipients debited transfers depositGain slashBack syncP creditMax
     crossing headroom debitedCard offDebited capsKept
   have altair : .altair ≤ F := Nat.le_trans (by decide) electra
-  have electraF : .pectra ≤ F := Nat.le_trans (by decide) electra
   -- The branch of `y` leaves the epoch at one slot, from its last state `z` in the epoch.
   obtain ⟨z, z', toZ, edge, fromZ', zEpoch, z'Epoch⟩ := Run.split_next tailS next
   have zFork : z.fork = F := Run.fork_eq_of_same_epoch toZ zEpoch
@@ -1150,7 +1149,7 @@ theorem effectiveRise_le
     scoredOk, rewardedOk, lower, pendingOk, resetSlot, resetSize, resetActive, resetKept,
     resetLife, resetWd, resetSlashed, resetExits, resetMatch, resetHolds, resetQueue, resetCarry,
     updateBound⟩ :=
-    rise_edge edge altair electraF nextZ
+    rise_edge edge altair electra nextZ
   -- The sums of effective balances active in an epoch up to the fixed one read the same.
   have sumPR : ∀ ep ≤ activityFixedEpoch r,
       ∑ i ∈ (Finset.range q.validators.data.size).filter (fun i => isActiveAt q ep i = true),
@@ -1186,7 +1185,7 @@ theorem effectiveRise_le
   obtain ⟨T, totalOk⟩ : ∃ T, getTotalActiveBalance q = .ok T := by
     have pending := pendingOk
     unfold processPendingBalances at pending
-    simp only [electraF, ↓reduceDIte] at pending
+    simp only [electra, ↓reduceDIte] at pending
     obtain ⟨deposited, depositedOk, -⟩ := bind_ok_iff.mp pending
     obtain ⟨churn, -, -, -, -, -, -, churned, -⟩ := pendingDeposits_pass depositedOk
     rw [totalPR, ← totalZR, ← totalResetZ]
@@ -1344,7 +1343,6 @@ theorem effectiveRise_le
         (∀ i ∉ pdKeys, pd i = 0) ∧ csKeys.card ≤ due.length ∧ (∀ i ∉ csKeys, cs i = 0) ∧
         ∑ i ∈ positions with upcoming i, pd i ≤ depositCredit ∧
         ∑ i ∈ positions with upcoming i, cs i ≤ dueStake := by
-    have electra := electraF
     unfold processPendingBalances at pendingOk
     simp only [electra, ↓reduceDIte] at pendingOk
     obtain ⟨deposited, depositedOk, consolidatedOk⟩ := bind_ok_iff.mp pendingOk
@@ -1521,7 +1519,7 @@ theorem effectiveRise_le
   obtain ⟨debS, creditedKeys, pc, dep, -, -, -, upS, -, electraDep, -,
     ⟨slashedNow, slashedFacts, pcSlashed⟩, converted,
     ⟨proposerKeys, depositKeys, credSplit, propCard, -, pcOff, -⟩, -, -, -⟩ := bc
-  have depZero : ∀ v, dep v = 0 := electraDep electraF
+  have depZero : ∀ v, dep v = 0 := electraDep electra
   -- The reads of the branch of `y` are those of `P`.
   have totalZeq : totalZ = totalGwei := by
     simp only [totalZ, stateZ, totalGwei, state, totalZR, totalPR]
@@ -1601,7 +1599,7 @@ theorem effectiveRise_le
   -- The largest effective balances are at most the largest of the fork.
   have capLe : ∀ v : Validator, (withdrawalMaxEffectiveBalance preset F v).toNat ≤ capMax := by
     intro v
-    simp only [capMax, electraF, ↓reduceIte, withdrawalMaxEffectiveBalance, getMaxEffectiveBalance]
+    simp only [capMax, electra, ↓reduceIte, withdrawalMaxEffectiveBalance, getMaxEffectiveBalance]
     split
     · exact Nat.le_refl _
     · exact UInt64.le_iff_toNat_le.mp caps.compounding
@@ -1668,7 +1666,7 @@ theorem effectiveRise_le
       intro le _
       have low : preset.MIN_ACTIVATION_BALANCE.toNat ≤
           (withdrawalMaxEffectiveBalance preset F vR).toNat := by
-        simp only [withdrawalMaxEffectiveBalance, electraF, ↓reduceIte, getMaxEffectiveBalance]
+        simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
         split
         · exact UInt64.le_iff_toNat_le.mp caps.compounding
         · exact Nat.le_refl _
@@ -1864,7 +1862,7 @@ theorem effectiveRise_le
     refine (Finset.card_le_card sub).trans ?_
     have union := Finset.card_union_le (proposerKeys.image UInt64.toNat ∪ pdKeys) csKeys
     have union' := Finset.card_union_le (proposerKeys.image UInt64.toNat) pdKeys
-    simp only [recipients, depositRecipients, electraF, ↓reduceIte]
+    simp only [recipients, depositRecipients, electra, ↓reduceIte]
     omega
   have cardD : (positions.filter (fun i => upcoming i = true) ∩
       debitedKeys.image UInt64.toNat).card ≤ debited :=

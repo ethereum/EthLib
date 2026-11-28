@@ -866,12 +866,12 @@ private theorem credited_processOperations {body : BeaconBlockBody preset fork} 
 
 /-- A block's operations before its consolidation requests keep whether each validator compounds.
 
-This holds from Fulu and before Gloas, from a state whose balances match its validators. -/
+This holds from Electra and before Gloas, from a state whose balances match its validators. -/
 theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork}
     {parent : Slot} {before : fork < .hegota}
     {proposed attested voted deposited exited changed requested withdrawn :
       BeaconState preset fork}
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (electra : .pectra ≤ fork)
+    (early : fork < .glamsterdam) (electra : .pectra ≤ fork)
     (matched : BalancesMatch s)
     (proposedOk : body.proposerSlashings.data.toList.foldlM
       (processProposerSlashing config checks) s = .ok proposed)
@@ -893,8 +893,7 @@ theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork
       ∃ later, withdrawn.validators.data[v.toNat]? = some later ∧
         hasCompoundingWithdrawalCredential later =
           hasCompoundingWithdrawalCredential validator := by
-  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix (Nat.le_trans (by decide) fulu) matched
-    proposedOk
+  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix electra matched proposedOk
     attestedOk votedOk depositedOk exitedOk changedOk
   have both := ops.ledger.trans
     (ledger_depositWithdrawalRequests (electra := electra) requestedOk withdrawnOk)

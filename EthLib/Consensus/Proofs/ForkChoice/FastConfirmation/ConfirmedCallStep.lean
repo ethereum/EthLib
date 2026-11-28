@@ -1185,6 +1185,8 @@ Every up-to-date honest head descends from it, from the slot after the last call
 The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence.
 
 The evidence is historical, cross-store direct-safety, cross-store justified or held-state finality.
+
+Before Electra it also assumes that each honest call's voters keep their stake up to its reserve.
 -/
 theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
