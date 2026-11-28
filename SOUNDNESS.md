@@ -4573,10 +4573,12 @@ The successor slot and its start time are read successfully.
 An up-to-date honest receiver reads its head at an event from that next start through the limit.
 The caller's finalized root is an ancestor of that head, unless honest stores collide or give cross-store direct-safety evidence by the limit.
 `Execution.finalized_ancestor_of_heads` in the same file proves the ancestry alone.
-In place of the run, preset and stake hypotheses, it assumes that honest stores agree on blocks and read each other's finality through the limit.
+In place of the run, the direct-safety parameters, the horizon, anchor-boundary, anchor-parent, pre-upgrade and stake hypotheses, it assumes an invariant anchor state, nonempty epochs and two epochs of block-root history.
+It also assumes that honest stores agree on blocks and read each other's finality through the limit.
 
-For both starts, the evidence counts drift from the anchor, so on a long execution with enough churn since the anchor it holds with no accountable key.
+For `Execution.observedRestart_covers_or_evidence` and `Execution.finalized_ancestor_of_heads_or_evidence`, the evidence counts drift from the anchor, so on a long execution with enough churn since the anchor it holds with no accountable key.
 Neither theorem shows that the evidence is one third of slashable stake, and neither covers honest stores that hold states past the next scheduled fork.
+The fact-form core has no evidence alternative and no fork-boundary hypothesis.
 
 `Execution.carrier_delivered` in the same file delivers a held block and its state; a private lemma orders the epochs for the fallback.
 Both assume synchrony, delayed block admission from time zero through the limit, nonempty epochs and at least two epochs of block-root history.

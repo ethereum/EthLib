@@ -153,7 +153,8 @@ Not yet released.
   The slot duration is positive.
   The result does not cover executions whose honest stores hold states past the next scheduled fork.
   The evidence counts drift from the anchor, so with enough churn since the anchor it holds with no accountable key; it is not shown to be one third of slashable stake.
-  `Execution.finalized_ancestor_of_heads`, in the same file, proves the ancestry alone when honest stores agree on blocks and read each other's finality, without the run and stake hypotheses.
+  `Execution.finalized_ancestor_of_heads`, in the same file, proves the ancestry alone, with no evidence alternative and none of the run, direct-safety parameter, horizon, anchor-boundary, anchor-parent, pre-upgrade and stake hypotheses.
+  It assumes instead an invariant anchor state, nonempty epochs, two epochs of block-root history, block agreement and cross-store finality reads through the limit.
   `Execution.carrier_delivered`, in the same file, is a new public theorem; it was private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
   It concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
   The sender and receiver are honest.

@@ -12,6 +12,8 @@ Source surplus reads the family only within one store.
 It needs each receiver's own finalized checkpoint on the chain of its own justified checkpoint.
 
 It also proves that the fallback to the finalized block stays on up-to-date honest heads.
+
+It needs block agreement and finality reads across stores, or else evidence holds.
 -/
 
 namespace EthLib.Consensus.Models.Network
@@ -280,7 +282,9 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
   · obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
     exact absurd (agree a ha b hb i j hi hj r left right leftFound rightFound) different
 
-/-- A delay later, each up-to-date honest receiver has justified a sender's finalized epoch. -/
+/-- An up-to-date honest receiver's justified epoch is at least an honest sender's finalized epoch.
+
+The receiver's event is at least a delay after the sender's, and by `last`. -/
 private theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -368,7 +372,9 @@ private theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {ancho
     exact UInt64.le_trans finalLe ((forward w receiver k).justified_le_of_pulledUp sound positive
       slots currentWOk blockHeld stateHeld run (UInt64.lt_of_lt_of_le earlier epochLe))
 
-/-- Given agreement and finality reads, a caller's finalized root is on later up-to-date heads. -/
+/-- With agreement and finality reads, an honest caller's finalized root is on later honest heads.
+
+Those heads are up to date, from the next slot's start through `last`. -/
 public theorem Execution.finalized_ancestor_of_heads {Δ last : ℕ} {anchor : Store preset fork}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
