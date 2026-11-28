@@ -275,7 +275,10 @@ private def variableRules (op : Op) (evm after : Evm fork Meter)
   | .exp => #[.exponent (nonzero 1)]
   | .keccak256 => #[.hash (nonzero 1)]
   | .calldatacopy | .codecopy | .returndatacopy | .mcopy => #[.copy (nonzero 2)]
-  | .extcodecopy => #[.copy (nonzero 3)] ++ externalCodeRules
+  | .extcodecopy =>
+    -- EIP-150, Specification: before Berlin, the copy pays a fixed base price at each fork.
+    #[.copy (nonzero 3)] ++ externalCodeRules ++
+      whenRule (fork < .berlin) (.fixedPrice (externalBaseCost fork false))
   | .extcodesize => externalCodeRules
   | .balance | .extcodehash => accountRules
   | .log n => #[.logData (nonzero 1)] ++ whenRule (n.val > 0) .logTopics

@@ -45,6 +45,16 @@ AMSTERDAM_JUMPDEST = (
 DENCUN_TLOAD = (
     "fixtures/state_tests/for_cancun/cancun/eip1153_tstore/basic_tload/basic_tload_gasprice.json"
 )
+EXTCODECOPY_BOUNDS = "frontier/opcodes/extcodecopy/extcodecopy_bounds.json"
+EXTCODECOPY_CASES = [
+    (f"fixtures/state_tests/for_frontier/{EXTCODECOPY_BOUNDS}", "Frontier", "frontier", 20),
+    (
+        f"fixtures/state_tests/for_tangerinewhistle/{EXTCODECOPY_BOUNDS}",
+        "TangerineWhistle",
+        "tangerineWhistle",
+        700,
+    ),
+]
 
 
 def test_cli_requires_assertions(tmp_path) -> None:
@@ -482,6 +492,9 @@ def test_vendored_dao_transition(observer) -> None:
         "homestead": 20,
         "daoFork": 25,
     }
+    # The accepted blocks contain 17 transactions before block 5 and 25 from block 5 on.
+    assert report.counts["homestead"].gas_rules["transaction.base.fixed"] == 17
+    assert report.counts["daoFork"].gas_rules["transaction.base.fixed"] == 25
     # Before the fork, four writes set a zero slot. From the fork, five writes pay the reset price.
     assert report.counts["homestead"].gas_rules["opcode.sstore.set-execution-charge"] == 4
     assert report.counts["daoFork"].gas_rules["opcode.sstore.reset-execution-charge"] == 5
@@ -776,6 +789,22 @@ def test_fixed_prices_are_counted_separately(archive, observer) -> None:
         assert rules["opcode.fixed-price.1"] == 1
         assert rules["opcode.fixed-price.100"] == transient_accesses
         assert rules["opcode.fixed-price.20"] == 0
+
+
+@pytest.mark.archive(catalogue.EXECUTION, *(case[0] for case in EXTCODECOPY_CASES))
+@pytest.mark.parametrize(("path", "network", "fork", "base_price"), EXTCODECOPY_CASES)
+def test_pinned_extcodecopy_fixed_charge(
+    archive, observer, path, network, fork, base_price
+) -> None:
+    name = (
+        "tests/frontier/opcodes/test_extcodecopy.py::"
+        f"test_extcodecopy_bounds[fork_{network}-state_test]"
+    )
+    case = Case("execution-spec-tests", "", network, "state_test", name, path)
+    counts = gas_coverage.replay_state(archive, case, observer)[fork]
+    # Three copies pay the base charge of the fork and a per-word charge.
+    assert counts.gas_rules["opcode.copy.per-word"] == 3
+    assert counts.gas_rules[f"opcode.fixed-price.{base_price}"] == 3
 
 
 @pytest.mark.archive(catalogue.EXECUTION, TRANSITION)
