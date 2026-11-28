@@ -165,7 +165,7 @@ theorem exists_mul_generator_of_keyValidatePoint {bytes : Vector UInt8 48} {P : 
         intro ha0
         subst ha0
         have hp0 : toPoint P = 0 := by
-          rw [ha, mul, Fr.val_zero, mulNat_def, ite_eq_left rfl, toPoint_zero]
+          rw [ha, mul, Fr.val_zero, Law.mulNat_zero, toPoint_zero]
         exact hinf ((isInfinity_eq_true_iff_toPoint_eq_zero hvalid).mpr hp0)
       · rw [show (!inSubgroup p) = true by simp [hsub]] at h
         cases h

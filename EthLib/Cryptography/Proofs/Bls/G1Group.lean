@@ -109,7 +109,7 @@ theorem toPoint_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) :
 theorem valid_mulNat {P : G1} (h : Valid P) (k : Nat) : Valid (mulNat P k) :=
   Law.valid_mulNat Fp.embedding 4 two_ne_zero' h k
 
-/-- The spec's double-and-add scalar multiplication is Mathlib's `ℕ` scalar action on the group.
+/-- The spec's scalar multiplication is Mathlib's `ℕ` scalar action on the group.
 
 The group is the curve group. -/
 theorem toPoint_mulNat {P : G1} (h : Valid P) (k : Nat) :

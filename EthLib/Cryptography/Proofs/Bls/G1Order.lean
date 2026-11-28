@@ -12,7 +12,7 @@ public import EthLib.Cryptography.Proofs.Bls.Fp2
 The trusted-setup proofs need three facts about the generator `g_1`.
 
 - The generator is a nonsingular point of the curve, which the kernel checks.
-- `[r] g_1 = 0`, which the kernel checks by running double and add.
+- `[r] g_1 = 0`, which the kernel checks by running the scalar product.
 - The map `s ↦ [s] g_1` is linear in `s`, so scalars mod `r` act on the span of `g_1`.
 -/
 
@@ -30,11 +30,7 @@ set_option maxRecDepth 8000
 theorem valid_generator : Valid generator :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
-/-! ## `[r]g_1 = 0`
-
-The double and add runs through a copy that recurses on a fuel argument.
-
-The kernel does not reduce well-founded recursion. -/
+/-! ## `[r]g_1 = 0` -/
 
 /-- The test for the point at infinity reads the same on the image in the model. -/
 theorem isInfinity_model (p : G1) : p.isInfinity = (map Fp.toModel.toHom p).isInfinity :=
@@ -47,23 +43,22 @@ The listed definitions of points are unfolded, and the map is pushed down to the
 So the kernel computes in the model, on natural numbers. -/
 macro "decide_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
   `(tactic| (rw [isInfinity_model]
-             simp only [map_mulNatAux, map_add_fn, map_neg_fn, map_mk, Fp.toModel_ofNat,
+             simp only [map_mulNat, map_add_fn, map_neg_fn, map_mk, Fp.toModel_ofNat,
                Fp.toModel_zero, Fp.toModel_one, $ids,*]
              decide +kernel))
 
 /-- `[r]g_1` is the point at infinity.
 
-The kernel runs the ladder in the model, 255 doublings and additions on 381-bit integers. -/
+The kernel runs the scalar product in the model: at most 255 doublings and 60 additions. -/
 theorem modulus_smul_generator :
     Fr.modulus • toPoint generator = 0 := by
   rw [← toPoint_mulNat valid_generator]
   refine Point.toAffine_of_Z_eq_zero ?_
   rw [rep_z]
   apply (isZero_iff (a := (generator.mulNat Fr.modulus).z)).mp
-  rw [← mulNatAux_eq 256 generator Fr.modulus (by decide)]
-  have h : (mulNatAux 256 (generator : G1 Fp.Model) Fr.modulus).isInfinity = true := by
+  have h : (mulNat (generator : G1 Fp.Model) Fr.modulus).isInfinity = true := by
     decide +kernel
-  rw [← map_generator Fp.toModel, ← map_mulNatAux, map_isInfinity,
+  rw [← map_generator Fp.toModel, ← map_mulNat, map_isInfinity,
     show ∀ p : G1, p.isInfinity = p.z.isZero from fun _ => rfl] at h
   exact h
 
