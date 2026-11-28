@@ -8922,8 +8922,9 @@ The codeword searches of each scheme share the bullet of that scheme:
 - VRF output independence over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once.
   The Keccak-256 calls of both outputs use that permutation in place of Keccak-f[1600].
   The secret, two different indices and an event on each output are fixed before the permutation is drawn.
-  The theorem says nothing about a secret chosen after the permutation was drawn.
-  Only classical calls are modelled, so the theorem says nothing about a holder that evaluates Keccak-f[1600] in superposition.
+  No party evaluates the permutation beyond those two calls, and the events cannot depend on its other values, such as the root of the tree.
+  The theorem says nothing about a secret that depends on the permutation.
+  A secret chosen after the permutation was drawn, or hashed from a seed, is such a secret.
   It says nothing either about an attack that uses the structure of Keccak-f[1600].
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.

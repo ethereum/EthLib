@@ -145,6 +145,7 @@ In the random oracle model, the outputs of one secret at distinct indices are al
 That holds for a secret and indices fixed before the oracle answers any of their output inputs.
 Over a uniform permutation in place of Keccak-f[1600], events on two such outputs hold with the product chance, up to `2^-1600 + 6 / 2^512`, below `2^-509` (`prEvent_outputs_pair_keccak256With_le_add`, `OutputPermutation.lean`).
 That holds for a secret, two different indices and an event on each output, fixed before the permutation is drawn.
+A secret hashed from a seed depends on the permutation, so that bound does not cover it.
 
 The same guarantees hold for a tree built from a seed (`KeyGen.lean`).
 That tree verifies at every index, with the output of that index's secret (`verify_prove`).
