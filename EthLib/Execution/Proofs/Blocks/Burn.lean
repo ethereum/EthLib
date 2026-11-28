@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Transactions.Burn
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the exact change of the supply of ether across a block
@@ -187,7 +188,7 @@ theorem systemCall_systemCallBurns {env : BlockEnvironment fork} {block : BlockS
     {target : Address} {data : ByteArray} {out : SystemCallOutput}
     (h : systemCall env block target data = .ok out) :
     ∃ log, SystemCallBurns env block target data out log := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   dsimp only at h
   split at h <;>
   · rename_i hfork

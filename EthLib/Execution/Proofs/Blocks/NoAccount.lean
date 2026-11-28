@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Transactions.NoAccount
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: no block writes storage at an address with no account
@@ -42,7 +43,7 @@ private theorem systemCall_ne_noAccount (env : BlockEnvironment fork)
     simp only [systemMessage, Option.some.injEq] at h
     exact h.symm
   intro h
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
     · exact Transactions.processMessageCall_ne_noAccount own other h

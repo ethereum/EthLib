@@ -7,6 +7,7 @@ public import EthLib.Execution.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.Validate
 public import EthLib.Execution.Proofs.State.Tracker
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the state transition of a block
@@ -376,7 +377,7 @@ theorem applyTransaction_eq_ok {env : BlockEnvironment fork} {index : Nat}
       after.gas = before.gas.add out.blockGas ∧
       after.cumulativeGasUsed = before.cumulativeGasUsed + out.gasUsed ∧
       (before.body.beginIndex (index + 1)).join out.state = .ok after.body := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
@@ -391,7 +392,7 @@ theorem applyTransaction_receipts {env : BlockEnvironment fork} {index : Nat}
     (h : applyTransaction env index before tx = .ok after) :
     ∃ outcome logs, after.receipts =
       before.receipts ++ [(tx.type, makeReceipt outcome after.cumulativeGasUsed logs)] := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
@@ -415,7 +416,7 @@ theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
       after.receipts.length = before.receipts.length + 1 ∧
       after.results = before.results ++
         [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
@@ -434,7 +435,7 @@ theorem applyTransaction_status {env : BlockEnvironment fork} {index : Nat}
       after.results = before.results ++ [result] ∧
       after.receipts = before.receipts ++ [(tx.type, receipt)] ∧
       receipt.outcome = .status hb result.error.isNone := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
@@ -474,7 +475,7 @@ theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index 
     (h : checkInclusion env.chainId env before.gas (.ofBlock before.block) tx =
       .error e) :
     applyTransaction env index before tx = .error (.invalidTransaction index e) := by
-  simp [applyTransaction, h, Except.mapError, bind, Except.bind]
+  simp [applyTransaction_unfold, h, Except.mapError, bind, Except.bind]
 
 /-- A call that joins the body leaves each account as the call left it. -/
 theorem BodyState.getAccount_join {body body' : BodyState} {tx : State.TransactionState}
@@ -506,7 +507,7 @@ theorem applyTransactions_steps {env : BlockEnvironment fork} {body : BodyState}
   obtain ⟨before, next, hBefore, hNext, hEnd⟩ := hSteps i (by simpa using hi)
   simp only [List.getElem_zipIdx, Nat.zero_add] at hNext
   refine ⟨before, next, ?_, hNext, hEnd⟩
-  unfold applyTransactions
+  rw [applyTransactions_unfold]
   rw [zipIdx_take]
   exact hBefore
 
@@ -606,7 +607,7 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
       accessListHashOf fork requested block.header.gasLimit = .ok output.accessListHash ∧
       -- The gas counts and the gas used that the receipts add up are those of the transactions.
       output.gas = txs.gas ∧ output.cumulativeGasUsed = txs.cumulativeGasUsed := by
-  unfold applyBody at h
+  rw [applyBody_unfold] at h
   dsimp only at h
   obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
@@ -645,7 +646,7 @@ theorem applyBody_toBodyOutput {config : ChainConfig} {env : BlockEnvironment fo
       startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
       applyTransactions env body block.transactions overrides = .ok txs ∧
       output.toBodyOutput = { txs with body := output.body } := by
-  unfold applyBody at h
+  rw [applyBody_unfold] at h
   dsimp only at h
   obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h

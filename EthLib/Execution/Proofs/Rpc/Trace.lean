@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.Depth
 public import EthLib.Execution.Rpc.Trace
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the opcode trace
@@ -48,7 +49,7 @@ private theorem traceTransaction_receipt {fork : Fork} (config : TraceConfig)
     ∃ trace, traceTransaction config env index before tx = .ok trace ∧
       ∃ receipt, after.receipts = before.receipts ++ [(tx.type, receipt)] ∧
         receipt.outcome = .status since (!trace.failed) := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, hinc, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hout, h⟩ := bind_ok_iff.mp h
   have hrun := traceRun_output config env before.block included tx some {}
@@ -73,7 +74,7 @@ theorem traceTransaction_ok {fork : Fork} (config : TraceConfig) (env : BlockEnv
     {index : Nat} {before after : BodyOutput fork} {tx : Transaction}
     (h : applyTransaction env index before tx = .ok after) :
     ∃ trace, traceTransaction config env index before tx = .ok trace := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, hinc, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hout, -⟩ := bind_ok_iff.mp h
   have hrun := traceRun_output config env before.block included tx some {}
@@ -204,7 +205,7 @@ theorem traceBlock_eq_ok (config : TraceConfig) {chain : BlockChain} {fork : For
   simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq, Nat.zero_add] at hp
   obtain ⟨rfl, rfl⟩ := hp
   have happly : applyTransactions env body (block.transactions.take i) = .ok mid := by
-    unfold applyTransactions
+    rw [applyTransactions_unfold]
     rw [zipIdx_take]
     exact hf
   simp only [traceTransactionAt, List.getElem?_eq_getElem hlt, hstart, happly, ht, bind,

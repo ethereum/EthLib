@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the beacon roots contract of EIP-4788 does what its EIP describes
@@ -434,7 +435,7 @@ theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body : BodyStat
         let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
         (mid.join out.state).mapError EvmError.state
       else pure mid) := by
-  simp only [startSystemCalls, BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, hfork,
+  simp only [startSystemCalls_unfold, BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, hfork,
     ↓reduceDIte,
     systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_BEACON_ROOTS_ADDRESS,
     bind, Except.bind, BodyState.join_recordAccountRead, Except.mapError, pure, Except.pure]

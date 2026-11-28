@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Blocks.Transition
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the system calls of a block
@@ -83,7 +84,7 @@ theorem systemCall_of_lt_glamsterdam (h : fork < .glamsterdam) :
       (processMessageCall (Meter := Nat) env.chainId.toNat (systemMessage env target data)
         (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
   have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
-  simp only [systemCall, hpre, ↓reduceIte, systemSubstate_of_lt_glamsterdam h]
+  simp only [systemCall_unfold, hpre, ↓reduceIte, systemSubstate_of_lt_glamsterdam h]
   cases processMessageCall (Meter := Nat) env.chainId.toNat (systemMessage env target data)
     (.ofBlock block) Substate.empty <;> rfl
 
@@ -95,7 +96,7 @@ theorem systemCall_of_glamsterdam (h : .glamsterdam ≤ fork) :
       (processMessageCall (Meter := StateGasMeter) env.chainId.toNat (systemMessage env target data)
         (.ofBlock block) (systemSubstate env target)).map
           fun out => ⟨out.state, out.output, out.error⟩ := by
-  simp only [systemCall, h, ↓reduceIte]
+  simp only [systemCall_unfold, h, ↓reduceIte]
   cases processMessageCall (Meter := StateGasMeter) env.chainId.toNat
     (systemMessage env target data) (.ofBlock block) (systemSubstate env target) <;> rfl
 
@@ -103,15 +104,15 @@ theorem systemCall_of_glamsterdam (h : .glamsterdam ≤ fork) :
 theorem checkedSystemCall_of_size_eq_zero {code : ByteArray}
     (hCode : codeAt block target = .ok code) (hEmpty : code.size = 0) :
     checkedSystemCall env block target data = .error (.systemContractEmpty target) := by
-  simp [checkedSystemCall, hCode, hEmpty, Except.mapError, bind, Except.bind, throw, throwThe,
-    MonadExceptOf.throw]
+  simp [checkedSystemCall_unfold, hCode, hEmpty, Except.mapError, bind, Except.bind, throw,
+    throwThe, MonadExceptOf.throw]
 
 /-- A checked system call that succeeds calls a contract with code, and stops with no error. -/
 theorem checkedSystemCall_ok {out : SystemCallOutput}
     (h : checkedSystemCall env block target data = .ok out) :
     (∃ code, codeAt block target = .ok code ∧ code.size ≠ 0) ∧
       systemCall env block target data = .ok out ∧ out.error = none := by
-  unfold checkedSystemCall at h
+  rw [checkedSystemCall_unfold] at h
   obtain ⟨code, hCode, h⟩ := bind_ok_iff.mp h
   by_cases hEmpty : code.size = 0
   · simp [hEmpty, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
@@ -132,14 +133,14 @@ theorem checkedSystemCall_eq_ok_iff {out : SystemCallOutput} :
       (∃ code, codeAt block target = .ok code ∧ code.size ≠ 0) ∧
         systemCall env block target data = .ok out ∧ out.error = none := by
   refine ⟨checkedSystemCall_ok, fun ⟨⟨code, hCode, hSize⟩, hCall, hError⟩ => ?_⟩
-  simp [checkedSystemCall, hCode, hSize, hCall, hError, Except.mapError, bind, Except.bind, pure,
-    Except.pure]
+  simp [checkedSystemCall_unfold, hCode, hSize, hCall, hError, Except.mapError, bind, Except.bind,
+    pure, Except.pure]
 
 /-- A checked system call fails as an empty contract exactly when its contract has no code. -/
 theorem checkedSystemCall_eq_systemContractEmpty_iff {address : Address} :
     checkedSystemCall env block target data = .error (.systemContractEmpty address) ↔
       address = target ∧ ∃ code, codeAt block target = .ok code ∧ code.size = 0 := by
-  unfold checkedSystemCall
+  rw [checkedSystemCall_unfold]
   cases hCode : codeAt block target with
   | error e => simp [Except.mapError, bind, Except.bind]
   | ok code =>
@@ -162,7 +163,7 @@ theorem checkedSystemCall_eq_systemCallFailed_iff {address : Address} {error : E
     checkedSystemCall env block target data = .error (.systemCallFailed address error) ↔
       address = target ∧ (∃ code, codeAt block target = .ok code ∧ code.size ≠ 0) ∧
         ∃ out, systemCall env block target data = .ok out ∧ out.error = some error := by
-  unfold checkedSystemCall
+  rw [checkedSystemCall_unfold]
   cases hCode : codeAt block target with
   | error e => simp [Except.mapError, bind, Except.bind]
   | ok code =>
@@ -246,7 +247,7 @@ theorem startSystemCalls_eq_ok {parentHash : Hash32} {body body' : BodyState}
       exact ⟨fun _ => ⟨out, hOut, mapError_ok_iff.mp hJoin⟩, fun h => absurd hPectra h⟩
     · rename_i hPectra
       exact ⟨fun h => absurd h hPectra, fun _ => (Except.ok.inj h).symm⟩
-  unfold startSystemCalls at h
+  rw [startSystemCalls_unfold] at h
   dsimp only at h
   split at h
   · rename_i hDencun
@@ -265,7 +266,7 @@ theorem startSystemCalls_eq_ok {parentHash : Hash32} {body body' : BodyState}
 theorem readRequest_of_empty {state : BodyState × List ByteArray} {contract : UInt8 × Address}
     (hcode : codeAt state.1.block contract.2 = .ok .empty) :
     readRequest env state contract = .error (.systemContractEmpty contract.2) := by
-  simp [readRequest, checkedSystemCall_of_size_eq_zero hcode rfl, bind, Except.bind]
+  simp [readRequest_unfold, checkedSystemCall_of_size_eq_zero hcode rfl, bind, Except.bind]
 
 /-- The call to one request contract must succeed on the body so far, and then joins it.
 
@@ -275,7 +276,7 @@ theorem readRequest_eq_ok {state state' : BodyState × List ByteArray}
     ∃ out, checkedSystemCall env state.1.block contract.2 .empty = .ok out ∧
       state.1.join out.state = .ok state'.1 ∧
       state'.2 = state.2 ++ requestList contract.1 out.output := by
-  unfold readRequest at h
+  rw [readRequest_unfold] at h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
   cases h
@@ -352,7 +353,7 @@ theorem requestContracts_of_pectra (h : .pectra ≤ fork) :
 /-- Before Pectra, a block reads no request and its body is unchanged. -/
 theorem readRequests_of_lt_pectra {body : BodyState} (h : fork < .pectra) :
     readRequests env body = .ok (body, []) := by
-  rw [readRequests, requestContracts_of_lt_pectra h]
+  rw [readRequests_unfold, requestContracts_of_lt_pectra h]
   rfl
 
 /-- A block calls each of its request contracts in turn, from no request. -/
@@ -369,7 +370,7 @@ theorem readRequests_of_empty_after {body : BodyState} {pre post : List (UInt8 �
     -- The contract has no code in the block after those calls.
     (hcode : codeAt mid.1.block contract.2 = .ok .empty) :
     readRequests env body = .error (.systemContractEmpty contract.2) := by
-  rw [readRequests, hsplit, List.foldlM_append, hpre]
+  rw [readRequests_unfold, hsplit, List.foldlM_append, hpre]
   simp [List.foldlM_cons, readRequest_of_empty hcode, bind, Except.bind]
 
 /-- The requests of a block have data, and come in the order of their types, each at most once.
@@ -417,7 +418,7 @@ theorem blockRequests_eq_ok {depositContract : Address} {body : BodyState} {logs
         (requestContracts fork).foldlM (readRequest env) (body, []) = .ok read ∧
         -- The deposits come first, then the requests of the contracts.
         result = (read.1, requestList DEPOSIT_REQUEST_TYPE deposits ++ read.2)) := by
-  unfold blockRequests at h
+  rw [blockRequests_unfold] at h
   refine ⟨fun hPectra => ?_, fun hPectra => ?_⟩
   · simp only [hPectra, ↓reduceIte] at h
     exact (Except.ok.inj h).symm
