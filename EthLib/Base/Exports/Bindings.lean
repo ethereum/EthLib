@@ -1213,7 +1213,8 @@ def bindings : List Binding := [
   ⟨"consensus_gossip_validation", `EthLib.Consensus.Exports.gossipValidationExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
       "blocks: list[tuple[int, int | None, bytes] | " ++
-      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "tuple[int, int | None, bytes, bytes | None] | " ++
+      "tuple[int, int | None, bytes, bytes | None, bool]], " ++
       "finalized: tuple[int, bytes] | None, topic: str, " ++
       "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
       "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
@@ -1221,7 +1222,8 @@ def bindings : List Binding := [
   ⟨"consensus_api_post", `EthLib.Consensus.Exports.apiPostExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
       "blocks: list[tuple[int, int | None, bytes] | " ++
-      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "tuple[int, int | None, bytes, bytes | None] | " ++
+      "tuple[int, int | None, bytes, bytes | None, bool]], " ++
       "finalized: tuple[int, bytes] | None, " ++
       "requests: list[tuple[int, str, list[bytes]] | " ++
       "tuple[int, str, list[bytes], str | None]], " ++

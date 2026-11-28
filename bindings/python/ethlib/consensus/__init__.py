@@ -1735,7 +1735,11 @@ def gossip_validation(
     messages: Sequence[tuple[int, int, bytes] | tuple[int, int, bytes, str]],
     verify: bool = True,
     config: dict[str, Any] | None = None,
-    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
+    blocks: Sequence[
+        tuple[int, int | None, bytes]
+        | tuple[int, int | None, bytes, bytes | None]
+        | tuple[int, int | None, bytes, bytes | None, bool]
+    ]
     | None = None,
     finalized: tuple[int, bytes] | None = None,
 ) -> list[tuple[str, str | None]]:
@@ -1743,6 +1747,7 @@ def gossip_validation(
     # A block after the anchor is (1 if failed, 2 if pending, else 0; payload status; SSZ bytes).
     # Kind 3 gives a block that the store holds already, such as the anchor, for its envelope.
     # From Gloas the SSZ bytes of the signed envelope of its payload may follow, or None for none.
+    # Then whether the block arrived after the attestation deadline of its slot; False by default.
     # A message is (arrival time in milliseconds, subnet ID, SSZ bytes).
     # A topic may follow, for a message of another topic than the case.
     return _native.consensus_gossip_validation(
@@ -1774,7 +1779,11 @@ def api_post(
     requests: Sequence[PostRequest],
     verify: bool = True,
     config: dict[str, Any] | None = None,
-    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
+    blocks: Sequence[
+        tuple[int, int | None, bytes]
+        | tuple[int, int | None, bytes, bytes | None]
+        | tuple[int, int | None, bytes, bytes | None, bool]
+    ]
     | None = None,
     finalized: tuple[int, bytes] | None = None,
 ) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]:
