@@ -1389,6 +1389,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, a proposer refuses a fetched bid whose block hash equals its parent hash, as the Builder API now requires ([#5025](https://github.com/ethereum/EthLib/issues/5025)).
+  `BuilderApi.ValidateBidError` gains `repeatsParentHash`, which gives that hash, and `BuilderApi.validateBid` checks the rule after the parent hash.
+  `BuilderApi.validateBid_ok_true_iff` (`Consensus/Proofs/BuilderApi/GloasBid.lean`) gains the conjunct that the block hash differs from the parent hash.
+  The Python binding `consensus.validate_bid` names the new refusal `repeats_parent_hash`.
+  The pinned Builder API source moves from `0911550` to `bbd815e`.
+
 - In Lean, the inverses of the secp256r1 fields `Fp` and `Fn` take the divsteps of Bernstein and Yang in place of the extended Euclidean algorithm ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `SafeGcd.inverseFin` (`Cryptography/SafeGcd.lean`) keeps the candidate of `SafeGcd.candidate` when it is below the modulus and its product with the input is one mod the modulus, and otherwise takes the extended Euclidean algorithm.
   `SafeGcd.candidate`, `SafeGcd.negInverseWord` (`-m^(-1) mod 2^64` by Newton's iteration) and `SafeGcd.inverseFin_eq` are new.
