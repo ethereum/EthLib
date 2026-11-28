@@ -866,13 +866,13 @@ private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}
     · simp only [Pi.zero_apply, Nat.add_zero] at down
       omega
 
-/-- From Fulu, take a validator that cannot withdraw in full.
+/-- From Electra, take a validator that cannot withdraw in full.
 
 A block leaves it at least the smaller of its balance and its effective balance, less two amounts.
 -/
 private theorem block_floor {f : Fork}
     {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
-    {block : BeaconBlock preset f} (fulu : .fusaka ≤ f)
+    {block : BeaconBlock preset f} (electra : .pectra ≤ f)
     -- From Gloas the activation balance must be at most the largest effective balance of Electra.
     (compounding : .glamsterdam ≤ f →
       preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
@@ -890,13 +890,12 @@ private theorem block_floor {f : Fork}
     min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨f, t⟩ v.toNat +
         -- The first amount is its seats times the sync participant reward, read after the block.
-        syncSeats t (Nat.le_trans (by decide) fulu) v.toNat *
+        syncSeats t (Nat.le_trans (by decide) electra) v.toNat *
           ((syncParticipantReward t).toOption.getD 0).toNat +
         -- The second is what the queued partial withdrawals pay it.
         min (blockQueuePaid (config := config) (checks := checks) s block v)
           -- That second amount is capped at its effective balance above the activation balance.
           (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
-  have electra : .pectra ≤ f := Nat.le_trans (by decide) fulu
   have altair : .altair ≤ f := Nat.le_trans (by decide) electra
   have bellatrix : .bellatrix ≤ f := Nat.le_trans (by decide) electra
   obtain ⟨input, last, started, operatedOk, -, synced⟩ := processBlock_operationsInput computed
@@ -973,7 +972,7 @@ private theorem block_floor {f : Fork}
   have lastClear : ∀ w, last.validators.data[v.toNat]? = some w → w.slashed = false := by
     intro w read
     exact unslashed w (by rw [syncedEq]; exact read)
-  have operationsFloor := processOperations_floor fulu (startedFrame.balancesMatch matched)
+  have operationsFloor := processOperations_floor electra (startedFrame.balancesMatch matched)
     operatedOk inputFound cappedP lastClear
   obtain ⟨w, lastFound, samePubkey⟩ := validators_getElem?_of_validatorKeys_prefix
     (frame_processOperations operatedOk).pubkeysPrefix inputFound
@@ -2019,7 +2018,7 @@ private theorem fall_credit_arith {EB after gRewarded gTrue gSub gLow c credit q
 
 Such a voter falls by at most a computed bound, plus a term when it was credited more.
 
-The fork at `P` must be Fulu or later. -/
+The fork at `P` must be Electra or later. -/
 theorem effectiveFall_le
     -- The epoch starts at `R`, right after its epoch transition.
     --
@@ -2038,7 +2037,7 @@ theorem effectiveFall_le
     --
     -- The registry at `y` is within its limit.
     (hysteresis : Hysteresis R.state) (within : y.state.RegistryWithinLimit)
-    (fulu : .fusaka ≤ P.fork)
+    (electra : .pectra ≤ P.fork)
     (boundaryEpoch : getCurrentEpoch T.state = getCurrentEpoch R.state)
     (callEpoch : getCurrentEpoch P.state = getCurrentEpoch R.state)
     (next : (getCurrentEpoch y.state).toNat = (getCurrentEpoch R.state).toNat + 1)
@@ -2122,8 +2121,7 @@ theorem effectiveFall_le
   intro state epoch inc slots p validator effective actual current totalGwei
     base seatReward seats sync score delay inactivity penalty syncP partials fall
     maskCap creditBound
-  have altairP : .altair ≤ P.fork := Nat.le_trans (by decide) fulu
-  have electraP : .pectra ≤ P.fork := Nat.le_trans (by decide) fulu
+  have altairP : .altair ≤ P.fork := Nat.le_trans (by decide) electra
   have delayPos : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := withdrawDelay
   -- The branch of `y` leaves the epoch at one slot.
   have nextT : (getCurrentEpoch y.state).toNat = (getCurrentEpoch T.state).toNat + 1 := by
@@ -2134,7 +2132,7 @@ theorem effectiveFall_le
   have PT : P.fork = T.fork :=
     Run.fork_eq_of_same_epoch tailP (callEpoch.trans boundaryEpoch.symm)
   have ZT : z.fork = T.fork := Run.fork_eq_of_same_epoch toZ zEpoch
-  have electraT : .pectra ≤ T.fork := PT ▸ electraP
+  have electraT : .pectra ≤ T.fork := PT ▸ electra
   -- The registries on the branch of `y` are within the limit.
   have withinT : T.state.RegistryWithinLimit := Nat.le_trans tailS.registryLifecycle.size_le within
   have withinZ : z.state.RegistryWithinLimit :=
@@ -2191,7 +2189,7 @@ theorem effectiveFall_le
           caps val (Array.mem_of_getElem? read)
         have top : withdrawalMaxEffectiveBalance preset P.fork val ≤
             preset.MAX_EFFECTIVE_BALANCE_ELECTRA := by
-          simp only [withdrawalMaxEffectiveBalance, electraP, ↓reduceIte, getMaxEffectiveBalance]
+          simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
           split
           · exact UInt64.le_refl _
           · exact caps.compounding
@@ -2202,7 +2200,7 @@ theorem effectiveFall_le
       _ = owed.card * (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
           preset.MIN_ACTIVATION_BALANCE.toNat) := by simp
       _ ≤ maskCap := by
-        simp only [maskCap, electraP, ↓reduceIte]
+        simp only [maskCap, electra, ↓reduceIte]
         exact Nat.mul_le_mul_right _ owedCard
   · intro v activeV clearY
     -- The validator is not slashed at `y`, so at no state before it.
@@ -2270,7 +2268,7 @@ theorem effectiveFall_le
       have toS := fromR.append pre
       have sEpochR : getCurrentEpoch s = getCurrentEpoch R.state := sEpoch.trans XEpoch
       have fEq : f = R.fork := Run.fork_eq_of_same_epoch toS sEpochR
-      have fuluF : .fusaka ≤ f := by rw [fEq, ← RT, ← PT]; exact fulu
+      have electraF : .pectra ≤ f := by rw [fEq, ← RT, ← PT]; exact electra
       obtain ⟨-, keptS, -, activeS⟩ := readsAt toS sEpochR
       have activeAtS : isActiveAt s (getCurrentEpoch R.state) v.toNat = true := by
         rw [show isActiveAt s (getCurrentEpoch R.state) v.toNat =
@@ -2304,7 +2302,7 @@ theorem effectiveFall_le
         simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActiveT
         rw [sEpochR]
         exact isActiveT.2
-      have floor := block_floor fuluF (fun _ => caps.compounding) withinT invS.balancesMatch
+      have floor := block_floor electraF (fun _ => caps.compounding) withinT invS.balancesMatch
         invS.exitsOrdered (applySignedBlock_ok ok).2.1 foundS later capS exiting clearAfter
       rw [syncAt (fromR.append post) tEpoch, effS] at floor
       exact floor

@@ -93,7 +93,7 @@ The report itself also prints the number of rules at each fork.
 | bellatrix | 1346 | 11 |
 | shapella | 1357 | 11 |
 | dencun | 1366 | 11 |
-| pectra | 1386 | 11 |
+| pectra | 1387 | 11 |
 | fusaka | 1393 | 11 |
 | glamsterdam | 1517 | 13 |
 | hegota | 1506 | 13 |
@@ -4374,7 +4374,7 @@ In place of the read they take its premises: `CheckpointStakeCeiling`, `Config.P
 The headlines and `Execution.confirmedRoot_covers` derive it through `Execution.rootViableAt_of_checked_or_evidence`, so they do not take it.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 Its alternative is a collision of two honest stores.
-`Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, from Fulu.
+`Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, from Electra.
 From Gloas it takes `room`: the anchor's registry leaves room for the pending deposits of each epoch up to the horizon.
 Its anchor store comes from a successful `getForkchoiceStore`, every honest participant starts at it, and `anchorBlock.slot = anchorState.slot`.
 `SLOT_DURATION_MS` is positive, and an epoch has at least one slot.
@@ -4385,10 +4385,10 @@ The seed lookahead covers at least one epoch, and the preset satisfies `Incremen
 The withdrawal delay is at least one epoch, and the preset satisfies `CapOrder` and `ActivationWithinMaxEffective`.
 Together these make `MAX_EFFECTIVE_BALANCE` equal to `MIN_ACTIVATION_BALANCE`, as on both presets.
 The theorem bounds the drift by the reserve, but whether the reserve is small enough against the confirmation margin on mainnet is not established.
-`Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
-A caller with BLS checks from Fulu discharges it with `Execution.quorumDriftWithin`, passing `room` from Gloas.
+`Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` take `QuorumDriftWithin` as a premise at every fork.
+From Electra a caller with BLS checks discharges it with `Execution.quorumDriftWithin`, passing `room` from Gloas.
 `Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
-`Execution.confirmedRoot_covers` below discharges both the same way, so it takes neither `QuorumDriftWithin` nor `HeldStatesBeforeUpgrade` as a premise.
+`Execution.confirmedRoot_covers` derives quorum drift from Electra and assumes it before Electra; it does not assume `HeldStatesBeforeUpgrade`.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.
@@ -4454,16 +4454,17 @@ That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreDirectSafetyEviden
 Each evidence alternative is relative to the anchor, so with enough churn since the anchor it holds with no accountable key.
 The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
 The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
-The fork is Fulu or later.
+From Electra it derives `QuorumDriftWithin`; before Electra it takes it as an assumption that no theorem discharges.
+At Electra `JustifiedPinned` stays a premise without a proof: `justifiedPinned_of_setting` covers Fulu up to Gloas.
 From Gloas it takes three premises, each saying nothing before Gloas.
 `room` says that the anchor's registry leaves room up to the horizon.
 `weights` says that the head reads of the configuration fit 64 bits for an active stake up to 2·10^17 Gwei.
 `supply` is a `CheckpointHeadWeightCeiling`: each weight of the weak-head test at an honest justified state through the limit is at most 2·10^17 Gwei.
 A private step of the same file shows that each call keeps the call invariant, given the invariant at every earlier call.
 The call invariant and the walk of a call are in `ConfirmedCalls.lean`.
-The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
-So the endpoint takes neither as a premise.
-In their place it takes the parameter facts that the drift bound reads, among them `CapOrder` and `ActivationWithinMaxEffective`.
+From Electra the step derives quorum drift with `Execution.quorumDriftWithin`; at every fork it derives the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
+The endpoint assumes quorum drift only before Electra and does not assume the honest target count.
+Its parameter facts include `CapOrder` and `ActivationWithinMaxEffective`, which the drift bound reads.
 For the seed lookahead it takes `Preset.SeedLookaheadAtLeastThree` instead, a lookahead of at least three epochs.
 The drift bound needs a lookahead of one epoch, and the near exit bound below needs three.
 The endpoint derives `HeldStatesBeforeUpgrade` itself, with `Execution.heldStatesBeforeUpgrade_of_bounded`, and does not take it either.
