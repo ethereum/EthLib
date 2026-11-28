@@ -5,6 +5,8 @@ public import EthLib.Consensus.Proofs.Containers.Builder
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.Misc
 import Batteries.Data.List.Lemmas
+import EthLib.Base.Proofs.MapM
+import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 public import Mathlib.Data.List.Forall2
 
 /-!
@@ -172,6 +174,46 @@ theorem getExecutionRequestsList_increasing {preset : Preset} {fork : Fork}
   simp only [Option.some_lt_some]
   exact (ExecutionRequests.typedLists_increasing requests).sublist
     ((List.filter_sublist).map _)
+
+/-- Requests that encode in SSZ give the list that the execution layer receives. -/
+theorem getExecutionRequestsList_exists_ok {preset : Preset} {fork : Fork}
+    {requests : ExecutionRequests preset fork}
+    (encoded : ∃ bytes, SszType.serialize requests = .ok bytes) :
+    ∃ out, getExecutionRequestsList requests = .ok out := by
+  obtain ⟨bytes, wrote⟩ := encoded
+  rw [SszType.serialize_ok_iff] at wrote
+  have sized := representable_of_serialize _ _ _ wrote
+  unfold SszType.desc SszType.toValue ExecutionRequests.instSszType SszType.forkContainer at sized
+  -- Each list of the requests is a field of their container, so it encodes too.
+  have lists : ∀ list ∈ requests.typedLists, ∃ data, list.bytes = .ok data := by
+    by_cases gloas : Fork.glamsterdam ≤ fork
+    · simp only [gloas, ↓reduceIte, SszType.progressiveContainer] at sized
+      obtain ⟨sizes, each⟩ := progressiveContainer_of_representable sized
+      simp only [SszFields.descs, SszFields.toValues, gloas, ↓reduceIte, ↓reduceDIte,
+        List.zip_cons_cons, List.forall_mem_cons] at each
+      obtain ⟨deposits, withdrawals, consolidations, builderDeposits, builderExits, -⟩ := each
+      simp only [ExecutionRequests.typedLists, gloas, ↓reduceDIte, List.cons_append,
+        List.nil_append, List.forall_mem_cons]
+      exact ⟨SszType.serialize_exists_ok_of_representable deposits,
+        SszType.serialize_exists_ok_of_representable withdrawals,
+        SszType.serialize_exists_ok_of_representable consolidations,
+        SszType.serialize_exists_ok_of_representable builderDeposits,
+        SszType.serialize_exists_ok_of_representable builderExits, by simp⟩
+    · simp only [gloas, ↓reduceIte, SszType.container] at sized
+      obtain ⟨sizes, each⟩ := container_of_representable sized
+      simp only [SszFields.descs, SszFields.toValues, gloas, ↓reduceIte, ↓reduceDIte,
+        List.zip_cons_cons, List.forall_mem_cons] at each
+      obtain ⟨deposits, withdrawals, consolidations, -⟩ := each
+      simp only [ExecutionRequests.typedLists, gloas, ↓reduceDIte, List.append_nil,
+        List.forall_mem_cons]
+      exact ⟨SszType.serialize_exists_ok_of_representable deposits,
+        SszType.serialize_exists_ok_of_representable withdrawals,
+        SszType.serialize_exists_ok_of_representable consolidations, by simp⟩
+  -- Then each nonempty list gives its type byte and its bytes.
+  unfold getExecutionRequestsList
+  refine mapM_exists_ok fun list member => ?_
+  obtain ⟨data, wrote⟩ := lists list (List.mem_filter.1 member).1
+  exact ⟨⟨list.type.toArray⟩ ++ data, by simp [wrote, bind, Except.bind, pure, Except.pure]⟩
 
 /-- At Gloas, with no builder request, the list is that of Electra for the same requests.
 

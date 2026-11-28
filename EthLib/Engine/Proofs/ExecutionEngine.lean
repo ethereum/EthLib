@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Containers.Bid
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Transition.Payload
@@ -8,7 +9,7 @@ public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.Roots
-public import EthLib.Serialization.Proofs.Ssz.Codec.Bounds
+public import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 
 /-!
 # Proofs: the execution layer of the beacon chain
@@ -244,7 +245,6 @@ theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork) :
   cases fork <;> first
     | exact absurd h (by decide)
     | exact ⟨.paris, by decide⟩
-    | exact ⟨.shapella, by decide⟩
     | exact ⟨.dencun, by decide⟩
     | exact ⟨.pectra, by decide⟩
     | exact ⟨.glamsterdam, by decide⟩
@@ -706,33 +706,6 @@ theorem envelopeBlockHash_isSome_iff
         (fun _ => envelope.payload.slotNumber gloas)
       simp [hh, hd]
 
-open Serialization.Ssz in
-/-- A progressive list that has a size has elements that have sizes, below `2^32` bytes in all. -/
-private theorem progressiveList_of_representable {e : Desc} {l : Option Nat}
-    {values : List Value} {size : Nat}
-    (h : Representable (.progressiveList e l) (.seq values) size) :
-    ∃ sizes : Value → Nat, (∀ v ∈ values, Representable e v (sizes v)) ∧
-      (values.map fun v => fieldSize e (sizes v)).sum < 2 ^ 32 := by
-  cases h with
-  | progressiveList each bounded => exact ⟨_, each, bounded⟩
-
-open Serialization.Ssz in
-/-- A progressive container that has a size has fields that have sizes. -/
-private theorem progressiveContainer_of_representable {active : List Bool} {names : List String}
-    {fields : List Desc} {values : List Value} {size : Nat}
-    (h : Representable (.progressiveContainer active names fields) (.seq values) size) :
-    ∃ sizes : Desc → Value → Nat,
-      ∀ pair ∈ fields.zip values, Representable pair.1 pair.2 (sizes pair.1 pair.2) := by
-  cases h with
-  | progressiveContainer each _ => exact ⟨_, each⟩
-
-open Serialization.Ssz in
-/-- An integer that has a size has its declared width. -/
-private theorem size_of_representable_uint {width : Nat} {value : Value} {size : Nat}
-    (h : Representable (.uint width) value size) : size = width := by
-  cases h
-  rfl
-
 /-- A sum of terms each at least `k` is at least `k` times their count. -/
 private theorem mul_length_le_sum {α : Type} (f : α → Nat) (k : Nat) :
     (l : List α) → (∀ x ∈ l, k ≤ f x) → k * l.length ≤ (l.map f).sum
@@ -821,11 +794,62 @@ theorem envelopeBlockHash_isSome_iff_of_presets
     rcases presets with rfl | rfl <;> decide
   have extra : preset.MAX_EXTRA_DATA_BYTES.toNat < 2 ^ 32 := by
     rcases presets with rfl | rfl <;> decide
-  haveI : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
+  have : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
   -- The SSZ encoding bounds the lists of the payload.
   obtain ⟨fewTransactions, shortTransactions, fewWithdrawals⟩ := bounds_of_serialize gloas encoded
   exact envelopeBlockHash_isSome_iff gloas bloom extra fewTransactions shortTransactions
     fewWithdrawals
+
+open Serialization.Ssz in
+/-- From Gloas, on mainnet and minimal, the block hash of an envelope that encodes.
+
+It exists exactly when no transaction is empty, since the requests of the envelope encode too. -/
+theorem envelopeBlockHash_isSome_iff_of_serialize
+    (presets : preset = .mainnet ∨ preset = .minimal)
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    (encoded : ∃ bytes, SszType.serialize envelope = .ok bytes) :
+    (envelopeBlockHash envelope).isSome ↔ envelope.payload.hasEmptyTransaction = false := by
+  have bloom : preset.BYTES_PER_LOGS_BLOOM.toNat = 256 := by
+    rcases presets with rfl | rfl <;> decide
+  have : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
+  obtain ⟨bytes, wrote⟩ := encoded
+  rw [SszType.serialize_ok_iff] at wrote
+  have sized := representable_of_serialize _ _ _ wrote
+  simp only [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at sized
+  -- The payload and the requests are fields of the envelope, so they encode too.
+  obtain ⟨sizes, each⟩ := progressiveContainer_of_representable sized
+  simp only [List.zip_cons_cons, List.forall_mem_cons] at each
+  obtain ⟨payload, requests, -⟩ := each
+  rw [envelopeBlockHash_isSome_iff_of_presets presets gloas
+    (SszType.serialize_exists_ok_of_representable payload)]
+  simp [Consensus.getExecutionRequestsList_exists_ok
+    (SszType.serialize_exists_ok_of_representable requests)]
+
+open Serialization.Ssz in
+/-- From Gloas, on mainnet and minimal, the block hash of a signed envelope read from bytes.
+
+It exists exactly when no transaction is empty, a check that gossip makes before the hash. -/
+theorem envelopeBlockHash_isSome_iff_of_deserialize
+    (presets : preset = .mainnet ∨ preset = .minimal)
+    {signed : Consensus.SignedExecutionPayloadEnvelope preset fork} {data : ByteArray}
+    (gloas : .glamsterdam ≤ fork)
+    (read : SszType.deserialize (Consensus.SignedExecutionPayloadEnvelope preset fork) data =
+      .ok signed) :
+    (envelopeBlockHash signed.message).isSome ↔
+      signed.message.payload.hasEmptyTransaction = false := by
+  have bloom : preset.BYTES_PER_LOGS_BLOOM.toNat = 256 := by
+    rcases presets with rfl | rfl <;> decide
+  have : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
+  -- Bytes that decode are the bytes of the signed envelope.
+  have wrote := SszType.serialize_ok_iff.mp (SszType.serialize_deserialize read)
+  have sized := representable_of_serialize _ _ _ wrote
+  simp only [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at sized
+  -- The envelope is a field of the signed envelope, so it encodes too.
+  obtain ⟨sizes, each⟩ := container_of_representable sized
+  simp only [List.zip_cons_cons, List.forall_mem_cons] at each
+  obtain ⟨message, -⟩ := each
+  exact envelopeBlockHash_isSome_iff_of_serialize presets gloas
+    (SszType.serialize_exists_ok_of_representable message)
 
 /-- From Gloas, on mainnet and minimal, the execution layer accepts no payload without a block hash.
 
