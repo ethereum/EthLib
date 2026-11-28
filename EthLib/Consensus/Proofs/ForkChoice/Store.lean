@@ -1015,6 +1015,34 @@ theorem getForkchoiceStore_fields {config : Config} {anchorState : BeaconState p
           subst made
           exact ⟨anchorRoot, rfl, rfl, rfl, fun _ => ⟨rfl, rfl, rfl, rfl⟩⟩
 
+/-- From Heze a new store holds no inclusion list, and records the anchor's payload as satisfying.
+-/
+theorem getForkchoiceStore_heze {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
+    ∃ anchorRoot, SszType.hashTreeRoot anchorBlock = .ok anchorRoot ∧
+      ∀ heze : .hegota ≤ fork, store.inclusionLists heze = .empty ∧
+        store.payloadInclusionListSatisfaction heze =
+          (∅ : Std.TreeMap Root Bool).insert anchorRoot true := by
+  unfold getForkchoiceStore at made
+  cases stateRoot : SszType.hashTreeRoot anchorState with
+  | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
+  | ok stateRoot' =>
+    simp only [stateRoot, Except.mapError, bind, Except.bind] at made
+    split at made
+    · simp [throw, throwThe, MonadExceptOf.throw] at made
+    · cases blockRoot : SszType.hashTreeRoot anchorBlock with
+      | error e => simp [blockRoot] at made
+      | ok anchorRoot =>
+        simp only [blockRoot] at made
+        cases time : computeTimeAtSlotMs config (secondsToMilliseconds anchorState.genesisTime)
+            anchorState.slot with
+        | error e => simp [time] at made
+        | ok timeMs =>
+          simp only [time, pure, Except.pure, Except.ok.injEq] at made
+          subst made
+          exact ⟨anchorRoot, rfl, fun _ => ⟨rfl, rfl⟩⟩
+
 /-- A new store fails when the anchor block does not commit to the anchor state. -/
 theorem getForkchoiceStore_mismatch {config : Config} {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {stateRoot : Root}

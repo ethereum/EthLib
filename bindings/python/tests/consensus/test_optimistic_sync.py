@@ -723,13 +723,13 @@ def _satisfaction(
     ids=["not validated", "not validated, satisfied", "valid", "valid, unsatisfied"],
 )
 def test_inclusion_list_satisfaction_by_status(status: int, satisfied: bool, expected: bool):
-    # Only the block whose payload the store keeps has an answer.
-    assert _satisfaction(status, satisfied) == [None, expected, None, None]
+    # The anchor has the answer of a new store; only the block whose payload is kept has another.
+    assert _satisfaction(status, satisfied) == [True, expected, None, None]
 
 
 def test_inclusion_list_satisfaction_of_invalidated_payload():
     # The execution layer rejects the payload, so the store keeps no envelope and no answer.
-    assert _satisfaction(INVALIDATED, True) == [None, None, None, None]
+    assert _satisfaction(INVALIDATED, True) == [True, None, None, None]
 
 
 def test_inclusion_list_satisfaction_of_unknown_status():
@@ -743,7 +743,7 @@ def test_inclusion_list_satisfaction_once_valid(satisfied: bool):
     # The payload was kept before it was validated, then turns valid.
     # Its block takes the answer of the execution layer; the other answers stay.
     # No pinned Heze case keeps two payloads, so a theorem covers a neighbour with an answer.
-    assert _satisfaction(NOT_VALIDATED, satisfied, HEZE_BLOCK_1) == [None, satisfied, None, None]
+    assert _satisfaction(NOT_VALIDATED, satisfied, HEZE_BLOCK_1) == [True, satisfied, None, None]
 
 
 @pytest.mark.parametrize(

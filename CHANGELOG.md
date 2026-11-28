@@ -1375,6 +1375,8 @@ Not yet released.
   The new field `Config.MIN_TRANSACTION_GAS`, 4096 in both configurations, is a lower bound on the gas of one transaction from Gloas, and the Beacon API lists it.
   The upgrade to Gloas clears the availability bit of the payload of the fork slot ([#3515](https://github.com/ethereum/EthLib/issues/3515)).
   `upgradeToGloas_executionPayloadAvailability` (`Consensus/Proofs/Transition/Upgrade.lean`) shows that every other bit is set.
+  From Heze, the store that starts from an anchor records the payload of the anchor as satisfying its inclusion lists.
+  `getForkchoiceStore_heze` (`Consensus/Proofs/ForkChoice/Store.lean`) states it.
   At Fulu, the data of a block is available only when each sampled column carries its header and an inclusion proof to its body.
   `columnsAvailable_ok_iff`, `validateDataAvailability_ok_of_fulu` and `validatePayloadData_ok_iff` (`Consensus/Proofs/ForkChoice/Handlers.lean`) state the new check.
   From Gloas, the proposer decides whether to build on the full head at the slot of its state, not at the current slot of the store.
