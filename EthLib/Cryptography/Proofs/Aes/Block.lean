@@ -713,7 +713,7 @@ private theorem inv_eq_spec (b : UInt8) : Internal.inv b = Spec.inv b := by
         exact ih _
   exact go _ 1
 
-/-- One pass over Table 4 computes each inverse once, for the model and for the code. -/
+/-- One pass over Table 4 computes each inverse of the model once and checks both affine maps. -/
 private theorem sbox_check (b : UInt8) :
     (b == 0 || Spec.mul b (Spec.inv b) == 1) &&
       (sbox b == Spec.sbox b && sbox b == Internal.affine (if b = 0 then 0 else Spec.inv b)) :=
