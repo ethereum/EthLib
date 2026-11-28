@@ -1389,6 +1389,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the inverses of the secp256r1 fields `Fp` and `Fn` take the divsteps of Bernstein and Yang in place of the extended Euclidean algorithm ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `SafeGcd.inverseFin` (`Cryptography/SafeGcd.lean`) keeps the candidate of `SafeGcd.candidate` when it is below the modulus and its product with the input is one mod the modulus, and otherwise takes the extended Euclidean algorithm.
+  `SafeGcd.candidate`, `SafeGcd.negInverseWord` (`-m^(-1) mod 2^64` by Newton's iteration) and `SafeGcd.inverseFin_eq` are new.
+  The secp256k1 inverse mod `n` uses it too, so `Secp256k1.Inverse.check` moves to `SafeGcd.check`, and `Secp256k1.Inverse.check_eq` to `SafeGcd.check_eq` (`Cryptography/Proofs/Inverse.lean`).
+  `Secp256r1.Point.mulNat` and `Secp256r1.Montgomery.inv` invert with the inverse of `Fp`.
+  `Secp256r1.Fp.inv_eq_inverse` and `Secp256r1.Fn.inv_eq_inverse` (`Cryptography/Proofs/Secp256r1/Field.lean`) state that each inverse is the Euclidean inverse, and `toZMod_inv` keeps its statement.
+
 - In Lean, the inverses of the BLS12-381 fields `Fp` and `Fr` take the divsteps of Bernstein and Yang in place of the power `a ^ (p - 2)` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Montgomery.inv` (`Cryptography/Montgomery.lean`) keeps the candidate of `Montgomery.Modulus.invCandidate` when its product with the input is one, and otherwise takes the extended Euclidean algorithm; `Montgomery.toZMod_inv` keeps its statement.
   `Montgomery.Modulus` loses `pm2` and `pm2_spec`, and gains `invCandidate`, which defaults to no candidate.

@@ -71,9 +71,15 @@ theorem encode_scalar_succeeds_iff (n : Nat) :
     (∃ e, encode (.scalar n) = .ok e) ↔ (bigEndian n).size < 2 ^ 64 :=
   encode_bytes_succeeds_iff (bigEndian n)
 
-/-- Every scalar below `2^256` has an encoding: at most 32 bytes, then a one-byte prefix. -/
-theorem encode_scalar_succeeds (n : Nat) (h : n < 2 ^ 256) : ∃ e, encode (.scalar n) = .ok e := by
+/-- Every scalar below `2^256` encodes to at most 33 bytes. -/
+theorem encode_scalar_exists_ok (n : Nat) (h : n < 2 ^ 256) :
+    ∃ e, encode (.scalar n) = .ok e ∧ e.size ≤ 33 := by
   have hSize := bigEndian_size_le n 32 (by simpa using h)
-  exact (encode_scalar_succeeds_iff n).2 (by omega)
+  obtain ⟨e, he, -, hle⟩ := encode_bytes_exists_ok (bigEndian n) (by omega)
+  exact ⟨e, he, by have := hle (by omega); omega⟩
+
+/-- Every scalar below `2^256` has an encoding: at most 32 bytes, then a one-byte prefix. -/
+theorem encode_scalar_succeeds (n : Nat) (h : n < 2 ^ 256) : ∃ e, encode (.scalar n) = .ok e :=
+  (encode_scalar_exists_ok n h).imp fun _ ok => ok.1
 
 end EthLib.Serialization.Rlp
