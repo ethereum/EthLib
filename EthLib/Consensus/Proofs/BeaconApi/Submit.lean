@@ -110,7 +110,8 @@ private theorem submitList_snd_eq :
 /-- A message that gossip judges fails with the reason of gossip, and the keys after it. -/
 theorem messageFailure_of_ok {message : GossipMessage preset fork} {outcome : ValidationResult}
     {after : Seen}
-    (gossip : validateGossipMessage context.config context.checks context.setup seen
+    (gossip : validateGossipMessage context.config context.checks context.setup context.blockHashOf
+        seen
       context.store context.statuses context.currentTimeMs message = .ok (outcome, after)) :
     messageFailure context seen message = (failureReason outcome, after) := by
   simp [messageFailure, gossip]
@@ -118,7 +119,8 @@ theorem messageFailure_of_ok {message : GossipMessage preset fork} {outcome : Va
 /-- An error of the fork choice on a message fails it, with the keys from before it. -/
 theorem messageFailure_of_error {message : GossipMessage preset fork}
     {error : ForkChoiceError}
-    (gossip : validateGossipMessage context.config context.checks context.setup seen
+    (gossip : validateGossipMessage context.config context.checks context.setup context.blockHashOf
+        seen
       context.store context.statuses context.currentTimeMs message = .error error) :
     messageFailure context seen message =
       (some "fork choice: the store cannot check it", seen) := by

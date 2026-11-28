@@ -2162,6 +2162,15 @@ touched pectra EthLib.Consensus.BlobSidecarsByRootRequest
 touched fusaka EthLib.Consensus.BlobSidecarsByRootRequest
 touched glamsterdam EthLib.Consensus.BlobSidecarsByRootRequest
 touched hegota EthLib.Consensus.BlobSidecarsByRootRequest
+touched phase0 EthLib.Consensus.BlockHashOf
+touched altair EthLib.Consensus.BlockHashOf
+touched bellatrix EthLib.Consensus.BlockHashOf
+touched shapella EthLib.Consensus.BlockHashOf
+touched dencun EthLib.Consensus.BlockHashOf
+touched pectra EthLib.Consensus.BlockHashOf
+touched fusaka EthLib.Consensus.BlockHashOf
+touched glamsterdam EthLib.Consensus.BlockHashOf
+touched hegota EthLib.Consensus.BlockHashOf
 touched phase0 EthLib.Consensus.BlockSources.withPayloadStatus
 touched altair EthLib.Consensus.BlockSources.withPayloadStatus
 touched bellatrix EthLib.Consensus.BlockSources.withPayloadStatus

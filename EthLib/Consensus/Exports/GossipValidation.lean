@@ -269,12 +269,14 @@ def decodeGossipInput {preset : Preset} {fork : Fork} (topic : String) (input : 
 
 The keys change only when the message is valid. -/
 def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
-    (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
+    (checks : SignatureChecks) (blockHashOf : BlockHashOf preset fork) (store : Store preset fork)
+    (statuses : PayloadStatuses)
     (topic : String) (seen : Seen) (input : GossipInput) : Result (ValidationResult × Seen) := do
   let message ← decodeGossipInput topic input
   let setup ← toResult "fork choice" ((embeddedSetup ()).mapError ForkChoiceError.kzg)
   toResult "fork choice"
-    (validateGossipMessage config checks setup seen store statuses input.currentTimeMs message)
+    (validateGossipMessage config checks setup blockHashOf seen store statuses input.currentTimeMs
+      message)
 
 /-- From Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
 
@@ -357,8 +359,11 @@ def gossipCaseStore {preset : Preset} {fork : Fork} (config : Config) (checks : 
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
+The caller gives the block hash of the payload of an envelope.
+
 Every topic is specified here up to Heze. -/
-def gossipValidationOf (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
+def gossipValidationOf (blockHashOf : {preset : Preset} → {fork : Fork} → BlockHashOf preset fork)
+    (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
     Option (UInt64 × Root) × String × List GossipInput × Option PyValue × Bool) :
     Result (List (String × Option String)) := do
   let (name, fork, anchorState, anchorBlock, blocks, finalized, topic, inputs, replacements,
@@ -383,22 +388,10 @@ def gossipValidationOf (args : String × String × ByteArray × ByteArray × Lis
       rejectArgument none s!"gossip validation of the topic {messageTopic} at {fork.name} is not \
         yet specified"
     let (outcome, next) ←
-      validateGossipInput config checks store statuses messageTopic seen input
+      validateGossipInput config checks blockHashOf store statuses messageTopic seen input
     seen := next
     out := out.push (outcomeRecord outcome)
     store ← recordGossipInclusionList store messageTopic outcome input
   return out.toList
-
-/-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
-
-The arguments are the names of the preset and the fork, the anchor state and the anchor block.
-
-Then come the later blocks, the finalized checkpoint or none, the topic and the messages.
-
-Then come replacements of values of the configuration, and whether the signature checks run.
-
-Every topic is specified here up to Heze. -/
-@[export eth_consensus_gossip_validation]
-def gossipValidationExport (args : PyValue) : Result PyValue := pyExport gossipValidationOf args
 
 end EthLib.Consensus.Exports

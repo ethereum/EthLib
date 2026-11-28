@@ -208,8 +208,11 @@ The store starts from an anchor and later blocks.
 
 Each answer gives its status code, the position and the message of each item that failed.
 
-It also gives the events of the request. -/
-def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
+It also gives the events of the request.
+
+The caller gives the block hash of the payload of an envelope. -/
+def apiPostOf (blockHashOf : {preset : Preset} → {fork : Fork} → BlockHashOf preset fork)
+    (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
     Option (UInt64 × Root) × List PostInput × Option PyValue × Bool) :
     Result (List (Nat × List (Nat × String) × List (String × String))) := do
   let (name, fork, anchorState, anchorBlock, blocks, finalized, inputs, replacements, verify) :=
@@ -233,7 +236,8 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
     if store.timeMs < input.currentTimeMs then
       store ← toResult "fork choice" (store.onTick config input.currentTimeMs)
     let context : SubmitContext preset fork :=
-      { config, checks, setup, store, statuses, currentTimeMs := input.currentTimeMs }
+      { config, checks, setup, blockHashOf, store, statuses
+        currentTimeMs := input.currentTimeMs }
     let publishes := input.endpoint ∈ ["blocks", "execution_payload_envelopes"]
     if !publishes && input.level.isSome then
       rejectArgument none "a pool endpoint takes no broadcast validation"
@@ -274,20 +278,6 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
       let (status, failures) := submitAnswer outcome
       out := out.push (status, failures, ← eventRecords events)
   return out.toList
-
-/-- Answer the requests to pool and publish endpoints in turn.
-
-The arguments are the names of the preset and the fork, the anchor state and the anchor block.
-
-Then come the later blocks, the finalized checkpoint or none, and the requests.
-
-Then come replacements of values of the configuration, and whether the signature checks run.
-
-Each answer gives its status code, the position and the message of each item that failed.
-
-It also gives the events of the request, each as the name of its topic and its JSON data. -/
-@[export eth_consensus_api_post]
-def apiPostExport (args : PyValue) : Result PyValue := pyExport apiPostOf args
 
 /-- The event that an object gives if gossip accepts it, by the name of its gossip topic.
 

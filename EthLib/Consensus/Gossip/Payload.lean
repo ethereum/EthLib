@@ -36,6 +36,12 @@ variable {preset : Preset} {fork : Fork}
 
 /-! ## Envelopes -/
 
+/-- From Gloas: the hash of the execution header of the payload of an envelope, or none without one.
+
+The hash needs the trie roots of the execution layer, so the caller gives it. -/
+abbrev BlockHashOf (preset : Preset) (fork : Fork) :=
+  ExecutionPayloadEnvelope preset fork → Option Hash32
+
 /-- From Gloas: the checks of the counts of the requests of a payload, each against its limit.
 
 The types of the lists bound none of them from Gloas, so gossip checks each count. -/
@@ -80,8 +86,9 @@ where
   decreasing_by exact UInt64.lt_iff_toNat_lt.mp _lower
 
 /-- From Gloas: the checks of a signed envelope on its topic. -/
-def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks) (seen : Seen)
-    (store : Store preset fork) (gloas : .glamsterdam ≤ fork)
+def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks)
+    (blockHashOf : BlockHashOf preset fork) (seen : Seen) (store : Store preset fork)
+    (gloas : .glamsterdam ≤ fork)
     (signed : SignedExecutionPayloadEnvelope preset fork) :
     Except ForkChoiceError ValidationResult :=
   let envelope := signed.message
@@ -155,6 +162,11 @@ def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks
   let expectedRoot ← (SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas)).mapError .ssz
   (rejectUnless (withdrawalsRoot == expectedRoot)
     "payload's withdrawals do not match the expected withdrawals").andThenM fun _ => do
+  -- REJECT unless the block hash of the payload is the hash of its header.
+  --
+  -- A payload whose header has no hash fails too: the execution layer rejects its block hash.
+  (rejectUnless (blockHashOf envelope == some payload.blockHash)
+    "payload's block hash is not computed correctly").andThenM fun _ => do
   -- REJECT unless the signer of the envelope signed it, in the state after the block.
   let valid ←
     (verifyExecutionPayloadEnvelopeSignature config checks state gloas signed).mapError .transition
