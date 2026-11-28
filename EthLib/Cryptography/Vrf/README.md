@@ -212,6 +212,9 @@ Here `q` counts tree hash queries; it is not the `q` of mix queries above.
 With Keccak-256 in place of the oracle, the search of the experiment is exactly `findHashCollision` on the opening and the honest opening (`extractCollision_keccak256`).
 The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
 This bound and the bound on two outputs take the tree hash as a random oracle, so no theorem composes them with `prEvent_selected_le`.
+Over a uniform permutation in place of Keccak-f[1600], an adversary makes at most `q` classical queries to the permutation and its inverse.
+The search then finds a pair with probability at most `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` for `Q = q + 2^33 + 66` (`prEvent_extractCollision_isSome_keccak256With_le`, `SelectionPermutation.lean`).
+That is below `2^-128` at `q = 2^64`, and no theorem composes this bound with `prEvent_selected_le` either.
 
 ## Test vectors
 

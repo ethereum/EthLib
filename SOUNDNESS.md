@@ -780,7 +780,20 @@ That theorem holds for any node hash whose replay reads the cache at one input t
 The honest opening makes at most `2^(h + 1) - 2` of them (`openingWith_queryBound`), the two leaves make two, and the search makes at most two per level.
 `prEvent_extractCollision_isSome_le_of_adversary` states the bound with `Q = q + 2^(h + 1) + 2 h` for an adversary of at most `q` hash queries, which is `q + 2^33 + 64` at height 32.
 The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
-Carrying this bound over to Keccak-256 is an idealisation of A4, not a theorem.
+`prEvent_extractCollision_isSome_keccak256With_le` (`Proofs/Vrf/SelectionPermutation.lean`) bounds the same search with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
+The permutation is drawn once, and every Keccak-256 call of the honest opening, the two leaves and the search uses it.
+The adversary makes at most `q` classical queries to the permutation and its inverse, and its private sampling is not counted.
+The secrets, the index and the opening are its output, so they may depend on the permutation, and the bound covers that.
+The count of `extractCollision_queryBound` holds for any hash whose leaf and node hashes each make at most one counted call (`isQueryBoundP_extractCollision`).
+A leaf or node input is below 136 bytes, so Keccak-256 of it makes at most one call to the permutation (`isQueryBoundP_permHash`).
+A found pair is two such inputs, which `shortPair` passes to `keccak256_collisionAdvantage_le` as two messages of one block.
+`prEvent_le_collisionAdvantage` (`Proofs/Vrf/UniquenessPermutation.lean`) is that step from a search to the collision game, for both bounds over the permutation.
+The bound is `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` with `Q = q + 2^(h + 1) + 2 h + 2`, about `Q (Q - 1) / 2^257 + Q / 2^512`.
+`Q` counts the adversary's queries, the calls of the extraction and the two calls of the collision game.
+At height 32, `Q = q + 2^33 + 66`, and the bound is about `2^-191` at `q = 0`, `2^-177` at `q = 2^40` and `2^-129` at `q = 2^64`.
+With Keccak-f[1600] itself, the extraction is `findHashCollision` on the opening and the honest opening (`extractCollision_keccak256With_keccakF`).
+This bound also has an experiment of its own: no theorem composes it with `prEvent_selected_le` or turns a selection holder into its adversary.
+Carrying the random-oracle bound over to Keccak-256, or the permutation bound over to Keccak-f[1600], is an idealisation of A4, not a theorem.
 
 [EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
 The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
@@ -1695,6 +1708,7 @@ Let the adversary make `q` calls to the permutation and its inverse.
 `keccak256_collisionAdvantage_le` bounds its chance of a collision by `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` with `Q = q + 2`, about `Q (Q - 1) / 2^257 + Q / 2^512`.
 `keccak256_preimageAdvantage_le` bounds its chance of a preimage of any given digest by `Q (2^1344 + 2^1088) / (2^1600 - Q)` with `Q = q + 1`, about `Q / 2^256 + Q / 2^512`.
 `prEvent_outputsWin_keccak256With_le` (`Proofs/Vrf/UniquenessPermutation.lean`) uses the collision bound for the uniqueness of the VRF, whose hash inputs each fit in one block.
+`prEvent_extractCollision_isSome_keccak256With_le` (`Proofs/Vrf/SelectionPermutation.lean`) uses it for the collision search of a selection, over the same inputs.
 These bounds hold in the random permutation model only.
 Keccak-f[1600] is one fixed permutation, and treating it as a uniform one is a heuristic that EthLib assumes and does not prove.
 
@@ -8878,11 +8892,15 @@ The codeword searches of each scheme share the bullet of that scheme:
 - VRF uniqueness over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once before the run.
   The adversary evaluates it in both directions.
   Every Keccak-256 call of the experiment, for the leaves, the nodes and the outputs, uses that permutation in place of Keccak-f[1600].
+  The same assumption carries the bound on the collision search of a selection, `prEvent_extractCollision_isSome_keccak256With_le`.
+  There every Keccak-256 call of the honest opening, the two leaves and the search uses the permutation.
+  The secrets, the index and the opening are the adversary's output, so they may depend on the permutation, and the bound covers that.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak-f[1600].
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
   The bound on the collision search of a selection takes the tree hash as a random oracle instead, under the VRF uniqueness assumption above.
+  Its permutation form takes the tree hash as Keccak-256 over a uniform permutation, under the assumption of VRF uniqueness over a permutation.
   A composed bound would take the tree hash as a random oracle in the selection theorem too.
   One oracle on byte strings gives independent oracles on the disjoint input lengths of the mix and the tree, but no theorem states that composition.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.

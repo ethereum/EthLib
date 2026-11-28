@@ -35,7 +35,44 @@ open EthLib.Cryptography.Hash.Keccak.Internal (squeeze256)
 def permHash (x : ByteArray) : PermComp State Digest :=
   keccak256With forward x
 
+/-- The hash of fewer than 136 bytes makes at most one call to the permutation. -/
+theorem isQueryBoundP_permHash {x : ByteArray} (hx : x.size < RATE_256) :
+    IsQueryBoundP (permHash x) (·.isRight = true) 1 :=
+  -- Keccak-256 calls the permutation once per block, and such an input is one block.
+  (isQueryBoundP_keccak256With isQueryBoundP_forward x).mono
+    (by simp [blockCount, Nat.div_eq_of_lt hx])
+
+/-- Run with the permutation `π`, the hash is Keccak-256 with `π` in place of Keccak-f[1600]. -/
+theorem simulateQ_permHash (π : Equiv.Perm State) (x : ByteArray) :
+    simulateQ (permImpl π) (permHash x) = pure (Id.run (keccak256With (fun S => pure (π S)) x)) :=
+  simulateQ_keccak256With_of_pure _ _ _ (simulateQ_permImpl_forward π) x
+
 /-! ## The reduction to a collision -/
+
+/-- An event on the output is at most as likely as a one-block collision that the search finds.
+
+It holds when the search returns a collision of Keccak-256 after each output with the event. -/
+theorem prEvent_le_collisionAdvantage {α : Type} (adversary : PermComp State α)
+    (search : α → PermComp State (ShortMessage × ShortMessage))
+    (event : Equiv.Perm State → α → Prop)
+    (hsearch : ∀ π a, event π a → ∀ r ∈ support (simulateQ (permImpl π) (search a)),
+      IsHashCollisionWith (fun x => Id.run (keccak256With (fun S => pure (π S)) x))
+        (r.1.1, r.2.1)) :
+    Pr{let π ← $ᵗ (Equiv.Perm State); let a ← simulateQ (permImpl π) adversary}[event π a] ≤
+      collisionAdvantage (fun m : ShortMessage => oneBlockState m.1) squeeze256
+        (adversary >>= search) := by
+  unfold collisionAdvantage
+  refine prEvent_bind_mono_of_support _ _ _ fun π _ => ?_
+  rw [simulateQ_bind]
+  -- On every run, an output with the event makes the search return a collision.
+  refine prEvent_le_prEvent_bind_of_support _ _ _ _ fun a _ ha =>
+    prEvent_eq_one_of_forall_mem_support _ _ fun r hr => ?_
+  obtain ⟨hne, heq⟩ := hsearch π a ha r hr
+  -- The game's hash of a message of one block is Keccak-256 over the permutation.
+  have hgame : ∀ m : ShortMessage, oneCallHash (fun m : ShortMessage => oneBlockState m.1)
+      squeeze256 π m = Id.run (keccak256With (fun S => pure (π S)) m.1) := fun m => by
+    rw [oneCallHash_eq, keccak256With_eq_squeeze256, Id.run_map]
+  exact ⟨fun h => hne (congrArg Subtype.val h), (hgame r.1).trans (heq.trans (hgame r.2).symm)⟩
 
 /-- The collision search of two openings, with each hash Keccak-256 over the permutation.
 
@@ -59,17 +96,13 @@ def collisionSearch (claim : OpeningsClaim) : PermComp State (ShortMessage × Sh
 It hashes the two leaves, then at most two nodes per level. -/
 theorem isQueryBoundP_collisionSearch (claim : OpeningsClaim) :
     IsQueryBoundP (collisionSearch claim) (·.isRight = true) (2 * (VRF_TREE_HEIGHT + 1)) := by
-  -- Keccak-256 calls the permutation once per block, and each input of the tree is one block.
-  have hcall : ∀ x : ByteArray, x.size < RATE_256 →
-      IsQueryBoundP (permHash x) (·.isRight = true) 1 := fun x hx =>
-    (isQueryBoundP_keccak256With isQueryBoundP_forward x).mono
-      (by simp [blockCount, Nat.div_eq_of_lt hx])
+  -- Each input of the tree is one block, so each hash calls the permutation at most once.
   have hsearch := Merkle.isQueryBoundP_findCollision (hash := nodeWith permHash)
-    (fun _ _ _ => hcall _ (by simp [RATE_256])) claim.first.path.toList
+    (fun _ _ _ => isQueryBoundP_permHash (by simp [RATE_256])) claim.first.path.toList
     claim.second.path.toList ⟨0, claim.index.toNat⟩
   unfold collisionSearch
-  refine (isQueryBoundP_bind (hcall _ (by simp [RATE_256])) fun _ _ =>
-    isQueryBoundP_bind (hcall _ (by simp [RATE_256])) fun _ _ =>
+  refine (isQueryBoundP_bind (isQueryBoundP_permHash (by simp [RATE_256])) fun _ _ =>
+    isQueryBoundP_bind (isQueryBoundP_permHash (by simp [RATE_256])) fun _ _ =>
       isQueryBoundP_bind (hsearch _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
   -- Each path has one sibling per level of the tree.
   simp only [Vector.length_toList, min_self]
@@ -126,22 +159,9 @@ theorem prEvent_outputsWin_keccak256With_le (adversary : PermComp State Openings
     (isQueryBoundP_bind hq fun claim _ => isQueryBoundP_collisionSearch claim)
   rw [show q + 2 * (VRF_TREE_HEIGHT + 1) + 2 = q + 2 * (VRF_TREE_HEIGHT + 2) by omega] at hbound
   refine le_trans ?_ hbound
-  unfold collisionAdvantage
-  refine prEvent_bind_mono_of_support _ _ _ fun π _ => ?_
-  rw [simulateQ_bind]
   -- On every run, a win of the adversary makes the search return a collision.
-  refine prEvent_le_prEvent_bind_of_support _ _ _ _ fun _ _ hwin =>
-    prEvent_eq_one_of_forall_mem_support _ _ fun r hr => ?_
-  -- Run with the permutation, each hash is Keccak-256 over it.
-  have hH : ∀ x, simulateQ (permImpl π) (permHash x) =
-      pure (Id.run (keccak256With (fun S => pure (π S)) x)) :=
-    simulateQ_keccak256With_of_pure _ _ _ (simulateQ_permImpl_forward π)
-  obtain ⟨hne, heq⟩ := collisionSearch_collision_of_outputsWin hH hwin hr
-  -- The game's hash of a message of one block is Keccak-256 over the permutation.
-  have hgame : ∀ m : ShortMessage, oneCallHash (fun m : ShortMessage => oneBlockState m.1)
-      squeeze256 π m = Id.run (keccak256With (fun S => pure (π S)) m.1) := fun m => by
-    rw [oneCallHash_eq, keccak256With_eq_squeeze256, Id.run_map]
-  exact ⟨fun h => hne (congrArg Subtype.val h), (hgame r.1).trans (heq.trans (hgame r.2).symm)⟩
+  exact prEvent_le_collisionAdvantage adversary collisionSearch _ fun π _ hwin _ hr =>
+    collisionSearch_collision_of_outputsWin (simulateQ_permHash π) hwin hr
 
 /-! ## Over Keccak-f[1600] -/
 
