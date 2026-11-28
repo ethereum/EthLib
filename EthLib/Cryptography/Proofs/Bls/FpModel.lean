@@ -63,7 +63,7 @@ instance : BaseField Model where
   inverse a := Fin.inverse (a : Fin modulus)
   powNat := powNat
   sqrt := sqrt
-  sqrtCandidate a := powNat a ((modulus + 1) / 4)
+  invSqrtCandidate a := powNat a ((modulus - 3) / 4)
   sgn0 a := a.val % 2 == 1
 
 end Fp.Model
@@ -130,8 +130,7 @@ def Fp.toModel : BaseField.Hom Fp Fp.Model where
   map_square a := Fin.ext (Fp.val_mul a a)
   map_sqrt a := by
     change Fp.Model.sqrt (Fp.toModelFun a) = (Fp.sqrt a).toOption.map Fp.toModelFun
-    rw [Fp.Model.sqrt, Fp.sqrt, Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent,
-      Fp.powNat_toModelFun]
+    rw [Fp.Model.sqrt, Fp.sqrt, Fp.sqrtCandidate_eq_powNat, Fp.powNat_toModelFun]
     generalize Fp.powNat a ((modulus + 1) / 4) = c
     rw [Fp.toModelFun_mul]
     change (if ((c * c).val == a.val) = true then _ else _) = _
@@ -142,10 +141,10 @@ def Fp.toModel : BaseField.Hom Fp Fp.Model where
       rfl
     · rw [ite_eq_right h, ite_eq_right h]
       rfl
-  map_sqrtCandidate a := by
-    change Fp.Model.powNat (Fp.toModelFun a) ((modulus + 1) / 4) =
-      Fp.toModelFun (Fp.sqrtCandidate a)
-    rw [Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent, Fp.powNat_toModelFun]
+  map_invSqrtCandidate a := by
+    change Fp.Model.powNat (Fp.toModelFun a) ((modulus - 3) / 4) =
+      Fp.toModelFun (Fp.invSqrtCandidate a)
+    rw [Fp.invSqrtCandidate_eq_powNat, Fp.powNat_toModelFun]
   map_sgn0 _ := rfl
 
 namespace Fp

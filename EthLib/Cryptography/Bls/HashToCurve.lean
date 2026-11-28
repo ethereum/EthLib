@@ -236,11 +236,6 @@ def Aprime : Fp2 F := ⟨BaseField.zero, BaseField.ofNat 240⟩
 -/
 def Bprime : Fp2 F := Fp2.ofNats 1012 1012
 
-/-- The exponent `(p - 3) / 4`: one power by it gives a square root and an inverse.
-
-For `a ≠ 0` and `r = a^((p - 3) / 4)`, `r a` squares to `a` or `-a`, and `r^2 a` is 1 or -1. -/
-def rootExponent : Nat := (Fp.modulus - 3) / 4
-
 /-- A square root of `-N(Z) = -5` in the base field, where `N(Z)` is the norm of `Z`. -/
 def sqrtNegNormZ : F := BaseField.ofNat
   0x186417302d5a65347a88b0f999ab2b504614aa5e2eebdeb1a014c40bceb7d2306c12a6d436befcf94d39c9db7b263cd4
@@ -266,7 +261,7 @@ def sqrtRatio (u v : Fp2 F) : Bool × Fp2 F :=
   -- `u = 0`: the ratio is the square 0.
   if BaseField.isZero alpha then (true, Fp2.zero) else
     -- `r = alpha^((p - 3) / 4)`, and `e = r^2 alpha = alpha^((p - 1) / 2)` is 1 or -1.
-    let r := BaseField.powNat alpha rootExponent
+    let r := BaseField.invSqrtCandidate alpha
     let e := r * r * alpha
     -- `u v` is a square of `Fp2` exactly when its norm `alpha` is a square of the base field.
     let isQR := BaseField.beq e BaseField.one

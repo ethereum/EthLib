@@ -19,19 +19,22 @@ namespace EthLib.Cryptography.Bls.HashToCurve
 
 open EthLib.Cryptography.Bls
 
+/-- The exponent `k = (p - 3) / 4` of the candidate inverse root. -/
+local notation "kExp" => ((Fp.modulus - 3) / 4)
+
 /-- `x^(2k + 1)`, with `k = (p - 3) / 4`, is `x^((p - 1) / 2)`, and its square is 1 for `x ≠ 0`. -/
 private theorem euler_sq {x : ZMod Fp.modulus} (hx : x ≠ 0) :
-    (x ^ rootExponent * x ^ rootExponent * x) * (x ^ rootExponent * x ^ rootExponent * x) = 1 := by
+    (x ^ kExp * x ^ kExp * x) * (x ^ kExp * x ^ kExp * x) = 1 := by
   have h := ZMod.pow_card_sub_one_eq_one hx
-  rw [show Fp.modulus - 1 = 4 * rootExponent + 2 by decide] at h
+  rw [show Fp.modulus - 1 = 4 * kExp + 2 by decide] at h
   rw [← h]
   ring
 
 /-- On a nonzero square, `x^((p - 1) / 2)` is 1. -/
 private theorem euler_of_sq {y : ZMod Fp.modulus} (hy : y ≠ 0) :
-    (y * y) ^ rootExponent * (y * y) ^ rootExponent * (y * y) = 1 := by
+    (y * y) ^ kExp * (y * y) ^ kExp * (y * y) = 1 := by
   have h := ZMod.pow_card_sub_one_eq_one hy
-  rw [show Fp.modulus - 1 = 4 * rootExponent + 2 by decide] at h
+  rw [show Fp.modulus - 1 = 4 * kExp + 2 by decide] at h
   rw [← h]
   ring
 
@@ -44,7 +47,8 @@ private theorem sqrtRatio_spec {u v : Fp2} (hv : v ≠ 0) :
     ((sqrtRatio u v).2 * (sqrtRatio u v).2 =
       if (sqrtRatio u v).1 then u / v else Z * (u / v)) ∧
     ((sqrtRatio u v).1 = false → ∀ y, y * y ≠ u / v) := by
-  simp only [sqrtRatio, Fp.baseField_isZero, Fp.baseField_powNat, Fp.baseField_beq,
+  simp only [sqrtRatio, Fp.baseField_isZero, Fp.baseField_invSqrtCandidate,
+    Fp.invSqrtCandidate_eq_powNat, Fp.baseField_beq,
     Fp.baseField_one]
   obtain ⟨nu, hnu⟩ : ∃ nu, u.c0 * u.c0 + u.c1 * u.c1 = nu := ⟨_, rfl⟩
   obtain ⟨nv, hnv⟩ : ∃ nv, v.c0 * v.c0 + v.c1 * v.c1 = nv := ⟨_, rfl⟩
@@ -73,9 +77,9 @@ private theorem sqrtRatio_spec {u v : Fp2} (hv : v ≠ 0) :
     simp only [h0, Bool.false_eq_true, ↓reduceIte]
     have hα0 : Fp.toZMod α ≠ 0 := fun h =>
       h0 (Fp.isZero_iff.mpr (Fp.toZMod_inj.mp (h.trans Fp.toZMod_zero.symm)))
-    obtain ⟨r, hr⟩ : ∃ r, α.powNat rootExponent = r := ⟨_, rfl⟩
+    obtain ⟨r, hr⟩ : ∃ r, α.powNat kExp = r := ⟨_, rfl⟩
     simp only [hr]
-    have hR : Fp.toZMod r = Fp.toZMod α ^ rootExponent := by
+    have hR : Fp.toZMod r = Fp.toZMod α ^ kExp := by
       rw [← hr, Fp.toZMod_powNat]
     have hEE : Fp.toZMod r * Fp.toZMod r * Fp.toZMod α * (Fp.toZMod r * Fp.toZMod r * Fp.toZMod α)
         = 1 := by

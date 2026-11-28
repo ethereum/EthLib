@@ -140,7 +140,7 @@ open scoped EthLib.Cryptography.Bls.Fp
 theorem sq_or_neg_sq (a : Fp) :
     let s := Fp.powNat a ((Fp.modulus + 1) / 4)
     s * s = a ∨ s * s = -a := by
-  simpa only [Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent] using Fp.sqrtCandidate_sq_or_neg a
+  simpa only [Fp.sqrtCandidate_eq_powNat] using Fp.sqrtCandidate_sq_or_neg a
 
 /-- Any `a : Fp2` whose `Fp` norm is a square in `Fp` has a square root returned by `Fp2.sqrt`. -/
 theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp} (hsn : sn * sn = Fp2.norm a) :
