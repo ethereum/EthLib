@@ -11,7 +11,7 @@ A plain account has nonce 0 and no code, and a missing account counts as one.
 
 Only such an account loses its storage to a creation, and a block access list cannot record that.
 
-Adding ether keeps this, and so does moving the writes of a transaction into its block.
+Adding ether cannot make a nonempty account empty.
 -/
 
 @[expose] public section
@@ -57,47 +57,5 @@ theorem getAccount_eq_empty_of_createEther {fork : Fork}
     subst c
     subst b
     rfl
-
-/-- Under the property, adding ether keeps every storage word. -/
-theorem RebuildInvariant.getStorage_createEther {fork : Fork} {tx tx' : TransactionState}
-    {target : Address} {amount : U256} (valid : RebuildInvariant tx)
-    (h : tx.createEther fork target amount = .ok tx') (address : Address) (key : Bytes32) :
-    tx'.getStorage address key = tx.getStorage address key := by
-  rw [TransactionState.getStorage_modifyState h]
-  split
-  · rename_i deleted
-    have empty : tx'.getAccount address = EMPTY_ACCOUNT := by
-      simp only [TransactionState.getAccount, deleted.1, deleted.2, Option.getD_none]
-    obtain ⟨-, nonce, code⟩ := TransactionState.getAccount_createEther h address
-    rw [empty] at nonce code
-    exact (valid.storage address nonce.symm code.symm key).symm
-  · rfl
-
-/-- Adding ether keeps the property. -/
-theorem RebuildInvariant.createEther {fork : Fork} {tx tx' : TransactionState}
-    {target : Address} {amount : U256} (valid : RebuildInvariant tx)
-    (h : tx.createEther fork target amount = .ok tx') : RebuildInvariant tx' := by
-  refine ⟨?_, ?_⟩
-  · intro hash code read
-    rw [TransactionState.getCode_modifyState h] at read
-    exact valid.code hash code read
-  · intro address hnonce hcode key
-    obtain ⟨-, nonce, code⟩ := TransactionState.getAccount_createEther h address
-    rw [valid.getStorage_createEther h]
-    exact valid.storage address (nonce ▸ hnonce) (code ▸ hcode) key
-
-/-- Incorporating a transaction into its block keeps the property. -/
-theorem RebuildInvariant.ofBlock_incorporateTxIntoBlock {tx : TransactionState}
-    (valid : RebuildInvariant tx) : Rebuildable tx.incorporateTxIntoBlock.parent := by
-  refine ⟨?_, ?_⟩
-  · intro hash code read
-    change tx.incorporateTxIntoBlock.getCode hash = .ok code at read
-    rw [TransactionState.getCode_incorporateTxIntoBlock] at read
-    exact valid.code hash code read
-  · intro address hnonce hcode key
-    rw [TransactionState.getAccount_ofBlock_incorporateTxIntoBlock] at hnonce hcode
-    change tx.incorporateTxIntoBlock.getStorage address key = 0
-    rw [TransactionState.getStorage_incorporateTxIntoBlock]
-    exact valid.storage address hnonce hcode key
 
 end EthLib.Execution.State

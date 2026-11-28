@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, from Glamsterdam the block access list rebuilds the state after a mainnet block in which no creation lands on an account with nonce 0, no code and storage ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Blocks.stateTransition_rebuild_of_wipeAllowed` and `Blocks.stateTransition_rebuild_nonce_of_wipeAllowed` (`Execution/Proofs/Blocks/BodyFollow.lean`) assume of the state before the block only that its codes match their hashes and that no account with nonce 0 has a delegation's code hash.
+  They assume that the body wipes no storage of an account that had nonce 0, no code and storage before the block (`Evm.WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`), which on mainnet excludes only a creation at one of the 28 accounts of EIP-8253.
+  The theorems from a rebuildable block keep their statements and follow from these.
+
 - In Lean, the refund counter that a transaction settles is at least zero ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
   `Transactions.processMessageCall_refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) shows that a message that succeeds settles the counter of the frame that ends it, with no clamp, from a state that `Transactions.TransactionRun.refundReady` gives.
   `Evm.processMessage_clearedRefund_le` and `Evm.processCreateMessage_clearedRefund_le` (`Execution/Proofs/Evm/Call/Refund.lean`) show that from Spurious Dragon a message that succeeds gains at least the refund of the slots that it leaves cleared.
@@ -1372,6 +1377,13 @@ Not yet released.
   No statement changes.
 
 ### Changes that break callers
+
+- In Lean, the rebuild property of a transaction state no longer speaks of storage words ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Evm.RebuildEnd` (`Execution/Proofs/Evm/Call/Rebuild.lean`) loses `emptyStorage`; its `plain` field, moved from `Evm.RebuildState`, loses the balance, and its `clears`, like `RebuildState.created`, now says that the account had no nonce or code in the block state.
+  `Evm.RebuildState.ofBlock`, `Blocks.systemCall_rebuildState` and `Transactions.processTransaction_rebuildEnd` take the codes of the block state in place of `Rebuildable`, and `Evm.RebuildEnd.getStorage_of_slot_eq_none` and `Evm.RebuildEnd.followable` take an assumption on the wipes.
+  `Transactions.clearedSlots_eq_empty`, `Transactions.nonceOrCodeClearedSlots_eq_empty`, `Transactions.prepareFirstFrame_refundCounter_nonneg`, `Transactions.processMessageCall_refundCounter_nonneg` and `Transactions.runStack_refundCounter_nonneg` take `Rebuildable` of the block state as a separate hypothesis.
+  `Evm.PlainKept`, `Evm.RebuildReady`, `Evm.WipeAllowed`, `State.Rebuildable.wipeAllowed`, `Evm.RebuildReady.start`, `Evm.RebuildEnd.wipes_zero`, `Evm.RebuildEnd.rebuildReady`, `Blocks.keepsFollowable_rebuildReady`, `Blocks.withdrawalState_rebuildState` and `Blocks.exists_rebuildReady_systemCall` are new.
+  `Evm.RebuildEnd.toRebuildInvariant`, `Evm.RebuildState.blockStorage_of_not_hasNonceOrCode`, `Evm.RebuildEnd.rebuildableBlock`, `Blocks.keepsFollowable_rebuildableBlock`, `Blocks.exists_rebuildable_systemCall`, `Blocks.systemCall_followable`, `Blocks.systemCall_rebuildable`, `Blocks.systemCall_delegationsHaveNonce`, `Blocks.getStorage_withdrawalState`, `Blocks.withdrawalState_followable`, `Blocks.withdrawalState_rebuildable`, `Blocks.withdrawalState_delegationsHaveNonce`, `State.RebuildInvariant.getStorage_createEther`, `State.RebuildInvariant.createEther` and `State.RebuildInvariant.ofBlock_incorporateTxIntoBlock` are removed.
 
 - In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
