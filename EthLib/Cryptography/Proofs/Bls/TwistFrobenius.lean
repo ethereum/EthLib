@@ -361,7 +361,6 @@ theorem toPoint_psi_mulNat {P : G2} (hP : G2.Valid P) (n : Nat) :
 theorem psi_generator_projectiveEq :
     (psi (G2.generator : G2)).projectiveEq (mulNegX G2.generator) = true := by
   unfold mulNegX
-  rw [← G2.mulNatAux_eq 65 G2.generator blsX (by decide)]
   decide_g2_at_model [map_psi]
 
 /-- The `psi` eigenvalue on `G2.generator` equals the signed BLS parameter `x = -|x|`. -/

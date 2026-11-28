@@ -96,11 +96,14 @@ theorem accountStep_moves {op : Op} {f : Evm fork Meter → Except EvmError (Evm
 /-- SSTORE costs at least its constant price, at every fork. -/
 theorem constantGas_sstore_le (fork : Fork) (original current new : U256) (cold : Bool) :
     Op.constantGas fork .sstore ≤ sstoreCost fork original current new cold := by
-  unfold Op.constantGas sstoreCost sstoreReadCost sstoreResetCost
+  unfold Op.constantGas sstoreCost sstoreCase sstoreReadCost sstoreResetCost
   dsimp only [gasSchedule, sloadCost]
   cases fork <;> simp (config := { decide := true }) only [ite_true, ite_false]
   all_goals repeat' split
-  all_goals decide
+  -- Before Istanbul, a write is a set or a reset, never an unchanged or a dirty slot.
+  all_goals first
+    | decide
+    | (exfalso; revert ‹(if _ then SstoreWrite.set else SstoreWrite.reset) = _›; split <;> simp)
 
 /-- SLOAD takes a word, leaves one and pays at least its price. -/
 theorem sloadStep_moves {evm after : Evm fork Meter} (h : sloadStep evm = .ok after) :

@@ -121,7 +121,7 @@ private theorem maxMessageCallGas_add_le {x cost held stipend : Nat} (le : x + c
 
 omit [LawfulGasMeter Meter] in
 /-- A charge that succeeds was within the execution gas left, when the meter charges so. -/
-private theorem le_gasLeft_of_chargeGas
+theorem le_gasLeft_of_chargeGas
     (charge : ∀ {meter after : Meter} {amount : Nat}, GasMeter.charge meter amount = .ok after →
       amount ≤ GasMeter.gasLeft meter)
     {evm after : Evm fork Meter} {amount : Nat} (h : chargeGas evm amount = .ok after) :

@@ -14,6 +14,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 --
 -- Its run may also abort, when the runner of messages fails.
 public import EthLib.Execution.Proofs.Evm.Logic.Message
+-- Every frame of a run has the jump destinations of its code.
+public import EthLib.Execution.Proofs.Evm.Logic.Code
 -- Another form of triple lets the runner fail with any error.
 --
 -- It names the messages on which a run may stop because the runner fails.
