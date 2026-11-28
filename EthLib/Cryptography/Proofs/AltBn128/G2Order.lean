@@ -26,7 +26,10 @@ set_option maxRecDepth 8000
 namespace Point2
 
 /-- `P2` is on the twist. -/
-theorem isOnCurve_generator : generator.isOnCurve = true := by decide +kernel
+theorem isOnCurve_generator : generator.isOnCurve = true := by
+  -- The check reads `b2 = 3 / (9 + i)`, and the kernel inverts `9 + i` by the Euclidean algorithm.
+  rw [instTwistParams_eq_euclidTwist]
+  decide +kernel
 
 /-- `P2` is not the point at infinity. -/
 theorem generator_ne_infinity : generator ≠ infinity := by decide

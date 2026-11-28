@@ -116,7 +116,10 @@ def torsionWitness : Point2 :=
     ⟨19708715795314625321786836131027732252052916014094444083338561104342248597196,
       9594937902945310003264004071077143592487355200882289385935083565717474466459⟩
 
-theorem isOnCurve_torsionWitness : torsionWitness.isOnCurve = true := by decide +kernel
+theorem isOnCurve_torsionWitness : torsionWitness.isOnCurve = true := by
+  -- The check reads `b2 = 3 / (9 + i)`, and the kernel inverts `9 + i` by the Euclidean algorithm.
+  rw [instTwistParams_eq_euclidTwist]
+  decide +kernel
 
 theorem torsionWitness_ne_infinity : torsionWitness ≠ infinity := by decide
 

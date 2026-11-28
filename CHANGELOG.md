@@ -1395,6 +1395,13 @@ Not yet released.
   The Python binding `consensus.validate_bid` names the new refusal `repeats_parent_hash`.
   The pinned Builder API source moves from `0911550` to `bbd815e`.
 
+- In Lean, the inverse of the alt_bn128 field `Fp` takes the divsteps of Bernstein and Yang in place of the extended Euclidean algorithm ([#5027](https://github.com/ethereum/EthLib/issues/5027)).
+  `AltBn128.Fp.inv` unfolds to `SafeGcd.inverseFin`, and `AltBn128.Point.mulNat` inverts with it in place of `Fin.inverse`.
+  `AltBn128.Fp.inv_eq_inverse` and `AltBn128.Fp.inv_eq_fin_inverse` (`Cryptography/Proofs/AltBn128/Field.lean`) state that it is the Euclidean inverse, and `AltBn128.Fp.toZMod_inv` keeps its statement.
+  The kernel still computes the pairing of the generators with the Euclidean inverse.
+  `AltBn128.euclidOps` and `AltBn128.euclidTwist` (`Cryptography/Proofs/AltBn128/Fp2.lean`) are the operations of `Fp` and the twist with the Euclidean inverse, and `AltBn128.instFieldOps_eq_euclidOps` and `AltBn128.instTwistParams_eq_euclidTwist` rewrite to them before a computation in the kernel.
+  `ShortWeierstrass.Point.Representation.of_eq_inverse` (`Cryptography/Proofs/Jacobian.lean`) makes `Fin m` a representation for any inverse equal to the Euclidean one, for alt_bn128 and secp256r1.
+
 - In Lean, the inverses of the secp256r1 fields `Fp` and `Fn` take the divsteps of Bernstein and Yang in place of the extended Euclidean algorithm ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `SafeGcd.inverseFin` (`Cryptography/SafeGcd.lean`) keeps the candidate of `SafeGcd.candidate` when it is below the modulus and its product with the input is one mod the modulus, and otherwise takes the extended Euclidean algorithm.
   `SafeGcd.candidate`, `SafeGcd.negInverseWord` (`-m^(-1) mod 2^64` by Newton's iteration) and `SafeGcd.inverseFin_eq` are new.
