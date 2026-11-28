@@ -185,12 +185,16 @@ class BuildPipelineTests(unittest.TestCase):
 
     def test_saved_parent_archive_excludes_setup_files_and_restores_a_warm_build(self):
         self.run_command(["lake", "build", "--wfail"])
-        # Include nested paths, spaces, and a dangling setup-file symlink.
+        # Include nested paths, spaces, a dangling setup-file symlink, an irsetup file and bin/.
         nested = self.build / "ir" / "a directory"
         nested.mkdir(parents=True)
         setup = nested / "Probe.setup.json"
         setup.write_text('{"path":"/another/runner/EthLib/.lake/build"}')
+        (nested / "Probe.irsetup.json").write_text('{"path":"/another/runner/EthLib/.lake/build"}')
         (nested / "Link.setup.json").symlink_to("/another/runner/missing.setup.json")
+        bin_dir = self.build / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        (bin_dir / "check-decls").write_text("binary")
         (self.build / "ethlib-module-times.json").write_text(
             json.dumps({"schema_version": 1, "commit": None, "modules": {}})
         )
@@ -214,6 +218,8 @@ class BuildPipelineTests(unittest.TestCase):
         with tarfile.open(archive) as saved:
             names = saved.getnames()
         self.assertEqual([name for name in names if name.endswith(".setup.json")], [])
+        self.assertEqual([name for name in names if name.endswith(".irsetup.json")], [])
+        self.assertEqual([name for name in names if name.startswith(".lake/build/bin")], [])
         self.assertIn(".lake/build/lib/lean/EthLib/Exports/Probe.olean.private", names)
         self.assertIn(".lake/build/lib/lean/EthLib/Base/Proofs.olean", names)
         self.assertIn(".lake/build/ir/EthLib/Exports/Probe.c.o.export", names)
@@ -224,6 +230,25 @@ class BuildPipelineTests(unittest.TestCase):
         # It must do so for every default target.
         shutil.rmtree(self.build)
         self.run_command(["tar", "-xf", str(archive)])
+        output = self.run_command(["lake", "--no-build", "build", "--wfail"])
+        self.assertIn("All targets up-to-date", output)
+
+    def test_disjoint_shard_staging_merges_into_a_warm_build(self):
+        from proof_shards import stage_owner
+
+        self.run_command(["lake", "build", "--wfail"])
+        spec_stage = self.root / "stage-spec"
+        proof_stage = self.root / "stage-proof"
+        self.assertGreater(stage_owner(self.build, spec_stage, "spec-exports"), 0)
+        self.assertGreater(stage_owner(self.build, proof_stage, "base-ser-net"), 0)
+
+        spec_files = {p.relative_to(spec_stage) for p in spec_stage.rglob("*") if p.is_file()}
+        proof_files = {p.relative_to(proof_stage) for p in proof_stage.rglob("*") if p.is_file()}
+        self.assertEqual(spec_files & proof_files, set())
+
+        shutil.rmtree(self.build)
+        for staged in (spec_stage, proof_stage):
+            shutil.copytree(staged, self.build, dirs_exist_ok=True)
         output = self.run_command(["lake", "--no-build", "build", "--wfail"])
         self.assertIn("All targets up-to-date", output)
 
