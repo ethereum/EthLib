@@ -259,7 +259,7 @@ private abbrev ChildRefund (_ : Message fork) (state : TransactionState) (substa
 The frame must run code only at an account with a nonce or code.
 
 Each message it sends must end as a call or a creation does. -/
-private theorem refundFrame_step {evm : Evm fork Meter} {result : StepResult fork Meter}
+theorem refundFrame_step {evm : Evm fork Meter} {result : StepResult fork Meter}
     (hinv : CodeAtNonceOrCode evm) (h : step fork evm = .ok result) :
     StepResult.Keeps RefundFrame (ChildRelByKind CallRefund CreateRefund) evm result := by
   have hs := stepRules_keepsPlain.step h
@@ -307,7 +307,7 @@ private theorem refundFrame_step {evm : Evm fork Meter} {result : StepResult for
 /-- The state that a message enters has the cleared slots of the state it is sent from.
 
 Its substate has the refund counter of the substate it is sent from. -/
-private theorem refund_entered {message : Message fork} {state entry : TransactionState}
+theorem refund_entered {message : Message fork} {state entry : TransactionState}
     {substate entrySubstate : Substate}
     (h : Entered fork message state substate entry entrySubstate) :
     nonceOrCodeClearedSlots entry = nonceOrCodeClearedSlots state ∧
@@ -323,7 +323,7 @@ private theorem refund_entered {message : Message fork} {state entry : Transacti
   · exact ⟨(nonceOrCodeSlots_moveEther slotsOf_clearedSlots hm).trans hstart, rfl⟩
 
 /-- A call ends as it should, once its frame ends related to its start frame. -/
-private theorem callRefund_rollbackOnError {message : Message fork}
+theorem callRefund_rollbackOnError {message : Message fork}
     {state entry : TransactionState} {substate entrySubstate : Substate} {meter : Meter}
     {ended : Evm fork Meter}
     (hentry : Entered fork message state substate entry entrySubstate)
@@ -405,8 +405,17 @@ private theorem depositCode_refund {snapshot : TransactionState} {evm after : Ev
   cases h
   exact .inr ⟨hnone, hnone, rfl, .inr (Base.mapError_ok_iff.mp hst)⟩
 
+/-- From Spurious Dragon, the start of a creation gives its address a nonce. -/
+theorem nonce_prepareCreation (hfork : .spuriousDragon ≤ fork) {target : Address}
+    {state prepared : TransactionState} (hp : prepareCreation fork state target = .ok prepared) :
+    1 ≤ (prepared.getAccount target).nonce := by
+  unfold prepareCreation at hp
+  simp only [show fork ≥ .spuriousDragon from hfork, ↓reduceIte] at hp
+  rw [(TransactionState.getAccount_incrementNonce (Base.mapError_ok_iff.mp hp)).1]
+  exact Nat.succ_le_of_lt (Nat.succ_pos _)
+
 /-- From Spurious Dragon, a creation ends as it should, once its init code ends as a call does. -/
-private theorem createRefund_depositCode (hfork : .spuriousDragon ≤ fork)
+theorem createRefund_depositCode (hfork : .spuriousDragon ≤ fork)
     {message : Message fork} {state prepared : TransactionState} {substate : Substate}
     {meter : Meter} {evm after : Evm fork Meter}
     (hp : prepareCreation fork state message.currentTarget = .ok prepared)
@@ -415,11 +424,7 @@ private theorem createRefund_depositCode (hfork : .spuriousDragon ≤ fork)
     CreateRefund message state substate meter after := by
   intro hnc
   -- The start of the creation gives the address a nonce.
-  have hnonce : 1 ≤ (prepared.getAccount message.currentTarget).nonce := by
-    unfold prepareCreation at hp
-    simp only [show fork ≥ .spuriousDragon from hfork, ↓reduceIte] at hp
-    rw [(TransactionState.getAccount_incrementNonce (Base.mapError_ok_iff.mp hp)).1]
-    exact Nat.succ_le_of_lt (Nat.succ_pos _)
+  have hnonce := nonce_prepareCreation hfork hp
   obtain ⟨kcall, hc, hends⟩ := hm (fun _ => .inl hnonce)
   have kcreate := keepsNonceOrCodeCreate_depositCode hfork hp kcall hd
   obtain ⟨⟨hk, hpar⟩, hmsg⟩ := kcall
@@ -522,11 +527,11 @@ theorem sstoreRefund_nonneg (hfork : fork < .istanbul) (original current new : U
   split_ifs <;> omega
 
 /-- The second frame holds at least the refund counter of the first. -/
-private abbrev CounterLe (a b : Evm fork Meter) : Prop :=
+abbrev CounterLe (a b : Evm fork Meter) : Prop :=
   a.substate.refundCounter ≤ b.substate.refundCounter
 
 /-- A message from `substate` that succeeds ends with at least the counter of `substate`. -/
-private abbrev CounterEnds (_ : Message fork) (_ : TransactionState) (substate : Substate)
+abbrev CounterEnds (_ : Message fork) (_ : TransactionState) (substate : Substate)
     (_ : Meter) (ended : Evm fork Meter) : Prop :=
   ended.error = none → substate.refundCounter ≤ ended.substate.refundCounter
 
@@ -541,18 +546,10 @@ private theorem frameStepRules_counterLe (hfork : fork < .istanbul) :
   log _ _ hsub _ _ := by rw [CounterLe, hsub]
   incrementNonce _ _ _ _ := Int.le_refl _
 
-/-- Before Istanbul, a message that succeeds ends with at least the counter it starts from.
-
-That holds of a call and of a creation, and for every state. -/
-private theorem counter_induction [LawfulGasMeter Meter] (hfork : fork < .istanbul) (n : Nat) :
-    (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
-      (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-      ∀ ended, processMessage fork message state substate meter held = .ok ended →
-        CounterEnds message state substate meter ended.val) ∧
-    (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
-      (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-      ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
-        CounterEnds message state substate meter ended.val) := by
+/-- Before Istanbul, a step never lowers the counter, when no message that it sends does. -/
+theorem counterLe_step (hfork : fork < .istanbul) {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (h : step fork evm = .ok result) :
+    StepResult.Keeps CounterLe (ChildRel CounterEnds) evm result := by
   have T := frameStepRules_counterLe (Meter := Meter) hfork
   -- A child starts from a counter of zero, and a caller adds its counter only when it succeeds.
   have inc : ∀ {caller : Evm fork Meter} {message : Message fork} {child : Evm fork Meter},
@@ -568,33 +565,62 @@ private theorem counter_induction [LawfulGasMeter Meter] (hfork : fork < .istanb
         caller.substate.refundCounter + child.substate.refundCounter
       omega
     · exact Int.le_refl _
-  refine processMessage_rel (Inv := fun _ => True) T.refl T.trans (fun _ _ => trivial)
-    (fun evm error _ => T.static (staticStep_exceptionalHalt evm error)) (fun _ h => ?_)
-    (fun _ _ => T.sameContext ⟨rfl, rfl, rfl, rfl⟩)
-    (fun h _ => T.static (staticStep_runPrecompile h)) (fun hentry hrun => ?_)
-    (fun _ hm hd => ?_) n
-  · rcases T.step inc h with ⟨-, after, rfl, hsd⟩ | ⟨-, keeps⟩
-    · refine T.selfdestructStep (fun _ refund h => ?_) hsd
-      unfold finishSelfdestruct at h
-      split at h
-      · cases h
-      · obtain ⟨st, -, h⟩ := Base.bind_ok_iff.mp h
-        cases h
-        exact Int.le_add_of_nonneg_right (Int.natCast_nonneg refund)
-    · exact keeps
-  · -- A rollback keeps the substate, whose counter started at that of the caller's substate.
-    intro _
-    rw [(createdAccounts_rollbackOnError _ _).2]
-    have := hrun trivial
-    obtain ⟨-, hsub⟩ := refund_entered hentry
-    dsimp only [CounterLe, startFrame] at this
-    omega
-  · -- A creation that succeeds had an init code that succeeded, and keeps its substate.
-    intro herr
-    rcases depositCode_refund hd with ⟨-, hfail⟩ | ⟨hevm, -, hsub, -⟩
-    · exact absurd herr hfail
-    · rw [hsub]
-      exact hm hevm
+  rcases T.step inc h with ⟨-, after, rfl, hsd⟩ | ⟨-, keeps⟩
+  · refine T.selfdestructStep (fun _ refund h => ?_) hsd
+    unfold finishSelfdestruct at h
+    split at h
+    · cases h
+    · obtain ⟨st, -, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      exact Int.le_add_of_nonneg_right (Int.natCast_nonneg refund)
+  · exact keeps
+
+/-- A call keeps its counter, once its frame ends with at least the counter of its start frame. -/
+theorem counterEnds_rollbackOnError {message : Message fork}
+    {state entry : TransactionState} {substate entrySubstate : Substate} {meter : Meter}
+    {ended : Evm fork Meter}
+    (hentry : Entered fork message state substate entry entrySubstate)
+    (hrun : CounterLe (startFrame message entry entrySubstate meter) ended) :
+    CounterEnds message state substate meter (rollbackOnError state ended) := by
+  -- A rollback keeps the substate, whose counter started at that of the caller's substate.
+  intro _
+  rw [(createdAccounts_rollbackOnError _ _).2]
+  obtain ⟨-, hsub⟩ := refund_entered hentry
+  dsimp only [CounterLe, startFrame] at hrun
+  omega
+
+/-- A creation keeps its counter, once its init code keeps the counter. -/
+theorem counterEnds_depositCode {message : Message fork} {state prepared : TransactionState}
+    {substate : Substate} {meter : Meter} {evm after : Evm fork Meter}
+    (hm : CounterEnds message prepared substate meter evm)
+    (hd : depositCode fork state evm = .ok after) :
+    CounterEnds message state substate meter after := by
+  -- A creation that succeeds had an init code that succeeded, and keeps its substate.
+  intro herr
+  rcases depositCode_refund hd with ⟨-, hfail⟩ | ⟨hevm, -, hsub, -⟩
+  · exact absurd herr hfail
+  · rw [hsub]
+    exact hm hevm
+
+/-- Before Istanbul, a message that succeeds ends with at least the counter it starts from.
+
+That holds of a call and of a creation, and for every state. -/
+private theorem counter_induction [LawfulGasMeter Meter] (hfork : fork < .istanbul) (n : Nat) :
+    (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
+      (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
+      ∀ ended, processMessage fork message state substate meter held = .ok ended →
+        CounterEnds message state substate meter ended.val) ∧
+    (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
+      (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
+      ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
+        CounterEnds message state substate meter ended.val) :=
+  have T := frameStepRules_counterLe (Meter := Meter) hfork
+  processMessage_rel (Inv := fun _ => True) T.refl T.trans (fun _ _ => trivial)
+    (fun evm error _ => T.static (staticStep_exceptionalHalt evm error))
+    (fun _ h => counterLe_step hfork h) (fun _ _ => T.sameContext ⟨rfl, rfl, rfl, rfl⟩)
+    (fun h _ => T.static (staticStep_runPrecompile h))
+    (fun hentry hrun => counterEnds_rollbackOnError hentry (hrun trivial))
+    (fun _ hm hd => counterEnds_depositCode hm hd) n
 
 /-- Before Istanbul, a call that succeeds ends with at least the refund counter it starts from. -/
 theorem processMessage_refundCounter_le_of_lt_istanbul [LawfulGasMeter Meter]
