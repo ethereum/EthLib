@@ -111,7 +111,7 @@ theorem barycentricRefSum_eq_sum_div (p D : Array Fr) (z : Fr) (n : Nat) :
 
 /-- The barycentric sum as a `Finset.sum` over field operations only.
 
-The spec division is unfolded to `* _⁻¹` via little Fermat. -/
+The spec division is unfolded to `* _⁻¹`. -/
 theorem barycentricRefSum_eq_sum (p D : Array Fr) (z : Fr) (n : Nat) :
     barycentricRefSum p D z n
       = ∑ i ∈ Finset.range n, p[i]! * D[i]! * (z - D[i]!)⁻¹ := by

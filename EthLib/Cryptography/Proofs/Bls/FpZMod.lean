@@ -415,7 +415,7 @@ theorem sqrtCandidate_eq_powNat (a : Fp) :
 
 /-! ## Bridge: spec operations = Mathlib operations -/
 
-/-- The inverse `a ^ (p - 2)` is the inverse of `ZMod p`, and both send `0` to `0`. -/
+/-- The inverse is the inverse of `ZMod p`, and both send `0` to `0`. -/
 theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ :=
   Montgomery.toZMod_inv a
 

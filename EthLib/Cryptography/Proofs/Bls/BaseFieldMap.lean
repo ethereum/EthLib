@@ -273,6 +273,120 @@ theorem map_cyclotomicPow (f : Hom F G) (a : Fp12 F) (e : Nat) :
       rw [map_cyclotomicSquare] at h
       split <;> simp only [map_mul, h]
 
+/-- The map of base fields, applied to the four kept coefficients. -/
+private def Compressed.map (f : Hom F G) (g : Compressed F) : Compressed G :=
+  ⟨g.a1.map f, g.a2.map f, g.a4.map f, g.a5.map f⟩
+
+/-- The map of base fields, applied to the numerators and the denominator. -/
+private def mapTriple (f : Hom F G) (n : Fp2 F × Fp2 F × Fp2 F) : Fp2 G × Fp2 G × Fp2 G :=
+  (n.1.map f, n.2.1.map f, n.2.2.map f)
+
+/-- The square of the shared `Fp2` definition commutes with the map. -/
+private theorem map_fp2Square (f : Hom F G) (a : Fp2 F) :
+    Fp2.map f (Cryptography.Fp2.square a) = Cryptography.Fp2.square (Fp2.map f a) :=
+  Fp2.map_square f a
+
+private theorem map_compress (f : Hom F G) (a : Fp12 F) :
+    (compress a).map f = compress (map f a) := rfl
+
+private theorem map_compressedSquare (f : Hom F G) (g : Compressed F) :
+    g.square.map f = (g.map f).square := by
+  simp only [Compressed.square, Compressed.map, Fp2.map_add, Fp2.map_sub, map_fp2Square,
+    Fp2.map_mulByOnePlusI]
+
+private theorem map_squares (f : Hom F G) (g : Compressed F) (e : Nat) :
+    (g.squares e).map (Compressed.map f) = (g.map f).squares e := by
+  induction e using Nat.strongRecOn generalizing g with
+  | _ e ih =>
+    rw [Compressed.squares.eq_1 g e, Compressed.squares.eq_1 (g.map f) e]
+    split
+    · rfl
+    · split
+      · rfl
+      · have h := ih (e / 2) (by omega) g.square
+        rw [map_compressedSquare] at h
+        split <;> simp only [List.map_cons, h]
+
+private theorem map_numerators (f : Hom F G) (g : Compressed F) :
+    mapTriple f g.numerators = (g.map f).numerators := by
+  simp only [Compressed.numerators, mapTriple, Compressed.map, Fp2.map_add, Fp2.map_sub,
+    Fp2.map_mul, map_fp2Square, Fp2.map_mulByOnePlusI]
+
+private theorem map_suffixProducts (f : Hom F G) (xs : List (Fp2 F)) :
+    ((suffixProducts xs).1.map (Prod.map (Fp2.map f) (Fp2.map f)),
+      (suffixProducts xs).2.map f) = suffixProducts (xs.map (Fp2.map f)) := by
+  induction xs with
+  | nil => simp only [suffixProducts, List.foldr_nil, List.map_nil, Fp2.map_one]
+  | cons x xs ih =>
+    simp only [suffixProducts, List.foldr_cons, List.map_cons] at ih ⊢
+    rw [← ih]
+    simp only [Prod.map, Fp2.map_mul]
+
+private theorem map_batchInverse (f : Hom F G) (ps : List (Fp2 F × Fp2 F)) (inv : Fp2 F) :
+    (batchInverse ps inv).map (Fp2.map f) =
+      batchInverse (ps.map (Prod.map (Fp2.map f) (Fp2.map f))) (inv.map f) := by
+  induction ps generalizing inv with
+  | nil => rfl
+  | cons p ps ih =>
+    simp only [batchInverse, List.map_cons, Prod.map, ih, Fp2.map_mul]
+
+private theorem map_foldl_mul (f : Hom F G) (xs : List (Fp12 F)) (a : Fp12 F) :
+    map f (xs.foldl (· * ·) a) = (xs.map (map f)).foldl (· * ·) (map f a) := by
+  induction xs generalizing a with
+  | nil => rfl
+  | cons x xs ih => simp only [List.foldl_cons, List.map_cons, ih, map_mul]
+
+private theorem map_decompress (f : Hom F G) (g : Compressed F) (n : Fp2 F × Fp2 F × Fp2 F)
+    (d : Fp2 F) : map f (g.decompress n d) = (g.map f).decompress (mapTriple f n) (d.map f) := by
+  simp only [Compressed.decompress, map, Fp6.map, Compressed.map, mapTriple, Fp2.map_mul]
+
+private theorem map_zipWith_decompress (f : Hom F G) (sel : List (Compressed F))
+    (nums : List (Fp2 F × Fp2 F × Fp2 F)) (invs : List (Fp2 F)) :
+    (List.zipWith (fun x d => x.1.decompress x.2 d) (sel.zip nums) invs).map (map f) =
+      List.zipWith (fun x d => x.1.decompress x.2 d)
+        ((sel.map (Compressed.map f)).zip (nums.map (mapTriple f))) (invs.map (Fp2.map f)) := by
+  induction sel generalizing nums invs with
+  | nil => rfl
+  | cons g sel ih =>
+    cases nums with
+    | nil => rfl
+    | cons n nums =>
+      cases invs with
+      | nil => rfl
+      | cons d invs =>
+        simp only [List.map_cons, List.zip_cons_cons, List.zipWith_cons_cons, map_decompress, ih]
+
+/-- The power with compressed squares commutes with the map. -/
+theorem map_compressedPow (f : Hom F G) (a : Fp12 F) (e : Nat) :
+    map f (compressedPow a e) = compressedPow (map f a) e := by
+  have hsel : (compress (map f a)).square.squares (e / 2) =
+      ((compress a).square.squares (e / 2)).map (Compressed.map f) := by
+    rw [map_squares, map_compressedSquare, map_compress]
+  have hnum : ∀ sel : List (Compressed F),
+      (sel.map (Compressed.map f)).map Compressed.numerators =
+        (sel.map Compressed.numerators).map (mapTriple f) := fun sel => by
+    simp only [List.map_map]
+    exact List.map_congr_left fun g _ => (map_numerators f g).symm
+  unfold compressedPow
+  dsimp only
+  rw [hsel, hnum]
+  generalize (compress a).square.squares (e / 2) = sel
+  generalize sel.map Compressed.numerators = nums
+  have hden : (nums.map (mapTriple f)).map (fun n => n.2.2) =
+      (nums.map fun n => n.2.2).map (Fp2.map f) := by
+    simp only [List.map_map]
+    rfl
+  obtain ⟨hp, ht⟩ := Prod.ext_iff.mp (map_suffixProducts f (nums.map fun n => n.2.2))
+  rw [hden, ← hp, ← ht, Fp2.map_isZero, ← Fp2.map_inverse, ← map_batchInverse,
+    ← map_zipWith_decompress]
+  generalize List.zipWith _ _ _ = powers
+  split_ifs
+  · exact map_cyclotomicPow f a e
+  · exact map_foldl_mul f powers a
+  · cases powers with
+    | nil => exact map_one f
+    | cons p rest => exact map_foldl_mul f rest p
+
 end Fp12
 
 end EthLib.Cryptography.Bls
