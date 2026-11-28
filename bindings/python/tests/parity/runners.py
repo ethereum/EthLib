@@ -843,8 +843,6 @@ def runner(case: Case):
     if case.fork in BOGOTA_NETWORKS:
         return None
     run = RUNNERS.get(case.group)
-    if run in (_state_test, _transaction) and case.fork not in FORK_OF_NETWORK:
-        return None
     if run is _ssz_static and case.fork not in _container_forks(case.group.split("/")[1]):
         return None
     if run is _operation and not runs_operation(case.fork, case.group.split("/")[1]):
@@ -875,7 +873,7 @@ def runner(case: Case):
 def plan(case: Case) -> str | None:
     """The plan for a case that no runner covers: its fork's entry first, then the general one."""
     if case.fork in BOGOTA_NETWORKS:
-        return _BOGOTA.get(case.suite)
+        return _BOGOTA[case.suite]
     for table in (NOT_YET_AT.get(case.fork, {}), NOT_YET):
         if entry := table.get(case.group) or table.get(case.group.split("/")[0]):
             return entry

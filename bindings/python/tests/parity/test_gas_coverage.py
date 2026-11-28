@@ -475,7 +475,22 @@ def coverage_executable() -> Path:
 @pytest.fixture(scope="module")
 def observer(coverage_executable):
     with gas_coverage.open_bridge(coverage_executable) as bridge:
-        yield bridge.request
+        inventories: dict[str, frozenset[str]] = {}
+
+        # Every observed rule must be in its fork's inventory, as the report requires.
+        def request(payload: dict) -> dict:
+            reply = bridge.request(payload)
+            rules = reply.get("gasRules")
+            if payload["kind"] != "inventory" and isinstance(rules, dict):
+                fork = payload["fork"]
+                if fork not in inventories:
+                    inventory = bridge.request({"kind": "inventory", "fork": fork})
+                    inventories[fork] = gas_coverage.parse_inventory_reply(inventory, fork).rules
+                unexpected = sorted(rules.keys() - inventories[fork])
+                assert not unexpected, f"gas rules missing from the {fork} inventory: {unexpected}"
+            return reply
+
+        yield request
 
 
 def test_vendored_dao_transition(observer) -> None:

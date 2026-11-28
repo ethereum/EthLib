@@ -285,6 +285,16 @@ def skip_reason(case: Case, disagreements: Mapping[tuple[str, str | None], dict]
         return "fixture network is outside the implemented execution forks"
     if reason := catalogue.EXCLUDED_FORMATS.get(case.group):
         return reason
+    # Parity has no plan for these networks, and must keep failing loudly on them.
+    unplanned_bogota = (
+        case.fork in catalogue.BOGOTA_NETWORKS and case.suite not in catalogue.DEVNETS
+    )
+    unknown_state_network = (
+        case.group in ("state_test", "transaction_test")
+        and case.fork not in runners.FORK_OF_NETWORK
+    )
+    if unplanned_bogota or unknown_state_network:
+        return "no parity runner for this fixture at this network"
     if runners.runner(case) is None:
         return runners.plan(case) or "no parity runner for this fixture at this network"
     if case.group not in REPLAYERS:
