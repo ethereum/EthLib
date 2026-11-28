@@ -133,13 +133,14 @@ def pre_state(pre: dict) -> bytes:
     )
 
 
-def _block_hashes(number: int) -> list[bytes]:
+@lru_cache(maxsize=128)
+def _block_hashes(number: int) -> tuple[bytes, ...]:
     """The hashes of the 256 blocks before a state test, oldest first."""
     # A state test has no chain, so block `n` has the hash `keccak256(str(n))` by convention.
     # The test `test_blockhash_zero_in_window_control` of execution-spec-tests states it.
     from ethlib.cryptography.keccak import keccak256
 
-    return [keccak256(str(n).encode()) for n in range(max(0, number - 256), number)]
+    return tuple(keccak256(str(n).encode()) for n in range(max(0, number - 256), number))
 
 
 def _environment(env: dict) -> bytes:
@@ -157,7 +158,7 @@ def _environment(env: dict) -> bytes:
             _scalar(env.get("currentBaseFee", "0x0")),
             random,
             _scalar(env.get("currentExcessBlobGas", "0x0")),
-            _block_hashes(int(env["currentNumber"], 16)),
+            list(_block_hashes(int(env["currentNumber"], 16))),
             _scalar(env.get("slotNumber", "0x0")),
         ]
     )
@@ -211,6 +212,17 @@ def state_test_input(root: Path, case: Case) -> tuple[tuple[str, int, bytes, byt
     return args, post
 
 
+def check_state_test_receipt(post: dict, logs_hash: bytes, gas_used: int, succeeded: bool) -> None:
+    """Check the logs and any gas and success fields pinned by a state test."""
+    assert logs_hash == _hex(post["logs"]), "logs hash differs"
+    receipt = post.get("receipt", {})
+    if "cumulativeGasUsed" in receipt:
+        assert gas_used == int(receipt["cumulativeGasUsed"], 16), "gas used differs"
+    # A receipt before Byzantium holds a state root instead of a status.
+    if "status" in receipt:
+        assert succeeded == receipt["status"], "transaction status differs"
+
+
 def _state_test(root: Path, case: Case) -> None:
     from ethlib.execution import transactions
 
@@ -228,13 +240,7 @@ def _state_test(root: Path, case: Case) -> None:
     if run.state_root != _hex(post["hash"]):
         got, expected = _accounts(run.accounts), _expected_accounts(post["state"])
         raise AssertionError(_state_diff(got, expected))
-    assert run.logs_hash == _hex(post["logs"])
-    receipt = post.get("receipt", {})
-    if "cumulativeGasUsed" in receipt:
-        assert run.gas_used == int(receipt["cumulativeGasUsed"], 16)
-    # A receipt before Byzantium holds a state root instead of a status.
-    if "status" in receipt:
-        assert run.succeeded == receipt["status"]
+    check_state_test_receipt(post, run.logs_hash, run.gas_used, run.succeeded)
 
 
 # The forks of a network of the blockchain tests, in order, and how each activates.
@@ -305,6 +311,11 @@ _SCENARIOS = {
     "AmsterdamToBPOIncreaseAtTime15k": ("AmsterdamBPOIncrease", 15_000),
     "AmsterdamToBPODecreaseAtTime15k": ("AmsterdamBPODecrease", 15_000),
 }
+
+
+def static_fork(network: str) -> str | None:
+    """The active fork of a network that keeps one execution fork for all its blocks."""
+    return _NETWORK_FORK.get("Amsterdam" if network in _SCENARIOS else network)
 
 
 def chain_of(fixture: dict) -> tuple[dict, list]:
@@ -387,9 +398,11 @@ def genesis_of(fork: str, header: dict, pre: dict) -> bytes:
     )
 
 
-def _blockchain_test(root: Path, case: Case) -> None:
+def check_blockchain_test(
+    root: Path, case: Case, transition: legacy.BlockTransition = legacy.advance_block
+) -> None:
+    """Check a chain fixture with a callback for blocks that the fixture expects to pass."""
     from ethlib.cryptography.keccak import keccak256
-    from ethlib.execution import blocks
     from ethlib.serialization import rlp
 
     fixture = _fixtures(root / case.path)[case.id]
@@ -416,15 +429,14 @@ def _blockchain_test(root: Path, case: Case) -> None:
             fork = recent[-1][0]
         if expected:
             with pytest.raises(ValueError) as error:
-                blocks.state_transition(config, state, recent, fork, raw, seal)
+                legacy.advance_block(config, state, recent, fork, raw, seal)
             names = expected.split("|")
             assert any(names_block_error(e, str(error.value)) for e in names), (
                 names,
                 str(error.value),
             )
             continue
-        _, accounts = blocks.state_transition(config, state, recent, fork, raw, seal)
-        state = rlp.encode(accounts)
+        state = transition(config, state, recent, fork, raw, seal, block.get("receipts"))
         recent = (recent + [(fork, rlp.encode(item[0]), [rlp.encode(o) for o in item[2]])])[-256:]
     assert "0x" + keccak256(recent[-1][1]).hex() == fixture["lastblockhash"]
 
@@ -780,7 +792,7 @@ def _container_forks(container: str) -> tuple[str, ...]:
 FORMAT_RUNNERS = {
     "transaction_test": _transaction,
     "state_test": _state_test,
-    "blockchain_test": _blockchain_test,
+    "blockchain_test": check_blockchain_test,
     "blockchain_test_engine": _blockchain_test_engine,
     "blockchain_test_engine_x": _blockchain_test_engine_x,
     "blockchain_test_engine_reorg": _blockchain_test_engine_reorg,

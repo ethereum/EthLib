@@ -150,6 +150,17 @@ lean_exe «known-answers» where
   srcDir := "scripts"
   root := `KnownAnswers
 
+/-- The gas rules that the fixture observer can distinguish. -/
+lean_lib «EvmGasCoverage» where
+  srcDir := "scripts"
+
+/-- Answers requests from the Python gas coverage report.
+
+No default target builds it. -/
+lean_exe «gas-coverage» where
+  srcDir := "scripts"
+  root := `GasCoverage
+
 /-- A library of known answers that the kernel checks.
 
 Each file stays within the budget that `CONTRIBUTING.md` sets.

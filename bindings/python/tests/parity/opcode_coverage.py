@@ -69,13 +69,8 @@ def select_cases(cases: Iterable[Case], group: PurePosixPath | None) -> dict[str
     by_fork: dict[str, list[Case]] = {
         fork: [] for fork in catalogue.EXECUTION_FORKS if fork in FORK_OF_NETWORK
     }
-    for case in cases:
-        if (
-            case.group == "state_test"
-            and case.fork in by_fork
-            and (group is None or group in PurePosixPath(case.path).parents)
-        ):
-            by_fork[case.fork].append(case)
+    for case in harness.select_cases(cases, group, networks=by_fork.keys(), formats={"state_test"}):
+        by_fork[case.fork].append(case)
     return {fork: matches for fork, matches in by_fork.items() if matches}
 
 

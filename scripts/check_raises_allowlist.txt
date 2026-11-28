@@ -15,4 +15,4 @@ bindings/python/tests/parity/legacy.py _header_error: the fixture name maps to s
 bindings/python/tests/parity/legacy.py run_ommers: the fixture name maps to several errors
 bindings/python/tests/parity/legacy.py run_blockchain: the fixture name maps to several errors
 bindings/python/tests/parity/runners.py _state_test: the message holds state values, such as balances and gas, that the fixture does not give
-bindings/python/tests/parity/runners.py _blockchain_test: the message holds state values, such as balances and gas, that the fixture does not give
+bindings/python/tests/parity/runners.py check_blockchain_test: the message holds state values, such as balances and gas, that the fixture does not give

@@ -3,6 +3,7 @@
 import json
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -611,7 +612,25 @@ def names(expected: str, message: str) -> bool:
     )
 
 
-def run_blockchain(root: Path, case: Case) -> None:
+RecentBlocks = list[tuple[str, bytes, list[bytes]]]
+BlockTransition = Callable[[dict, bytes, RecentBlocks, str, bytes, bool, list[dict] | None], bytes]
+
+
+def advance_block(
+    config: dict,
+    state: bytes,
+    recent: RecentBlocks,
+    fork: str,
+    raw: bytes,
+    seal: bool,
+    _receipts: list[dict] | None = None,
+) -> bytes:
+    """Run a block and encode the accounts after it for the next block."""
+    _, accounts = blocks.state_transition(config, state, recent, fork, raw, seal)
+    return rlp.encode(accounts)
+
+
+def run_blockchain(root: Path, case: Case, *, transition: BlockTransition = advance_block) -> None:
     """Run each block through the state transition, and follow the chain of most difficulty."""
     test = fixture(root, case)
     network = test["network"]
@@ -673,13 +692,15 @@ def run_blockchain(root: Path, case: Case) -> None:
                 blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
             assert names(expected, str(error.value)), (expected, str(error.value))
             continue
-        _, accounts = blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
+        state = transition(
+            config, state, recent_blocks, fork, raw, sealed(test), entry.get("receipts")
+        )
         block_hash = keccak256(rlp.encode(header))
         recent_blocks = recent_blocks + [
             (fork, rlp.encode(header), [rlp.encode(o) for o in ommers])
         ]
         difficulty += int.from_bytes(header[7], "big")
-        chains[block_hash] = (rlp.encode(accounts), recent_blocks[-256:], difficulty)
+        chains[block_hash] = (state, recent_blocks[-256:], difficulty)
         # The head moves only to a chain of strictly more total difficulty.
         if difficulty > chains[head][2]:
             head = block_hash

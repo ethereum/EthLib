@@ -731,6 +731,25 @@ They also run the fork choice compliance tests of the pinned release of consensu
 A case passes, fails, waits for a runner, or disagrees for a reason listed in `tests/parity/disagreements.toml`.
 Set `ETHLIB_PARITY_REPORT` to a file name to get the report of these outcomes for each fork and runner.
 
+A gas rule is a named case in the calculation of a gas charge or refund.
+At each fork, the gas coverage report lists the instrumented rules that fixtures exercise or miss.
+From Berlin, for example, it counts warm and cold `SLOAD` separately.
+Build the fixture runner and run the report from the repository root.
+
+```bash
+lake build gas-coverage
+ETHLIB_ARCHIVES=~/.cache/ethlib/archives PYTHONPATH=bindings/python/tests \
+  uv run --no-sync python -m parity.gas_coverage --jobs 4 > /tmp/ethlib-gas-coverage.md
+```
+
+The report reads the pinned execution release and selected legacy and devnet block fixtures.
+It counts a block at its active fork after checking its state and receipt roots.
+It also checks the encoded block receipts when the fixture supplies them.
+For a state test, it checks the state root and logs hash.
+It checks the encoded receipt, cumulative gas used and status when the fixture supplies them.
+Use `--suite`, `--network`, `--format` or `--group` to limit the replay.
+The command exits with status 1 if a fixture fails its checks.
+
 When you change Python code, format it, lint it and check its types and its spelling:
 
 ```bash

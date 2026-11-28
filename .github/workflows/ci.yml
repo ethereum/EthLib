@@ -79,6 +79,20 @@ jobs:
       - name: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
+      - name: build the gas coverage runner
+        run: |
+          lake build --wfail gas-coverage
+          cp .lake/build/bin/gas-coverage "$RUNNER_TEMP/gas-coverage"
+
+      - name: upload the gas coverage runner
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ethlib-gas-coverage
+          path: ${{ runner.temp }}/gas-coverage
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 1
+
       - name: stage spec and export artifacts
         run: >-
           uv run --no-project --python 3.12 python scripts/proof_shards.py stage spec-exports
@@ -600,6 +614,58 @@ jobs:
         run: >-
           uv run --no-sync pytest -m archive bindings/python/tests/parity/test_consensus.py
           -k "not test_case"
+
+      - name: restore the execution parity archive
+        if: matrix.python == '3.12'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/archives/*.tar.gz
+          key: ethlib-execution-archive-${{ hashFiles('tests/sources.toml') }}
+
+      - name: read the legacy archive pin
+        id: legacy-pin
+        if: matrix.python == '3.12'
+        env:
+          PYTHONPATH: bindings/python/tests
+        run: |
+          uv run --no-sync python - <<'PY' >> "$GITHUB_OUTPUT"
+          from archives import fetch_archives
+          from parity.catalogue import LEGACY
+          print(f"sha256={fetch_archives.load()[LEGACY].sha256}")
+          PY
+
+      - name: restore the legacy archive
+        id: legacy-archive
+        if: matrix.python == '3.12'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/archives/${{ steps.legacy-pin.outputs.sha256 }}.tar.gz
+          key: ethlib-legacy-archive-${{ steps.legacy-pin.outputs.sha256 }}
+
+      - name: download the gas coverage runner
+        if: matrix.python == '3.12'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ethlib-gas-coverage
+          path: .lake/build/bin
+
+      - name: gas coverage fixtures
+        if: matrix.python == '3.12'
+        env:
+          ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
+          ETHLIB_REQUIRE_GAS_COVERAGE: '1'
+        run: |
+          chmod +x .lake/build/bin/gas-coverage
+          uv run --no-sync pytest bindings/python/tests/parity/test_gas_coverage.py
+
+      - name: save the legacy archive
+        if: >-
+          matrix.python == '3.12' && steps.legacy-archive.outputs.cache-hit != 'true'
+          && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/archives/${{ steps.legacy-pin.outputs.sha256 }}.tar.gz
+          key: ethlib-legacy-archive-${{ steps.legacy-pin.outputs.sha256 }}
 
       # The pinned history files check the layout that the format documents leave open.
       - name: pinned history files
