@@ -1031,7 +1031,6 @@ structure StepCtx {g : ForkedBeaconState preset}
   terminal : HeldTerminalStakeFloor (e := e) horizon limit
   pinned : JustifiedPinned (e := e) anchorEpoch 0 0 limit
   signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 limit
-  fusaka : .fusaka ≤ fork
   included : TargetIncluded (e := e) limit
   stale : StaleHeadVotersInWindow (e := e) limit
   reference : ∃ x ∈ J, ∃ m, ∃ referenceSlot finish : Slot, limit ≤ (e.world m).time ∧

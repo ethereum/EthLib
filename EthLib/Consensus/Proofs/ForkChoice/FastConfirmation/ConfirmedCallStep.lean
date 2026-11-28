@@ -1006,7 +1006,8 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
     (absent : AnchorParentAbsent (e := e) limit)
     (pinned : JustifiedPinned (e := e) anchorEpoch 0 0 limit)
     (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 limit)
-    (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
+    (beforeElectra : fork < .pectra → QuorumDriftWithin (e := e) horizon limit)
+    (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
@@ -1051,7 +1052,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
       admitted, half, long, window, maxAligned, incrementPositive, votes, fits, prompt,
       windows, fit, anchored, sound, anchorSlot, anchorBoundary, start,
       anchorEpochOk, increment, bounded, roots, unslashed, ceiling, scoreFits, parameters,
-      genesis, heldEarly, enough, terminal, absent, pinned, signedAll, fusaka,
+      genesis, heldEarly, enough, terminal, absent, pinned, signedAll,
       included, stale, reference, caller,
       confirmationEpoch, anchorEpochBefore, upToDate, atSlots }
   suffices goal : CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
@@ -1072,11 +1073,15 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
   · exact .inr (.inl collision)
   -- The stake of each call's voters drifts by at most the call's reserve.
   have quorum : QuorumDriftWithin (e := e) horizon limit := by
+    -- Before Electra the run supplies the bound.
+    by_cases electra : .pectra ≤ fork
+    swap
+    · exact beforeElectra (Nat.lt_of_not_le electra)
     subst bls
     have maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := by
       have : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := exitWindow
       omega
-    exact e.quorumDriftWithin anchored start anchorSlot slots positive genesis pre room fusaka
+    exact e.quorumDriftWithin anchored start anchorSlot slots positive genesis pre room electra
       forkWindow bounded maxLookahead band withdrawDelay caps activation
   have good : Good (e := e) horizon limit := ⟨agree, finality, blocks, quorum⟩
   have anchorFacts := anchor_facts ctx
@@ -1243,8 +1248,9 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     --
     -- It buys the honest signer of each later justification.
     (byzantine : ByzantineCountedStake (e := e) anchorEpoch 0 limit)
-    -- The fork is Fulu or later.
-    (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
+    -- Before Electra the run must supply the quorum drift bound.
+    (beforeElectra : fork < .pectra → QuorumDriftWithin (e := e) horizon limit)
+    (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
@@ -1316,9 +1322,9 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
       rcases e.callInvariant_step pre bls anchorGenesis sync slots minLookahead exitWindow ring
         room weights supply admitted half long maxAligned votes fits prompt windows fit anchored
         anchorSlot anchorBoundary start anchorEpochOk increment bounded roots unslashed ceiling
-        scoreFits parameters genesis heldEarly enough terminal absent pinned signedAll fusaka band
-        withdrawDelay caps activation forkWindow included stale reference caller confirmationEpoch
-        anchorEpochBefore upToDate atSlots calls
+        scoreFits parameters genesis heldEarly enough terminal absent pinned signedAll beforeElectra
+        band withdrawDelay caps activation forkWindow included stale reference caller
+        confirmationEpoch anchorEpochBefore upToDate atSlots calls
         (timeLe i n calls.1) (obligations i n fcr after calls) (fun i' lt => earlier i' lt) with
         holds | evidence
       · exact holds

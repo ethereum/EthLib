@@ -182,7 +182,7 @@ private theorem kept_block {fork : Fork} {a t : BeaconState preset fork}
   have frame := frame_processBlock processed
   refine ⟨registryLifecycle_processBlock processed, .of_frame frame, ?_⟩
   exact Run.withdrawableKept_of_same_epoch (Run.nil.snoc (Step.block engine signed due ok))
-    fulu (by simp only [getCurrentEpoch, frame.slot]) matched
+    (Nat.le_trans (by decide) fulu) (by simp only [getCurrentEpoch, frame.slot]) matched
 
 /-- From Fulu and before Gloas, a run keeps the registry. -/
 theorem kept_run {g x y : ForkedBeaconState preset}

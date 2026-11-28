@@ -768,7 +768,7 @@ Not yet released.
   `unforgeable` is unchanged.
 
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
-  It compares the call's pulled-up state with a later state in the target's epoch or the next, from Fulu.
+  It compares the call's pulled-up state with a later state in the target's epoch or the next, from Electra.
   It takes the counting state's registry within the limit, which the type of the registry gives before Gloas.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
   The anchor state is reached by a run with BLS checks from a genesis built from deposits, and an epoch has at least one slot.
@@ -777,7 +777,7 @@ Not yet released.
   The preset keeps the bands of hysteresis, its seed lookahead covers at least one epoch, and the withdrawal delay is at least one epoch.
   The preset meets `CapOrder` and the new `ActivationWithinMaxEffective`, which together make `MAX_EFFECTIVE_BALANCE` equal `MIN_ACTIVATION_BALANCE`.
   `ActivationWithinMaxEffective.mainnet` and `ActivationWithinMaxEffective.minimal` show that it holds on both presets.
-  No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`, passing the anchor's registry room from Gloas.
+  No separate headline discharges `QuorumDriftWithin`: from Electra a caller with BLS checks composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`, passing the anchor's registry room from Gloas.
   `Execution.heldStatesBeforeUpgrade_of_bounded` derives their premise `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
@@ -896,7 +896,7 @@ Not yet released.
   `Store.Reachable.nonempty_run_of_blockState` gives a run from the anchor state to each held state, with the store's setting of the checks.
   `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.
   `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
-  `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block from Fulu.
+  `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block from Electra.
   The balance stays at least the smaller of its balance and its effective balance before them.
   `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other, and `actualBalanceAt_push` reads an appended balance.
   `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
@@ -1377,6 +1377,16 @@ Not yet released.
   No statement changes.
 
 ### Changes that break callers
+
+- In Lean, the quorum drift bound and the effective-balance bounds that it reads hold from Electra, not only from Fulu (part of [#2056](https://github.com/ethereum/EthLib/issues/2056)).
+  Eight theorems take `(electra : .pectra ≤ _)` in place of `(fulu : .fusaka ≤ _)`, with the same position, premises and conclusion.
+  They are `block_balances` and `processOperations_floor` (`Consensus/Proofs/Transition/BlockCredits.lean`), and `Run.withdrawableKept_of_same_epoch` and `Run.balanceCorrections_of_same_epoch` (`BranchLedger.lean`).
+  They are also `effectiveFall_le` (`EffectiveFall.lean`), `effectiveRise_le` (`EffectiveRise.lean`), `quorumDrift_le_quorumReserve` (`Consensus/Proofs/ForkChoice/FastConfirmation/QuorumDriftBound.lean`) and `Execution.quorumDriftWithin` (`QuorumDrift.lean`).
+  `Execution.confirmedRoot_covers` (`ConfirmedCallStep.lean`) takes `(beforeElectra : fork < .pectra → QuorumDriftWithin (e := e) horizon limit)` in place of `(fusaka : .fusaka ≤ fork)`.
+  It derives quorum drift from Electra and takes it as that condition before Electra, so it holds at every fork under its other hypotheses.
+  `ConfirmedCalls.StepCtx` drops its field `fusaka`.
+  Migration: with `fulu` the former proof of `.fusaka ≤ _`, pass `Nat.le_trans (by decide : Fork.pectra ≤ .fusaka) fulu` to each of the eight.
+  For `Execution.confirmedRoot_covers`, pass `beforeElectra := fun h => absurd h (Nat.not_lt_of_ge (Nat.le_trans (by decide : Fork.pectra ≤ .fusaka) fulu))`, and build a `StepCtx` without `fusaka`.
 
 - In Lean, the rebuild property of a transaction state no longer speaks of storage words ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Evm.RebuildEnd` (`Execution/Proofs/Evm/Call/Rebuild.lean`) loses `emptyStorage`; its `plain` field, moved from `Evm.RebuildState`, loses the balance, and its `clears`, like `RebuildState.created`, now says that the account had no nonce or code in the block state.
@@ -2557,7 +2567,7 @@ Not yet released.
 - In Lean, `Execution.blocks_of_partiallySynchronous` is removed; its one reader, the confirmed-root step, now reads `Execution.blocks_of_partiallySynchronous_of_anchorSlot`.
   Migration: use `Execution.blocks_of_partiallySynchronous_of_anchorSlot` (added earlier in 0.4.0), passing `fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)` for `anchorSlot` and `start v honest` and `start u receiver` for the two starts.
 
-- In Lean, the confirmed root of a run of fast-confirmation calls covers honest heads from Gloas too, and keeps its Fulu floor.
+- In Lean, the confirmed root of consecutive fast-confirmation calls covers honest heads under the theorem's hypotheses at every fork, with quorum drift assumed before Electra.
   `Execution.confirmedRoot_covers` takes `room`, `weights` and `supply`, gated on Gloas, instead of `preGloas`.
   They are the anchor's registry room, the head-weight bundle, and the head-weight ceiling of honest justified states.
   `CallsCtx` drops its field `preGloas`, and `StepCtx` carries `room`, `weights` and `supply`.
@@ -2565,13 +2575,13 @@ Not yet released.
   `Execution.receiverWindowExitsNear_of_sourceOnParentChain` takes `within`, the registry of the source within the limit, instead of `preGloas`.
   Migration: pass `room`, `weights` and `supply` each as `fun g => absurd g (Nat.not_le_of_lt preGloas)`, delete the other arguments, and pass `within := source.validators.bound preGloas`.
 
-- In Lean, the quorum drift of a call is bounded from Gloas too, and keeps its Fulu floor.
+- In Lean, the quorum drift of a call is bounded from Electra, including from Gloas under the registry-room condition.
   `quorumDrift_le_quorumReserve` takes `within` at the counting state instead of `early`.
   `Execution.quorumDriftWithin` takes `room`, the anchor's registry room from Gloas, instead of `early`.
   `setting_runs_of_call` drops `early`.
   Migration: pass `within := BeaconState.registryWithinLimit_of_lt early state` and `room := fun g => absurd g (Nat.not_le_of_lt early)`, and delete the argument of `setting_runs_of_call`.
 
-- In Lean, `effectiveRise_le` and `effectiveFall_le` bound the effective-balance rise and fall from Gloas too, and keep their Fulu floor at `P`.
+- In Lean, `effectiveRise_le` and `effectiveFall_le` bound the rise and fall from Electra at `P`, including from Gloas under the registry bound.
   They take `within`, the registry of the counting state within the limit, instead of `early`.
   From Gloas the type of the registry does not give it.
   Migration: pass `within := y.state.validators.bound early`.

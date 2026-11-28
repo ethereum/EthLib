@@ -767,13 +767,13 @@ private theorem credited_join {x y : BeaconState preset fork}
   rw [Finset.empty_union] at joined
   exact ⟨_, _, _, _, _, joined⟩
 
-/-- From Fulu and before Heze, the operations before the requests credit like operations.
+/-- From Electra and before Heze, the operations before the requests credit like operations.
 
 They convert no validator. -/
 private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {parent : Slot}
     {before : fork < .hegota}
     {proposed attested voted deposited exited changed : BeaconState preset fork}
-    (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (electra : .pectra ≤ fork) (matched : BalancesMatch s)
     (proposersOk : body.proposerSlashings.data.toList.foldlM
       (processProposerSlashing config checks) s = .ok proposed)
     (attestersOk : body.attesterSlashings.data.toList.foldlM
@@ -786,8 +786,7 @@ private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {
       (processVoluntaryExit config checks) deposited = .ok exited)
     (changesOk : processBlsToExecutionChanges config checks exited body = .ok changed) :
     ∃ p c sl o sh, Credited s changed p c sl ∅ o sh := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   have matchedAt {x : BeaconState preset fork} {p c sl o sh}
       (held : Credited s x p c sl ∅ o sh) : BalancesMatch x :=
     held.kept.frame.balancesMatch matched
@@ -809,19 +808,19 @@ private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {
   obtain ⟨_, _, _, _, _, six⟩ := credited_processBlsToExecutionChanges changesOk
   exact credited_join upFive six
 
-/-- From Fulu, the operations of a block credit like operations.
+/-- From Electra, the operations of a block credit like operations.
 
 Before Gloas they convert no more validators than a payload can carry consolidation requests.
 
 From Gloas they carry no request, and convert no validator. -/
 private theorem credited_processOperations {body : BeaconBlockBody preset fork} {parent : Slot}
-    (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (electra : .pectra ≤ fork) (matched : BalancesMatch s)
     (computed : processOperations config checks s body parent = .ok t) :
     ∃ p c sl cv o sh, Credited s t p c sl cv o sh ∧
       cv.card ≤ if .glamsterdam ≤ fork then 0
         else preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) fulu
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
   have matchedAt {x : BeaconState preset fork} {p c sl o sh}
       (held : Credited s x p c sl ∅ o sh) : BalancesMatch x :=
     held.kept.frame.balancesMatch matched
@@ -856,12 +855,10 @@ private theorem credited_processOperations {body : BeaconBlockBody preset fork} 
     subst same
     exact ⟨_, _, _, _, _, _, upFive, by simp [gloas]⟩
   rename_i notGloas
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, a, proposersOk, b, attestersOk, c, attestationsOk, d, depositsOk, e,
     exitsOk, f, changesOk, requestsOk⟩ := computed
-  simp only [electra, ↓reduceDIte] at requestsOk
-  obtain ⟨_, _, _, _, _, upSix⟩ := credited_operationsPrefix fulu matched proposersOk
+  obtain ⟨_, _, _, _, _, upSix⟩ := credited_operationsPrefix electra matched proposersOk
     attestersOk attestationsOk depositsOk exitsOk changesOk
   obtain ⟨conv, seven, count⟩ := credited_processExecutionRequests requestsOk
   obtain ⟨_, _, _, _, _, upSeven⟩ := credited_join upSix seven
@@ -896,7 +893,8 @@ theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork
       ∃ later, withdrawn.validators.data[v.toNat]? = some later ∧
         hasCompoundingWithdrawalCredential later =
           hasCompoundingWithdrawalCredential validator := by
-  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix fulu matched proposedOk
+  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix (Nat.le_trans (by decide) fulu) matched
+    proposedOk
     attestedOk votedOk depositedOk exitedOk changedOk
   have both := ops.ledger.trans
     (ledger_depositWithdrawalRequests (electra := electra) requestedOk withdrawnOk)
@@ -905,7 +903,7 @@ theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork
 
 end CreditedSteps
 
-/-- From Fulu, take a validator that stays unslashed through the operations of a block.
+/-- From Electra, take a validator that stays unslashed through the operations of a block.
 
 The operations keep its balance at least the smaller of two amounts.
 
@@ -913,7 +911,7 @@ They are its balance and its effective balance before the operations. -/
 theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
     {s t : BeaconState preset fork}
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (electra : .pectra ≤ fork) (matched : BalancesMatch s)
     (computed : processOperations config checks s body parentSlot = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
     -- Its effective balance is within its largest.
@@ -922,7 +920,7 @@ theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
     min (actualBalanceAt ⟨fork, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨fork, t⟩ v.toNat := by
   obtain ⟨_, _, _, conv, _, slash, ops, -⟩ :=
-    credited_processOperations fulu matched computed
+    credited_processOperations electra matched computed
   -- The validator stays unslashed, so the operations charge it no slashing penalty.
   have noSlash : slash v = 0 := by
     have bound := ops.penalized v
@@ -942,7 +940,6 @@ theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
     -- So its effective balance is within the activation balance, where its balance is left.
     have lowered := ops.ledger.lowered v converted (Finset.notMem_empty v)
     have fresh := ops.ledger.fresh v converted val found
-    have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
     have cap := UInt64.le_iff_toNat_le.mp capped
     simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance,
       fresh, Bool.false_eq_true] at cap
@@ -995,7 +992,7 @@ private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
     .of_data (by rw [(processSyncAggregate_kept computed).1]),
     Lives.of_data (by rw [(processSyncAggregate_kept computed).1])⟩
 
-/-- The balances of a block from Fulu, read at each validator.
+/-- The balances of a block from Electra, read at each validator.
 
 - Withdrawals pay at most the preset's `MAX_WITHDRAWALS_PER_PAYLOAD` validators.
 - Consolidation requests convert at most `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
@@ -1010,7 +1007,7 @@ They also include the proposer share of the sync aggregate, which no participant
 
 From Gloas the consolidation requests run in the payload of the parent, before the header. -/
 theorem block_balances {engine : ExecutionEngine preset fork}
-    {block : BeaconBlock preset fork} (fulu : .fusaka ≤ fork)
+    {block : BeaconBlock preset fork} (electra : .pectra ≤ fork)
     (matched : BalancesMatch s) (computed : processBlock config checks engine s block = .ok t) :
     ∃ (paid conv slashed : Finset ValidatorIndex) (sync other slash : ValidatorIndex → ℕ)
       (proposer : ValidatorIndex) (credit share : ℕ),
@@ -1052,9 +1049,9 @@ theorem block_balances {engine : ExecutionEngine preset fork}
       Lives s t ∧ RegistryLifecycle s t ∧
       (∀ v ∈ slashed, ∃ old, s.validators.data[v.toNat]? = some old ∧
         Eligible (getCurrentEpoch s) old) := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) fulu
-  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) fulu
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) electra
   obtain ⟨voted, operated, started, operatedOk, -, synced⟩ := processBlock_operationsInput computed
   simp only [altair, ↓reduceDIte] at synced
   -- The steps before the operations keep both flag lists and form a frame.
@@ -1118,7 +1115,7 @@ theorem block_balances {engine : ExecutionEngine preset fork}
     lifeParent.trans (RegistryLifecycle.of_data afterParent)
   -- The operations and the sync aggregate.
   obtain ⟨proposer, credit, slashed, conv, other, slash, ops, convCount⟩ :=
-    credited_processOperations fulu (frameVoted.balancesMatch matched) operatedOk
+    credited_processOperations electra (frameVoted.balancesMatch matched) operatedOk
   obtain ⟨proposer', reward, share, sync, rewardOk, read', shareBound, seats, syncLedger⟩ :=
     ledger_processSyncAggregate synced
   have syncKept := kept_processSyncAggregate synced
