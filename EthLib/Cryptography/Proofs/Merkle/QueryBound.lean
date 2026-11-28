@@ -65,6 +65,28 @@ theorem simulateQ_findCollision_of_pure {ι : Type} {spec : OracleSpec ι} {r : 
   simp only [hH] at hmap
   exact hmap.trans (findCollision_pure H s t p a b)
 
+/-- With node hashes answered by `H` and leaves by `L`, the path is the path over `H` and `L`. -/
+theorem simulateQ_path_of_pure {ι : Type} {spec : OracleSpec ι} {r : Type → Type}
+    [Monad r] [LawfulMonad r] {α : Type} (impl : QueryImpl spec r)
+    (hash : Position → α → α → OracleComp spec α) (leaves : Nat → OracleComp spec α)
+    (H : Position → α → α → α) (L : Nat → α)
+    (hH : ∀ q left right, simulateQ impl (hash q left right) = pure (H q left right))
+    (hL : ∀ j, simulateQ impl (leaves j) = pure (L j)) (h j : Nat) :
+    simulateQ impl (path hash leaves h j) =
+      pure (path (m := Id) (fun q left right => pure (H q left right)) (fun j => pure (L j))
+        h j).run := by
+  have hbind : ∀ {β γ : Type} (x : OracleComp spec β) (f : β → OracleComp spec γ),
+      simulateQ impl (x >>= f) = simulateQ impl x >>= fun b => simulateQ impl (f b) :=
+    fun x f => simulateQ_bind _ _ _
+  -- Answering the queries maps the path to the path over the answered hashes and leaves.
+  rw [path_map hash _ (fun b => simulateQ_pure impl b) hbind]
+  simp only [hH, hL]
+  -- Lifting the path in the identity monad by `pure` lifts each of its hashes and leaves.
+  exact (path_map (fun q left right => (pure (H q left right) : Id α))
+    (fun x => (pure x.run : r _)) (fun _ => rfl)
+    (fun x f => (pure_bind x.run fun b => (pure (f b).run : r _)).symm) (fun j => pure (L j))
+    h j).symm
+
 /-! ## Charged calls
 
 Each node hash is charged at most `h`, and each leaf at most `L`.

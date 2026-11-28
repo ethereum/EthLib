@@ -112,43 +112,93 @@ theorem collision_of_extractCollision {cache : HashSpec.QueryCache} {claim : Sel
       exact hleaf'
     · simp [hleaves] at hfound
 
+/-! ## The search with answered hashes -/
+
+/-- Run with answers that give each hash the value `G`, the extraction is the one over `G`. -/
+theorem simulateQ_extractCollision_of_pure {ι : Type} {spec : OracleSpec ι} {r : Type → Type}
+    [Monad r] [LawfulMonad r] (impl : QueryImpl spec r) {H : ByteArray → OracleComp spec Digest}
+    {G : ByteArray → Digest} (hH : ∀ x, simulateQ impl (H x) = pure (G x))
+    (claim : SelectionClaim) :
+    simulateQ impl (extractCollision H claim) =
+      pure (extractCollision (m := Id) (fun x => pure (G x)) claim).run := by
+  -- The honest opening runs to the honest opening over `G`.
+  have hopen : simulateQ impl (openingWith H claim.secrets claim.index) =
+      pure (openingWith (m := Id) (fun x => pure (G x)) claim.secrets claim.index).run := by
+    simp only [openingWith, simulateQ_bind, simulateQ_pure, pure_bind, Id.run_bind, Id.run_pure,
+      Merkle.simulateQ_path_of_pure impl (nodeWith H) (leafWith H claim.secrets)
+        (fun _ left right => G (nodeInput left right))
+        (fun j => G (leafInput (claim.secrets (UInt32.ofNat j)))) (fun _ _ _ => hH _)
+        (fun _ => hH _)]
+    rfl
+  -- Then the two leaves and the search run over `G`.
+  simp only [extractCollision, searchHashCollisionWith, simulateQ_bind, simulateQ_pure, hopen, hH,
+    pure_bind, Id.run_bind, Id.run_pure, Merkle.simulateQ_findCollision_of_pure impl (nodeWith H)
+      (fun _ left right => G (nodeInput left right)) (fun _ _ _ => hH _)]
+  rfl
+
 /-! ## The bound -/
+
+section Count
+
+variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p]
+  {H : ByteArray → OracleComp spec Digest}
+
+/-- With at most one counted call per hash, the honest opening makes at most `2^(h + 1) - 2` calls.
+
+Here `h` is the height of the tree. -/
+theorem isQueryBoundP_openingWith (hleaf : ∀ s, IsQueryBoundP (H (leafInput s)) p 1)
+    (hnode : ∀ l r, IsQueryBoundP (H (nodeInput l r)) p 1) (secrets : UInt32 → Digest)
+    (i : UInt32) :
+    IsQueryBoundP (openingWith H secrets i) p (2 ^ (VRF_TREE_HEIGHT + 1) - 2) := by
+  -- A sibling hashes each leaf below it and each node above those leaves, once.
+  have hpath := Merkle.isQueryBoundP_siblings (hash := nodeWith H) (leaves := leafWith H secrets)
+    (fun _ => hleaf _) (fun _ _ _ => hnode _ _) ⟨0, i.toNat⟩ VRF_TREE_HEIGHT
+  unfold openingWith Merkle.path
+  exact (isQueryBoundP_bind hpath fun _ _ => isQueryBoundP_pure _ _ 0).mono
+    (by simp [VRF_TREE_HEIGHT])
+
+/-- With at most one counted call per hash, the extraction makes at most `2^(h + 1) + 2 h` calls.
+
+Here `h` is the height of the tree. -/
+theorem isQueryBoundP_extractCollision (hleaf : ∀ s, IsQueryBoundP (H (leafInput s)) p 1)
+    (hnode : ∀ l r, IsQueryBoundP (H (nodeInput l r)) p 1) (claim : SelectionClaim) :
+    IsQueryBoundP (extractCollision H claim) p
+      (2 ^ (VRF_TREE_HEIGHT + 1) + 2 * VRF_TREE_HEIGHT) := by
+  -- The search makes at most two calls per level, and each path has one sibling per level.
+  have hsearch : ∀ (honest : Opening) (leaf leaf' : Digest),
+      IsQueryBoundP (Merkle.findCollision (nodeWith H) ⟨0, claim.index.toNat⟩ leaf leaf'
+        claim.revealed.path.toList honest.path.toList) p (2 * VRF_TREE_HEIGHT) :=
+    fun honest leaf leaf' => (Merkle.isQueryBoundP_findCollision (hash := nodeWith H)
+      (fun _ _ _ => hnode _ _) claim.revealed.path.toList honest.path.toList
+      ⟨0, claim.index.toNat⟩ leaf leaf').mono (by simp)
+  unfold extractCollision searchHashCollisionWith
+  refine (isQueryBoundP_bind (isQueryBoundP_openingWith hleaf hnode _ _) fun honest _ =>
+    isQueryBoundP_bind (hleaf _) fun leaf _ =>
+      isQueryBoundP_bind (hleaf _) fun leaf' _ =>
+        isQueryBoundP_bind (hsearch honest leaf leaf') fun _ _ =>
+          isQueryBoundP_pure _ _ 0).mono ?_
+  simp only [VRF_TREE_HEIGHT]
+  omega
+
+end Count
 
 /-- The honest opening makes at most `2^(h + 1) - 2` oracle calls, for a tree of height `h`.
 
 Its path has one sibling per level. -/
 theorem openingWith_queryBound (secrets : UInt32 → Digest) (i : UInt32) :
     IsQueryBoundP (openingWith oracleHash secrets i) (fun _ => True)
-      (2 ^ (VRF_TREE_HEIGHT + 1) - 2) := by
-  -- A sibling hashes each leaf below it and each node above those leaves, once.
-  have hpath := Merkle.isQueryBoundP_siblings (hash := nodeWith oracleHash)
-    (leaves := leafWith oracleHash secrets) (fun _ => oracleHash_queryBound _)
-    (fun _ _ _ => oracleHash_queryBound _) ⟨0, i.toNat⟩ VRF_TREE_HEIGHT
-  unfold openingWith Merkle.path
-  exact (isQueryBoundP_bind hpath fun _ _ => isQueryBoundP_pure _ _ 0).mono
-    (by simp [VRF_TREE_HEIGHT])
+      (2 ^ (VRF_TREE_HEIGHT + 1) - 2) :=
+  isQueryBoundP_openingWith (fun _ => oracleHash_queryBound _)
+    (fun _ _ => oracleHash_queryBound _) secrets i
 
 /-- The extraction makes at most `2^(h + 1) + 2 h` oracle calls, for a tree of height `h`.
 
 It builds the honest opening, hashes the two leaves, then at most two nodes per level. -/
 theorem extractCollision_queryBound (claim : SelectionClaim) :
     IsQueryBoundP (extractCollision oracleHash claim) (fun _ => True)
-      (2 ^ (VRF_TREE_HEIGHT + 1) + 2 * VRF_TREE_HEIGHT) := by
-  -- The search makes at most two calls per level, and each path has one sibling per level.
-  have hsearch : ∀ (honest : Opening) (leaf leaf' : Digest),
-      IsQueryBoundP (Merkle.findCollision (nodeWith oracleHash) ⟨0, claim.index.toNat⟩ leaf leaf'
-        claim.revealed.path.toList honest.path.toList) (fun _ => True) (2 * VRF_TREE_HEIGHT) :=
-    fun honest leaf leaf' => (Merkle.isQueryBoundP_findCollision (hash := nodeWith oracleHash)
-      (fun _ _ _ => oracleHash_queryBound _) claim.revealed.path.toList honest.path.toList
-      ⟨0, claim.index.toNat⟩ leaf leaf').mono (by simp)
-  unfold extractCollision searchHashCollisionWith
-  refine (isQueryBoundP_bind (openingWith_queryBound _ _) fun honest _ =>
-    isQueryBoundP_bind (oracleHash_queryBound _) fun leaf _ =>
-      isQueryBoundP_bind (oracleHash_queryBound _) fun leaf' _ =>
-        isQueryBoundP_bind (hsearch honest leaf leaf') fun _ _ =>
-          isQueryBoundP_pure _ _ 0).mono ?_
-  simp only [VRF_TREE_HEIGHT]
-  omega
+      (2 ^ (VRF_TREE_HEIGHT + 1) + 2 * VRF_TREE_HEIGHT) :=
+  isQueryBoundP_extractCollision (fun _ => oracleHash_queryBound _)
+    (fun _ _ => oracleHash_queryBound _) claim
 
 /-- The experiment makes the adversary's calls and at most `2^(h + 1) + 2 h` more.
 
