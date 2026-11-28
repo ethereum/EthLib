@@ -1378,6 +1378,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the final exponentiation of BLS12-381 runs its powers by `|x|` and `|x| + 1` on four of the six coefficients of each square ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.Fp12.compressedPow` (`Cryptography/Bls/Fp12.lean`) squares the coefficients of `w`, `w^2`, `w^4` and `w^5` only (`Bls.Fp12.Compressed`, `Bls.Fp12.compress`, `Bls.Fp12.Compressed.square`, `Bls.Fp12.Compressed.squares`).
+  It rebuilds the selected powers with one inversion for all (`Bls.Fp12.Compressed.numerators`, `Bls.Fp12.Compressed.decompress`, `Bls.Fp12.suffixProducts`, `Bls.Fp12.batchInverse`), and takes `Bls.Fp12.cyclotomicPow` when a denominator vanishes.
+  `Bls.finalExponentiation` unfolds to it; `Bls.finalExponentiation_eq_pow` keeps its statement.
+  `Bls.Fp12.compressedPow_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) and `Bls.Fp12.map_compressedPow` (`Proofs/Bls/BaseFieldMap.lean`) are new.
+
 - In Lean, the rebuild property of a transaction state no longer speaks of storage words ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Evm.RebuildEnd` (`Execution/Proofs/Evm/Call/Rebuild.lean`) loses `emptyStorage`; its `plain` field, moved from `Evm.RebuildState`, loses the balance, and its `clears`, like `RebuildState.created`, now says that the account had no nonce or code in the block state.
   `Evm.RebuildState.ofBlock`, `Blocks.systemCall_rebuildState` and `Transactions.processTransaction_rebuildEnd` take the codes of the block state in place of `Rebuildable`, and `Evm.RebuildEnd.getStorage_of_slot_eq_none` and `Evm.RebuildEnd.followable` take an assumption on the wipes.
