@@ -1055,7 +1055,7 @@ private theorem rate_final {X a b q P K S : ℕ} (hq : q * a ≤ X) (hP : X < (P
   have h2 : K * a * X < K * a * ((P + 1) * b) := by
     rw [Nat.mul_lt_mul_left (Nat.mul_pos hK ha)]
     exact hP
-  have h3 : q * S * (a * b) < P * K * (a * b) := by nlinarith [h1, h2, key]
+  have h3 : q * S * (a * b) < P * K * (a * b) := by linarith only [h1, h2, key]
   exact Nat.le_of_lt (Nat.lt_of_mul_lt_mul_right h3)
 
 /-- Below eighteen increments of the pulled total, a fifth of an increment gives the pin's rate. -/
@@ -1082,14 +1082,20 @@ private theorem rate_small_key {X I a b K S M : ℕ} (hI : 10 ^ 8 ≤ I) (hIX : 
     Nat.mul_le_mul shift shift
   have kb : 5 * K * (b * b) ≤ M := by
     have : K * (5 * (b * b)) ≤ K * I := Nat.mul_le_mul_left K hb5
-    nlinarith
-  have big : 500000000 * K * (b * b) < 100020001 * (a * a) := by nlinarith
-  have kb1 : b * b ≤ K * (b * b) := by nlinarith
+    linarith only [this, hM1]
+  have big : 500000000 * K * (b * b) < 100020001 * (a * a) := by
+    linarith only [kb, ha', sq]
+  have kb1 : b * b ≤ K * (b * b) := Nat.le_mul_of_pos_left _ hK
   have h40 : 40 * b ≤ 19 * a := by
     by_contra h
     have h' : 19 * a < 40 * b := by omega
-    have := Nat.mul_self_lt_mul_self h'
-    nlinarith
+    have hsq := Nat.mul_self_lt_mul_self h'
+    have ha2 : 19 * a * (19 * a) = 361 * (a * a) := by ring
+    have hb2 : 40 * b * (40 * b) = 1600 * (b * b) := by ring
+    have hbig' : 500000000 * (K * (b * b)) = 500000000 * K * (b * b) := by ring
+    rw [ha2, hb2] at hsq
+    rw [← hbig'] at big
+    omega
   have h20 : 20 * S * b ≤ 19 * K * a := by
     calc 20 * S * b ≤ 20 * (2 * K) * b := by
           have := Nat.mul_le_mul_right b (Nat.mul_le_mul_left 20 hS2)
@@ -1102,13 +1108,13 @@ private theorem rate_small_key {X I a b K S M : ℕ} (hI : 10 ^ 8 ≤ I) (hIX : 
     omega
   have e1 : X * (20 * S * b) ≤ X * (19 * K * a) := Nat.mul_le_mul_left X h20
   have e2 : K * a * (20 * b) ≤ K * a * X := Nat.mul_le_mul_left (K * a) h20b
-  nlinarith [e1, e2]
+  linarith only [e1, e2]
 
 /-- Three of the terms that the floors leave are small against `K * a * X`, for a large total. -/
 private theorem rate_big_common {X K a : ℕ} (hK : 12 ≤ K) (s2 : 1000 ≤ a) (hX : 2 ^ 35 ≤ X) :
     1000 * (144 * K * X) ≤ 144 * (K * a * X) ∧ 12000 * (96 * X) ≤ 96 * (K * a * X) ∧
       2 ^ 28 * (96 * K * a) ≤ K * a * X := by
-  have Ka : 12000 ≤ K * a := by nlinarith
+  have Ka : 12000 ≤ K * a := Nat.mul_le_mul hK s2
   refine ⟨?_, ?_, ?_⟩
   · have := Nat.mul_le_mul_left (144 * K * X) s2
     linarith
@@ -1146,8 +1152,8 @@ private theorem rate_big_small {X K a : ℕ} (hK : 12 ≤ K) (small : K + 1 ≤ 
     have h2 := Nat.mul_self_lt_mul_self h'
     have h3 : a * a < 2 ^ 20 * X := by
       have := Nat.mul_le_mul_right X small
-      nlinarith
-    have h4 : 9 * X * X < 240100 * 2 ^ 20 * X := by nlinarith
+      linarith only [this, s4]
+    have h4 : 9 * X * X < 240100 * 2 ^ 20 * X := by linarith only [h2, h3]
     have h5 : 9 * X < 240100 * 2 ^ 20 := by
       exact Nat.lt_of_mul_lt_mul_right h4
     omega
@@ -1167,17 +1173,18 @@ private theorem rate_big_key {X I a b K S M T : ℕ} (hX : 2 ^ 35 ≤ X) (hIX : 
     by_contra h
     have h1 : 49 * (a + 1) ≤ 80 * b := by omega
     have h2 := Nat.mul_le_mul h1 h1
-    nlinarith
+    linarith only [h2, hb, hT, ha']
   have s2 : 1000 ≤ a := by
     by_contra h
     have h1 : a + 1 ≤ 1000 := by omega
     have h2 := Nat.mul_le_mul h1 h1
-    nlinarith
+    have hKI : 12 * 10 ^ 8 ≤ K * I := Nat.mul_le_mul hK hI
+    linarith only [h2, ha', hM1, hKI]
   have s3 : a < 2 ^ 32 := by
     by_contra h
     have h1 : 2 ^ 32 ≤ a := by omega
     have h2 := Nat.mul_le_mul h1 h1
-    nlinarith
+    linarith only [h2, ha, hMhi]
   have s3' : 8 * a ≤ X := by omega
   have s4 : a * a < (K + 1) * X := by
     have := Nat.mul_le_mul_left (K + 1) hIX
@@ -1191,7 +1198,7 @@ private theorem rate_big_key {X I a b K S M T : ℕ} (hX : 2 ^ 35 ≤ X) (hIX : 
     Nat.mul_le_mul_left _ s1
   have e2 : 2 * K * a * (80 * b) ≤ 2 * K * a * (49 * a + 48) := Nat.mul_le_mul_left _ s1
   have e3 : 2 * S * (X * b) ≤ (3 * K + 2) * (X * b) := Nat.mul_le_mul_right _ hS
-  nlinarith [e1, e2, e3, T2]
+  linarith only [e1, e2, e3, T2]
 
 /-- The reward per increment at the total, times the previous stake's increments, is bounded.
 
@@ -1211,7 +1218,7 @@ private theorem rate_arith {I c M T S : ℕ} (scale : 2 ^ 35 ≤ I * c) (size : 
   have hK0 : 1 ≤ M / I := (Nat.le_div_iff_mul_le hI).mpr (by omega)
   have hS : 2 * (S / I) ≤ 3 * (M / I) + 2 := by
     have h1 : S / I * I ≤ S := Nat.div_mul_le_self S I
-    have h2 : 2 * (S / I) * I < 3 * (M / I + 1) * I := by nlinarith
+    have h2 : 2 * (S / I) * I < 3 * (M / I + 1) * I := by linarith only [h1, stake, hK2]
     have := Nat.lt_of_mul_lt_mul_right h2
     omega
   have ha := Nat.sqrt_le M
@@ -1887,7 +1894,7 @@ theorem passRate_le_leakAt (h : Setting config checks g split fin pulled anc cou
       rw [Nat.add_mul, Nat.one_mul] at times
       simp only at grown
       rw [Nat.mul_comm (_ - _)] at times
-      nlinarith
+      linarith only [grown, times]
   have key := Internal.passPenaltyRate_le_leak (config := config)
     (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts T.toNat_lt aligned band scored
   dsimp only at key
@@ -2353,7 +2360,7 @@ theorem two_bands_le_exitingBands (config : Config)
         count
   have timesB := Nat.mul_le_mul_right preset.upwardBand countB
   rw [parts]
-  nlinarith
+  linarith only [first, second, times, timesB]
 
 /-- A key whose exit C assigned by C's epoch and that R does not read as exiting has a charge.
 

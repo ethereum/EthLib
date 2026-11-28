@@ -23,6 +23,7 @@ public import EthLib.Cryptography.Montgomery.Fin
 public import EthLib.Cryptography.Montgomery.Limbs
 public import EthLib.Cryptography.Montgomery.Product
 public import EthLib.Cryptography.Montgomery.Words
+public import EthLib.Cryptography.SafeGcd
 public import EthLib.Cryptography.Word64
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Fp2

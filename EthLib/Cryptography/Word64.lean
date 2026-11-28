@@ -436,12 +436,6 @@ theorem rawToNat_eq (a : Raw) : rawToNat a = a.val := by
   simp only [rawToNat, Nat.shiftLeft_eq, Raw.val, Raw.words, lowValue, wordRadix]
   omega
 
-/-- Bit `i` of four words, and `false` from bit 256 on. -/
-@[inline] def Raw.bit (k : Raw) (i : Nat) : Bool :=
-  let w := if i < 64 then k.w0 else if i < 128 then k.w1 else if i < 192 then k.w2
-    else if i < 256 then k.w3 else 0
-  (w >>> (i % 64).toUInt64) &&& 1 != 0
-
 /-- Dropping the carry word keeps the four low words. -/
 theorem Raw.fromWords_val_low (w : Words64) : (Raw.fromWords w).val = lowValue w := rfl
 

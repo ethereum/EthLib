@@ -36,6 +36,13 @@ theorem Represents.mul {P : G1} {a : Fr} (hP : Represents P a) (s : Fr) :
   refine ⟨valid_mul hP.1 s, ?_⟩
   rw [toPoint_mul hP.1 s, hP.2, toPoint_mul_generator, toPoint_mul_generator, ofFr_mul]
 
+/-- `k P + l Q`, for representatives of `a • g1` and `b • g1`, represents `(k * a + l * b) • g1`. -/
+theorem Represents.mulAdd {P Q : G1} {a b : Fr} (hP : Represents P a) (hQ : Represents Q b)
+    (k l : Fr) : Represents (mulAdd P k Q l) (k * a + l * b) := by
+  refine ⟨valid_mulAdd hP.1 hQ.1 k l, ?_⟩
+  rw [toPoint_mulAdd hP.1 hQ.1 k l, hP.2, hQ.2, toPoint_mul_generator, toPoint_mul_generator,
+    toPoint_mul_generator, ofFr_add, ofFr_mul, ofFr_mul]
+
 /-- A point represents at most one scalar, since the generator has order `r`. -/
 theorem Represents.unique {P : G1} {a b : Fr} (ha : Represents P a) (hb : Represents P b) :
     a = b := by

@@ -1810,23 +1810,18 @@ They take two hypotheses on the setup.
 - `setup.Valid`: every point of the setup is on its curve.
   For the embedded setup, `TrustedSetup.ofHex_valid` proves it if the setup decodes.
 - `hsetup_tor`: the first 4032 monomial points of `G1` have an order that divides `r`.
-  For the embedded setup, `TrustedSetup.ofHex_torsion` (`Proofs/Kzg/SetupTorsion/Embedded.lean`) proves it for all 4096 monomial points of `G1`, if the setup decodes.
-  The kernel checks each point from its `x` coordinate.
-  This is a recorded exception to the rule of a few seconds for concrete facts in [CONTRIBUTING.md](CONTRIBUTING.md#known-answers).
-  It costs about 8 CPU-minutes per build and about as much per replay, in 16 modules.
-  Each module takes 20 to 50 seconds and 1.9 GB to elaborate, and 2.4 GB to replay.
-  No theorem proves that the embedded setup decodes, so that stays an assumption.
-  The Python suite gives two checks of it, both on compiled code.
+  No theorem proves that the embedded setup decodes, or that its points have an order that divides `r`.
+  So both stay assumptions for the embedded setup, and compiled code checks both.
   Each KZG vector runs an operation that first decodes the embedded setup.
   `bindings/python/tests/kzg/test_trusted_setup.py` decodes each point of the setup, in `G1` and `G2`, and checks that it is in the subgroup.
+  `lake exe known-answers`, which CI runs, decodes `TrustedSetup.ofHex` directly.
+  It checks subgroup membership for all 4096 monomial `G1` points, all 4096 Lagrange `G1` points and all 65 `G2` points.
 
 `TrustedSetup.WellFormed.valid` and `TrustedSetup.WellFormed.torsion` derive both from a well-formed setup.
-`computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` state the two theorems for the embedded setup, with neither hypothesis.
-Of the setup, they assume only that it decodes.
 
 The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
 `TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
-It also assumes only that the setup decodes.
+It assumes only that the setup decodes.
 `pointEvaluation_eq_ok_iff_kzg` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states, with that one assumption, that the precompile succeeds exactly when the KZG check of the cryptography layer accepts, once the length, the gas and the versioned hash pass.
 On a well-formed setup (assumption D3), `pointEvaluation_opening` in the same file gives the opening equation `c - y = w (τ - z)` of every successful call.
 
@@ -9154,17 +9149,17 @@ The codeword searches of each scheme share the bullet of that scheme:
   That theorem also assumes correct representations from the adversary, a reading of the algebraic group model.
   The theorems say nothing about an attack that uses the structure of SHA-256.
 
-When the message of a transaction succeeds, the refund counter that it settles is at least zero, so taking its natural number never changes it (`processMessageCall_refundCounter_nonneg`, `Execution/Proofs/Transactions/Refund.lean`).
-The theorem assumes that the message starts from a state with the rebuild property and no write of storage, which `TransactionRun.refundReady` gives for a run of a transaction.
-That holds when, in the block state, each code matches its hash, and accounts with nonce 0 and no code, missing ones too, hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
-Setting a delegation always raises the nonce of its account.
-The 28 mainnet accounts of EIP-8253 hold storage with nonce 0 and no code, so the theorem covers no mainnet transaction until a fork applies EIP-8253.
-A chain whose genesis allocates such an account, or a delegation at nonce 0, is outside the theorem too.
-There the counter can end below zero from Prague.
-An authorization that clears the code of an account with nonce 0 and balance 0 deletes its storage.
-A later write to a slot of that account then takes back a refund that no clear paid.
+When the message of a transaction succeeds, the refund counter that it settles is at least zero, so taking its natural number never changes it (`TransactionRun.refundCounter_nonneg`, `Execution/Proofs/Transactions/Refund.lean`).
+The theorem assumes three facts of the block state.
+Each code matches its hash, and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
+No empty account, with nonce 0, no code and balance 0, holds a nonzero word of storage (`EmptyAccountsHoldNoStorage`).
+The 28 mainnet accounts of EIP-8253 hold storage with nonce 0 and no code, but each holds a balance, so mainnet meets the third fact.
+The proof shows that each storage that the first frame wipes held only zeros, or is at an empty account (`TransactionRun.wipes`).
+The third fact is needed: from Prague, an authorization that clears the code of an account with nonce 0, balance 0 and storage deletes that storage.
+A later write to a slot of that account then takes back a refund that no clear paid, and the counter can end below zero.
 EthLib then passes on nothing of the counter, while execution-specs raises an error ([execution-specs#4095](https://github.com/ethereum/execution-specs/issues/4095)).
-The second hypothesis excludes the account that holds a delegation at nonce 0, the case of [execution-specs#4093](https://github.com/ethereum/execution-specs/issues/4093).
+The hypothesis on delegations excludes the account that holds a delegation at nonce 0, the case of [execution-specs#4093](https://github.com/ethereum/execution-specs/issues/4093).
+The forms named `_of_wipesHideZeros` keep the wipes of the first frame as an assumption on the run (`WipesHideZeros`).
 
 ## Gap B: does the code that runs match the definitions?
 
@@ -9444,29 +9439,22 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
   `bindings/python/tests/kzg/test_trusted_setup.py` checks that the file holds exactly three lists.
   It also checks that each embedded array holds the points of the matching list, in order.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
-  For the embedded bytes, the first part is proved only in part, the third is proved if the bytes decode, and the second is not.
-  `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
-  No theorem says that they decode.
-  If they decode, `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`.
-  If they decode, `TrustedSetup.ofHex_lagrangeTorsion` proves the same of each Lagrange point of `G1`, since each is a sum of multiples of the monomial points (below).
-  No theorem says this of the points of `G2`.
-  If they decode, `TrustedSetup.ofHex_lagrangeOfMonomial` (`Proofs/Kzg/SetupLagrange/Embedded.lean`) proves that each Lagrange point of `G1` is the sum of the monomial points times the coefficients of its basis polynomial.
-  So the Lagrange points are the matching basis of whatever secret the monomial points hold.
-  The kernel checks this on the embedded data, in three rounds of 256 transforms of size 16.
-  It also checks that each of the 8192 strings of `G1` encodes its table point, so decompression gives that point.
-  The kernel computes no square root: each table point is a certificate that it checks with three products.
-  Compiled code computes two tables of intermediate points when the files are built, and the repository holds no copy of them.
-  A wrong table only makes a kernel check fail.
-  This is a second recorded exception to the rule of a few seconds for concrete facts in [CONTRIBUTING.md](CONTRIBUTING.md#known-answers).
-  It costs about 20 CPU-minutes per replay, measured one module at a time, in 56 modules, and about as much per build.
-  Each module takes 14 to 29 seconds and at most 3.3 GB to replay.
-  The Python suite checks for every point that it decodes and lies in the subgroup (`bindings/python/tests/kzg/test_trusted_setup.py`).
+  For the embedded bytes, `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves only that each point is on its curve, if the bytes decode.
+  No theorem proves that the bytes decode, or that the points lie in the prime-order subgroup.
+  No theorem proves that the Lagrange points equal the inverse transform of the monomial points, or that the monomial points are powers of one secret.
+  Compiled code checks decoding, subgroup membership, and that the Lagrange points match the monomial points.
+  It checks the powers of one secret only by sampled pairings.
+  `bindings/python/tests/kzg/test_trusted_setup.py` checks that every point of `G1` and `G2` decodes and lies in the subgroup.
+  It also checks that the Lagrange points commit to the matching monomial point, for 9 sampled degrees.
+  By pairing, it checks each step between consecutive `G2` powers, and 8 sampled steps between `G1` powers.
+  `lake exe known-answers`, which CI runs, decodes `TrustedSetup.ofHex` directly on the compiled specification.
+  It checks subgroup membership of every `G1` and `G2` point.
+  It also checks that the 4096 Lagrange points are the inverse 4096-point DFT of the monomial points.
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.
-  The theorems on commitments and on honest proofs take it as a hypothesis.
-  For the embedded setup, `TrustedSetup.ofHex_wellFormed` reduces it to the monomial points.
-  If the setup decodes and its monomial points of `G1` and `G2` represent the powers of `τ`, it is well formed at `τ`.
-  That some `τ` makes the monomial points represent its powers is an assumption, and no theorem proves it.
+  `TrustedSetup.WellFormed.of_lagrangeOfMonomial` (`Proofs/Kzg/LagrangeCoefficients.lean`) reduces `WellFormed` to `Valid`, `LagrangeOfMonomial` and monomial powers of `τ`.
+  The theorems on commitments and on honest proofs take `WellFormed` as a hypothesis.
+  That the embedded setup satisfies those conditions for some `τ` is an assumption, and no theorem proves it.
 - Secrecy: no one knows the secret, which holds if at least one ceremony participant was honest.
   Only binding, a security property, needs it; a theorem about parsing, or that an honest proof verifies, does not.
 

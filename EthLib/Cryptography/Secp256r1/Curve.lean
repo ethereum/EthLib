@@ -57,7 +57,7 @@ def generator : Point :=
 
 The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
 def mulNat (k : Nat) (p : Point) : Point :=
-  ShortWeierstrass.Point.mulNat id Fin.inverse id a k p
+  ShortWeierstrass.Point.mulNat id Fp.inv id a k p
 
 /-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`. -/
 def mul (k : Fn) (p : Point) : Point := mulNat k.val p
@@ -71,14 +71,9 @@ The chain runs in Jacobian coordinates in Montgomery form, and only the conversi
 
 On points of the curve it is the sum of the two products. -/
 def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
-  let p' := (toJacobian p).toCoords.map Montgomery.ofFin
-  let q' := (toJacobian q).toCoords.map Montgomery.ofFin
-  -- The shared chain reads the bits of each scalar from its four words.
-  --
-  -- Halving a 256-bit scalar at each step would allocate a big integer, at a dominant cost.
   ShortWeierstrass.Point.ofCoords Montgomery.inv Montgomery.toFin
-    (Jacobian.Coords.mulAddBits aMontgomery p' q' (Jacobian.Coords.add aMontgomery p' q')
-      (Word64.rawOfNat k.val).bit (Word64.rawOfNat l.val).bit 256 0)
+    (Jacobian.Coords.mulAdd aMontgomery k.val ((toJacobian p).toCoords.map Montgomery.ofFin) l.val
+      ((toJacobian q).toCoords.map Montgomery.ofFin))
 
 end Point
 

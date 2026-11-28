@@ -138,9 +138,7 @@ theorem hpow_ofNat_eq_pow (a : Fr) {w : Nat} (hw : w < modulus) :
     a ^ Fr.ofNat w = a ^ w := by
   rw [hpow_eq_pow, val_ofNat_of_lt hw]
 
-/-- The inverse of the specification is the field inverse, and both send `0` to `0`.
-
-The inverse is `a ^ (r - 2)`, which equals the field inverse because `r` is prime. -/
+/-- The inverse of the specification is the field inverse, and both send `0` to `0`. -/
 theorem inverse_eq_inv (a : Fr) : a.inverse = a⁻¹ := rfl
 
 /-- The spec's division, a product by the inverse, is field division. -/

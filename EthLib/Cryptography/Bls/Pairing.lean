@@ -212,11 +212,15 @@ def finalExponentiation (f : Fp12 F) : Fp12 F :=
   -- The exponents `|x|` and `(|x| + 1) / 3` have at most 64 bits.
   --
   -- `a = m^((x - 1)^2 / 3)`, which is `m^((|x| + 1)^2 / 3)`, since `3` divides `|x| + 1`.
-  let a := (m.cyclotomicPow ((blsX + 1) / 3)).cyclotomicPow (blsX + 1)
+  --
+  -- The powers by `|x|` and `|x| + 1`, with 6 and 7 set bits, square on four coefficients only.
+  --
+  -- `(|x| + 1) / 3` has 28 set bits, too many to decompress each power, so it squares in full.
+  let a := (m.cyclotomicPow ((blsX + 1) / 3)).compressedPow (blsX + 1)
   -- `b = a^(x + p)`, which is `a^p * conj(a^|x|)`.
-  let b := a.frobenius * (a.cyclotomicPow blsX).conjugate
+  let b := a.frobenius * (a.compressedPow blsX).conjugate
   -- `c = b^(x^2 + p^2 - 1)`, which is `(b^|x|)^|x| * b^(p^2) * conj(b)`.
-  let c := (b.cyclotomicPow blsX).cyclotomicPow blsX * b.frobenius.frobenius * b.conjugate
+  let c := (b.compressedPow blsX).compressedPow blsX * b.frobenius.frobenius * b.conjugate
   -- `m^h = c * m`, the `+ 1` of `h`.
   c * m
 

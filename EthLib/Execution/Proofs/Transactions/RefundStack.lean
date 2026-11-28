@@ -333,6 +333,7 @@ namespace EthLib.Execution.Transactions
 open EthLib.Base (Address Fork)
 open EthLib.Execution.State (Rebuildable TransactionState)
 open EthLib.Execution.Evm
+open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -340,24 +341,24 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 The steps are those that a run of the message reaches.
 
-The live frames are the frame that runs and the callers that wait for it.
-
-The state must have the rebuild property and no write of storage.
-
-No account with nonce 0 and no code may hold storage in its block state.
-
-The caller must have a nonce or code, and a call must run at its recipient.
-
-The substate must start with a counter of at least zero. -/
-theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.BlockState}
-    {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
-    {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+The live frames are the frame that runs and the callers that wait for it. -/
+theorem runStack_refundCounter_nonneg_of_wipesHideZeros [LawfulGasMeter Meter]
+    {block : State.BlockState} {chainId : Nat} {message : Message fork}
+    {state : TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     {callers : List (Evm fork Meter)} {reached : Evm fork Meter}
-    (valid : RebuildState block state) (empty : Rebuildable block) (hw : NoStorageWrite state)
+    -- The state has the rebuild property and no write of storage.
+    (valid : RebuildState block state) (hw : NoStorageWrite state)
+    -- The caller has a nonce or code, and a call runs at its recipient.
     (hcaller : HasNonceOrCode state message.caller)
     (htarget : ∀ target, message.target = some target → message.currentTarget = target)
+    -- The substate starts with a counter of at least zero.
     (hsub : 0 ≤ substate.refundCounter)
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid = .ok first)
+    -- Each wipe in the state of the first frame hid only zero words of the block state.
+    --
+    -- For a transaction, those are empty authorities that an authorization to address 0 names.
+    (hwipe : WipesHideZeros block first.state)
     (reach : RunStack fork Meter
       (if message.target = none then .create first.message first.state first.substate first.meter
       else .call first.message first.state first.substate first.meter) callers reached) :
@@ -381,7 +382,7 @@ theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.Bloc
   obtain ⟨vfirst, -, hdep, hcode⟩ := prepareFirstFrame_rebuildState valid hcaller htarget h
   have hzero : clearedRefund fork first.state = 0 := by
     unfold clearedRefund
-    rw [nonceOrCodeClearedSlots_eq_empty vfirst empty (hw.prepareFirstFrame h)]
+    rw [nonceOrCodeClearedSlots_eq_empty vfirst hwipe (hw.prepareFirstFrame h)]
     simp
   have hclear : 0 ≤ clearedRefund fork reached.state :=
     Int.mul_nonneg (Int.natCast_nonneg _) (Int.natCast_nonneg _)
@@ -403,5 +404,56 @@ theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.Bloc
   rw [hstart, hstate, hzero] at this
   unfold refundSurplus at this
   omega
+
+/-- The counters of the live frames sum to at least zero, after each step of a transaction message.
+
+The hypotheses are those above, with no account of nonce 0 and no code holding storage instead.
+
+Mainnet meets that hypothesis only once a fork applies EIP-8253, for its 28 accounts. -/
+theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.BlockState}
+    {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
+    {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    {callers : List (Evm fork Meter)} {reached : Evm fork Meter}
+    (valid : RebuildState block state) (empty : Rebuildable block) (hw : NoStorageWrite state)
+    (hcaller : HasNonceOrCode state message.caller)
+    (htarget : ∀ target, message.target = some target → message.currentTarget = target)
+    (hsub : 0 ≤ substate.refundCounter)
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid = .ok first)
+    (reach : RunStack fork Meter
+      (if message.target = none then .create first.message first.state first.substate first.meter
+      else .call first.message first.state first.substate first.meter) callers reached) :
+    0 ≤ counterSum callers + reached.substate.refundCounter :=
+  runStack_refundCounter_nonneg_of_wipesHideZeros valid hw hcaller htarget hsub h
+    ((prepareFirstFrame_rebuildState valid hcaller htarget h).1.wipesHideZeros empty) reach
+
+/-- The counters of the live frames sum to at least zero, after each step of a run's message.
+
+The block state must hold no storage at an empty account, which mainnet meets. -/
+theorem TransactionRun.runStack_refundCounter_nonneg [LawfulGasMeter Meter]
+    {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
+    {tx : Transaction} {out : TransactionOutput} {target : Address} {bought : TransactionState}
+    {message : Message fork} {output : CallOutput} {settled : TransactionState}
+    {first : FirstFrame fork Meter} {callers : List (Evm fork Meter)} {reached : Evm fork Meter}
+    -- Each code read in its block state has its hash.
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    -- That state holds no delegation indicator at an account with nonce 0.
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    -- No account with nonce 0, no code and balance 0 holds storage there.
+    (empty : EmptyAccountsHoldNoStorage block)
+    (h : TransactionRun Meter env block included tx out target bought message output settled)
+    (hfirst : prepareFirstFrame (Meter := Meter) env.chainId.toNat
+      { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
+      (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+      (paidWrites included.sender target tx) = .ok first)
+    (reach : RunStack fork Meter
+      (if message.target = none then .create first.message first.state first.substate first.meter
+      else .call first.message first.state first.substate first.meter) callers reached) :
+    0 ≤ counterSum callers + reached.substate.refundCounter := by
+  obtain ⟨vb, hw, hcaller, htarget, hsub⟩ := h.refundReady code delegations
+  exact runStack_refundCounter_nonneg_of_wipesHideZeros
+    (message := { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir })
+    vb hw hcaller htarget (Int.le_of_eq hsub.symm) hfirst
+    (h.wipesHideZeros code delegations empty hfirst) reach
 
 end EthLib.Execution.Transactions

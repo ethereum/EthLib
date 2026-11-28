@@ -152,46 +152,9 @@ When `Q` has `Z = 1`, the products by its `Z` are skipped. -/
 @[specialize] def mulNat (a : F) (k : Nat) (p : Coords F) : Coords F :=
   ScalarProduct.naf (double a) (add a) infinity p (neg p) k
 
-/-- One chain of doublings for two products, high bits first, from bit `s` of each scalar.
-
-When `kb` and `lb` read the bits of `k` and `l`, with `k, l < 2^(s + fuel)`, it is the sum below.
-
-That sum is `(k / 2^s) P + (l / 2^s) Q`.
-
-`pq` is `P + Q`, which each pair of bits that are both `1` adds at once.
-
-It recurses on `fuel`, so the kernel can run it. -/
-@[specialize] def mulAddBits (a : F) (p q pq : Coords F) (kb lb : Nat → Bool) :
-    Nat → Nat → Coords F
-  | 0, _ => infinity
-  | fuel + 1, s =>
-    -- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`, at bit `s`.
-    --
-    -- The chain reads bit `s` instead of halving the scalars.
-    --
-    -- A scalar in fixed words then needs no new big integer at each step.
-    let acc := double a (mulAddBits a p q pq kb lb fuel (s + 1))
-    if kb s then
-      if lb s then add a acc pq else add a acc p
-    else if lb s then add a acc q else acc
-
-/-- `k P + l Q`, for `k, l < 2^fuel`, with one chain of doublings for both, high bits first.
-
-`pq` is `P + Q`, which each pair of bits that are both `1` adds at once. -/
-@[specialize] def mulAddAux (a : F) (p q pq : Coords F) (fuel k l : Nat) : Coords F :=
-  mulAddBits a p q pq k.testBit l.testBit fuel 0
-
-/-- `k P + l Q`, for `k, l < 2^fuel`, by simultaneous multiple point multiplication.
-
-The two products share their doublings: `fuel` doublings in total, instead of `2 fuel`.
-
-The method is Algorithm 3.48, in §3.3.3 of "Guide to Elliptic Curve Cryptography".
-
-That book is by Hankerson, Menezes and Vanstone (Springer, 2004). -/
-@[specialize] def mulAdd (a : F) (fuel k : Nat) (p : Coords F) (l : Nat)
-    (q : Coords F) : Coords F :=
-  -- The windows of the method have one bit here.
-  mulAddAux a p q (add a p q) fuel k l
+/-- `k P + l Q`, with one chain of doublings for both products, with the curve's `a`. -/
+@[specialize] def mulAdd (a : F) (k : Nat) (p : Coords F) (l : Nat) (q : Coords F) : Coords F :=
+  ScalarProduct.joint (double a) (add a) infinity p (neg p) q (neg q) k l
 
 end Coords
 
@@ -218,15 +181,10 @@ At a point with `y = 0`, the result has `Z = 0`, the point at infinity. -/
 @[inline] def mulNat (a : Fin m) (k : Nat) (p : Jacobian m) : Jacobian m :=
   ofCoords (Coords.mulNat a k p.toCoords)
 
-/-- `k P + l Q` on the integers mod `m`, for `k, l < 2^fuel`, with `pq = P + Q`. -/
-@[inline] def mulAddAux (a : Fin m) (p q pq : Jacobian m) (fuel k l : Nat) :
+/-- `k P + l Q` on the integers mod `m`, with the curve's `a` and shared doublings. -/
+@[inline] def mulAdd (a : Fin m) (k : Nat) (p : Jacobian m) (l : Nat) (q : Jacobian m) :
     Jacobian m :=
-  ofCoords (Coords.mulAddAux a p.toCoords q.toCoords pq.toCoords fuel k l)
-
-/-- `k P + l Q` on the integers mod `m`, for `k, l < 2^fuel`, with shared doublings. -/
-@[inline] def mulAdd (a : Fin m) (fuel k : Nat) (p : Jacobian m) (l : Nat)
-    (q : Jacobian m) : Jacobian m :=
-  ofCoords (Coords.mulAdd a fuel k p.toCoords l q.toCoords)
+  ofCoords (Coords.mulAdd a k p.toCoords l q.toCoords)
 
 end Jacobian
 

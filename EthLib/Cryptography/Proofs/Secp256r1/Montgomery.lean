@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Proofs.Montgomery.Core
 public import EthLib.Cryptography.Proofs.Montgomery.Fin
 public import EthLib.Cryptography.Proofs.Word64
 public import EthLib.Cryptography.Proofs.Jacobian
+public import EthLib.Cryptography.Proofs.Secp256r1.Field
 
 /-!
 # Proofs: the Montgomery form of the secp256r1 base field
@@ -16,7 +17,7 @@ The four words hold the same residue as the shared Montgomery field on eight 32-
 
 So reading back into `Fp` keeps zero, one, sums, differences and products, and it is injective.
 
-It undoes the encoding, and the inverse reads back as the inverse of `Fp`.
+It undoes the encoding, and the inverse reads back as the Euclidean inverse.
 -/
 
 @[expose] public section
@@ -31,13 +32,11 @@ def Fp.params : Cryptography.Montgomery.Modulus 8 where
   pLimbs := ⟨0xffffffffffffffff, 0x00000000ffffffff, 0x0000000000000000, 0xffffffff00000001⟩
   r1 := ⟨0x0000000000000001, 0xffffffff00000000, 0xffffffffffffffff, 0x00000000fffffffe⟩
   r2 := ⟨0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd⟩
-  pm2 := ⟨0xfffffffffffffffd, 0x00000000ffffffff, 0x0000000000000000, 0xffffffff00000001⟩
   pinv := 1
   pLimbs_spec := by decide
   pinv_spec := by decide
   r1_spec := by decide
   r2_spec := by decide
-  pm2_spec := by decide
 
 end EthLib.Cryptography.Secp256r1
 
@@ -128,9 +127,9 @@ theorem toFin_injective : Function.Injective toFin := Word64.Montgomery.toFin_in
 /-- Entering the Montgomery form and reading back gives the element itself. -/
 theorem toFin_ofFin (a : Fp) : toFin (ofFin a) = a := Word64.Montgomery.toFin_ofFin a
 
-/-- The inverse reads back as the inverse of `Fp`. -/
-theorem toFin_inv (a : Montgomery) : toFin (inv a) = Fin.inverse (toFin a) :=
-  toFin_ofFin _
+/-- The inverse reads back as the Euclidean inverse of its value in `Fp`. -/
+theorem toFin_inv (a : Montgomery) : toFin (inv a) = Fin.inverse (toFin a) := by
+  rw [inv, toFin_ofFin, Fp.inv_eq_inverse]
 
 /-- Reading the Montgomery form back is a change of field representation. -/
 theorem toFin_embedding : Jacobian.Coords.Embedding toFin :=

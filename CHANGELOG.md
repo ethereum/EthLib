@@ -14,6 +14,22 @@ Not yet released.
   They assume that the body wipes no storage of an account that had nonce 0, no code and storage before the block (`Evm.WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`), which on mainnet excludes only a creation at one of the 28 accounts of EIP-8253.
   The theorems from a rebuildable block keep their statements and follow from these.
 
+- In Lean, the refund counter of a run of a transaction is at least zero when the block state has three properties ([#5021](https://github.com/ethereum/EthLib/issues/5021)).
+  Each code matches its hash, every delegation indicator comes with a nonce, and no empty account holds storage (`Transactions.EmptyAccountsHoldNoStorage`, `Execution/Proofs/Transactions/Refund.lean`).
+  An empty account has nonce 0, no code and balance 0 (`State.TransactionState.EmptyAt`).
+  The 28 accounts of EIP-8253 hold ether, so mainnet meets the third property.
+  `Transactions.TransactionRun.wipes` proves that each storage that the first frame of a run wipes held only zeros in the block state, or is at an empty account there.
+  `Transactions.TransactionRun.wipesHideZeros` and `Transactions.TransactionRun.refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) follow.
+  So does `Transactions.TransactionRun.runStack_refundCounter_nonneg` (`Execution/Proofs/Transactions/RefundStack.lean`).
+  `Transactions.TransactionRun.messageReady` (`Execution/Proofs/Transactions/Rebuild.lean`) gives the start of the message of a run, for both the rebuild and the refund proofs.
+
+- In Lean, the refund counter that a transaction settles is at least zero on mainnet too, when the first frame of its message wipes no storage that holds a nonzero word ([#5017](https://github.com/ethereum/EthLib/issues/5017)).
+  `Transactions.prepareFirstFrame_refundCounter_nonneg_of_wipesHideZeros`, `Transactions.processMessageCall_refundCounter_nonneg_of_wipesHideZeros` (`Execution/Proofs/Transactions/Refund.lean`) and `Transactions.runStack_refundCounter_nonneg_of_wipesHideZeros` (`Execution/Proofs/Transactions/RefundStack.lean`) are new forms that do not assume that no account with nonce 0 and no code holds storage.
+  They assume that each wipe in the state of the first frame hid only zero words of the block state (`Transactions.WipesHideZeros`).
+  For a transaction, the first frame wipes only an authority with nonce 0, no code and no balance that an authorization to the zero address names.
+  The 28 accounts of EIP-8253 hold ether, so they are never wiped there.
+  The theorems from a rebuildable block keep their statements and follow from these through `Evm.RebuildEnd.wipesHideZeros`.
+
 - In Lean, the refund counter that a transaction settles is at least zero ([#4951](https://github.com/ethereum/EthLib/issues/4951)).
   `Transactions.processMessageCall_refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) shows that a message that succeeds settles the counter of the frame that ends it, with no clamp, from a state that `Transactions.TransactionRun.refundReady` gives.
   `Evm.processMessage_clearedRefund_le` and `Evm.processCreateMessage_clearedRefund_le` (`Execution/Proofs/Evm/Call/Refund.lean`) show that from Spurious Dragon a message that succeeds gains at least the refund of the slots that it leaves cleared.
@@ -21,13 +37,8 @@ Not yet released.
   `Evm.CreatesPlain`, `Evm.KeepsPlain`, `Evm.CodeAtNonceOrCode` and `Evm.childRelByKind_of_step` (`Execution/Proofs/Evm/Call/CreatesPlain.lean`) are now public, and `Evm.createdAccounts_finishSelfdestruct` moves to `ToDelete.lean`.
 
 - In Lean, `Kzg.everyOther` moves from `Kzg/Fft.lean` to `Kzg/FftHalves.lean`, with an unchanged full name.
-  The definitions on naturals that the kernel checks of the Lagrange setup read move from `Proofs/Kzg/SetupLagrange/{Roots,Points,Glv,Dft,Rounds,Tables}.lean` to `Proofs/Kzg/SetupLagrange/Checker.lean`, with unchanged full names.
-  The four tables of those checks are literal data in `Proofs/Kzg/SetupLagrange/Data/`, which `lake exe gen-setup-tables` writes, in place of elaborators that decoded the setup with the specification while the file was built.
 
 - In Lean, `Bls.Fp.modulus`, `Bls.Fr.modulus` and `Bls.blsX` move from `Bls/Fp.lean` and `Bls/Fr.lean` to `Bls/Constants.lean`, with unchanged full names and values.
-  The definitions of the torsion check of `G1` on naturals move from `Proofs/Bls/G1TorsionCheck.lean` to `Proofs/Bls/G1NatCheck.lean`.
-  The decoding of the embedded setup's strings and the command that states its checks move from `Proofs/Kzg/SetupTorsion/Check.lean` to `Proofs/Kzg/SetupTorsion/Checker.lean`.
-  Their full names are unchanged, and the kernel checks of the monomial points import only these modules and the setup data.
 
 - In Lean, STATICCALL to an account with no code that is no precompile returns no data under the state gas meter of EIP-8037, at every fork from Berlin ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   `Evm.Logic.staticcall_noCode_meter` and `Evm.Logic.staticcall_noCode_returndatasize_meter` (`Execution/Proofs/Evm/Logic/CallMeter.lean`) hold for code that passes the check of that meter, with the call at an opcode position.
@@ -1378,6 +1389,30 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the inverses of the secp256r1 fields `Fp` and `Fn` take the divsteps of Bernstein and Yang in place of the extended Euclidean algorithm ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `SafeGcd.inverseFin` (`Cryptography/SafeGcd.lean`) keeps the candidate of `SafeGcd.candidate` when it is below the modulus and its product with the input is one mod the modulus, and otherwise takes the extended Euclidean algorithm.
+  `SafeGcd.candidate`, `SafeGcd.negInverseWord` (`-m^(-1) mod 2^64` by Newton's iteration) and `SafeGcd.inverseFin_eq` are new.
+  The secp256k1 inverse mod `n` uses it too, so `Secp256k1.Inverse.check` moves to `SafeGcd.check`, and `Secp256k1.Inverse.check_eq` to `SafeGcd.check_eq` (`Cryptography/Proofs/Inverse.lean`).
+  `Secp256r1.Point.mulNat` and `Secp256r1.Montgomery.inv` invert with the inverse of `Fp`.
+  `Secp256r1.Fp.inv_eq_inverse` and `Secp256r1.Fn.inv_eq_inverse` (`Cryptography/Proofs/Secp256r1/Field.lean`) state that each inverse is the Euclidean inverse, and `toZMod_inv` keeps its statement.
+
+- In Lean, the inverses of the BLS12-381 fields `Fp` and `Fr` take the divsteps of Bernstein and Yang in place of the power `a ^ (p - 2)` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Montgomery.inv` (`Cryptography/Montgomery.lean`) keeps the candidate of `Montgomery.Modulus.invCandidate` when its product with the input is one, and otherwise takes the extended Euclidean algorithm; `Montgomery.toZMod_inv` keeps its statement.
+  `Montgomery.Modulus` loses `pm2` and `pm2_spec`, and gains `invCandidate`, which defaults to no candidate.
+  A modulus with no candidate, such as the proof models of the secp256k1 and secp256r1 fields, now inverts by the extended Euclidean algorithm.
+  The divsteps of `Secp256k1.Inverse` move to `SafeGcd` (`Cryptography/SafeGcd.lean`), with the class `SafeGcd.Signed` of the signed integers of five and seven words (`SafeGcd.Words7`); `Bls.Fp.invCandidate` and `Bls.Fr.invCandidate` are new.
+  `Montgomery.Modulus.neZero` moves from `Montgomery/Fin.lean` to `Montgomery.lean`, with an unchanged full name.
+
+- In Lean, the lemmas under the refund theorems assume only what they use of the block state ([#5017](https://github.com/ethereum/EthLib/issues/5017)).
+  `Transactions.clearedSlots_eq_empty` and `Transactions.nonceOrCodeClearedSlots_eq_empty` (`Execution/Proofs/Transactions/Refund.lean`) take `Transactions.WipesHideZeros` of the state in place of `Rebuildable` of the block state; `Evm.RebuildEnd.wipesHideZeros` gives it from `Rebuildable`.
+  `Transactions.buyGas_refundReady` and `Transactions.TransactionRun.refundReady` take the codes of the block state in place of `Rebuildable`; pass `valid.code` for a `valid : Rebuildable block`.
+
+- In Lean, the final exponentiation of BLS12-381 runs its powers by `|x|` and `|x| + 1` on four of the six coefficients of each square ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.Fp12.compressedPow` (`Cryptography/Bls/Fp12.lean`) squares the coefficients of `w`, `w^2`, `w^4` and `w^5` only (`Bls.Fp12.Compressed`, `Bls.Fp12.compress`, `Bls.Fp12.Compressed.square`, `Bls.Fp12.Compressed.squares`).
+  It rebuilds the selected powers with one inversion for all (`Bls.Fp12.Compressed.numerators`, `Bls.Fp12.Compressed.decompress`, `Bls.Fp12.suffixProducts`, `Bls.Fp12.batchInverse`), and takes `Bls.Fp12.cyclotomicPow` when a denominator vanishes.
+  `Bls.finalExponentiation` unfolds to it; `Bls.finalExponentiation_eq_pow` keeps its statement.
+  `Bls.Fp12.compressedPow_eq_pow` (`Proofs/Bls/FinalExponentiation.lean`) and `Bls.Fp12.map_compressedPow` (`Proofs/Bls/BaseFieldMap.lean`) are new.
+
 - In Lean, the quorum drift bound and the effective-balance bounds that it reads hold from Electra, not only from Fulu (part of [#2056](https://github.com/ethereum/EthLib/issues/2056)).
   Eight theorems take `(electra : .pectra ≤ _)` in place of `(fulu : .fusaka ≤ _)`, with the same position, other premises and conclusion.
   They are `block_balances` and `processOperations_floor` (`Consensus/Proofs/Transition/BlockCredits.lean`), and `Run.withdrawableKept_of_same_epoch` and `Run.balanceCorrections_of_same_epoch` (`BranchLedger.lean`).
@@ -1395,6 +1430,19 @@ Not yet released.
   `Transactions.clearedSlots_eq_empty`, `Transactions.nonceOrCodeClearedSlots_eq_empty`, `Transactions.prepareFirstFrame_refundCounter_nonneg`, `Transactions.processMessageCall_refundCounter_nonneg` and `Transactions.runStack_refundCounter_nonneg` take `Rebuildable` of the block state as a separate hypothesis.
   `Evm.PlainKept`, `Evm.RebuildReady`, `Evm.WipeAllowed`, `State.Rebuildable.wipeAllowed`, `Evm.RebuildReady.start`, `Evm.RebuildEnd.wipes_zero`, `Evm.RebuildEnd.rebuildReady`, `Blocks.keepsFollowable_rebuildReady`, `Blocks.withdrawalState_rebuildState` and `Blocks.exists_rebuildReady_systemCall` are new.
   `Evm.RebuildEnd.toRebuildInvariant`, `Evm.RebuildState.blockStorage_of_not_hasNonceOrCode`, `Evm.RebuildEnd.rebuildableBlock`, `Blocks.keepsFollowable_rebuildableBlock`, `Blocks.exists_rebuildable_systemCall`, `Blocks.systemCall_followable`, `Blocks.systemCall_rebuildable`, `Blocks.systemCall_delegationsHaveNonce`, `Blocks.getStorage_withdrawalState`, `Blocks.withdrawalState_followable`, `Blocks.withdrawalState_rebuildable`, `Blocks.withdrawalState_delegationsHaveNonce`, `State.RebuildInvariant.getStorage_createEther`, `State.RebuildInvariant.createEther` and `State.RebuildInvariant.ofBlock_incorporateTxIntoBlock` are removed.
+
+- In Lean, the general case of `k P + l Q` runs one chain of doublings on the non-adjacent forms of both scalars, with no fuel, on every short Weierstrass curve ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `ScalarProduct.joint` (`Cryptography/ScalarProduct.lean`) runs `ScalarProduct.jointSteps`, and `ScalarProduct.naf` is now its case `l = 0`, with an unchanged signature.
+  The steps read the bits of the scalars from their limbs below `2^62` (`ScalarProduct.limbs`, `ScalarProduct.bit`, `ScalarProduct.addDigit`), with the same value on every input.
+  `ScalarProduct.joint_spec`, `ScalarProduct.map_joint`, `ScalarProduct.map_jointSteps`, `ScalarProduct.map_addDigit` and `ScalarProduct.bit_limbs` (`Cryptography/Proofs/ScalarProduct.lean`) are new; `ScalarProduct.naf_spec` and `ScalarProduct.map_naf` keep their statements.
+  `ScalarProduct.nafSteps`, `ScalarProduct.valid_nafSteps` and `ScalarProduct.map_nafSteps` are removed.
+  `Jacobian.Coords.mulAdd` and `Jacobian.mulAdd` (`Cryptography/Jacobian.lean`) take no fuel argument: `mulAdd a k p l q` in place of `mulAdd a fuel k p l q`.
+  `Jacobian.Coords.map_mulAdd`, `Jacobian.Coords.onCurve_mulAdd`, `Jacobian.Coords.toPoint_mulAdd`, `Jacobian.onCurve_mulAdd` and `Jacobian.toPoint_mulAdd` (`Cryptography/Proofs/Jacobian.lean`) take no fuel and no hypothesis `k, l < 2 ^ fuel`.
+  `Jacobian.Coords.mulAdd_spec` is new, and `Jacobian.map_mulAdd` is new in place of `Jacobian.map_mulAddAux`.
+  `Jacobian.Coords.mulAddBits`, `Jacobian.Coords.mulAddAux`, `Jacobian.mulAddAux`, `Jacobian.Coords.mulAddBits_succ_start`, `Jacobian.Coords.mulAddAux_succ`, `Jacobian.Coords.map_mulAddAux`, `Jacobian.Coords.onCurve_mulAddAux`, `Jacobian.Coords.toPoint_mulAddAux`, `Jacobian.mulAddAux_zero`, `Jacobian.mulAddAux_succ`, `Jacobian.map_mulAddAux`, `Jacobian.onCurve_mulAddAux`, `Jacobian.toPoint_mulAddAux` and `Jacobian.mulAdd_eq` are removed.
+  `Secp256k1.Point.mulAdd_eq_jacobian` and `Secp256r1.Point.mulAdd_eq_jacobian` state the chain without the fuel `256`.
+  `Word64.Raw.bit`, `Word64.Raw.bit_iff` and `Word64.Raw.bit_eq_testBit`, which only P-256 used, are removed.
+  `Bls.G1.mulAdd` (`Cryptography/Bls/G1.lean`) is new, with `G1.Law.valid_mulAdd`, `G1.Law.toPoint_mulAdd`, `G1.valid_mulAdd`, `G1.toPoint_mulAdd` and `G1.Represents.mulAdd`; `Kzg.verifyKzgProofWith` computes `[-y] g1 + [z] proof` with it.
 
 - In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
@@ -4659,6 +4707,11 @@ Not yet released.
   The SSZ, JSON and Python forms are those of the bytes, so no encoding changes.
   The C and Python function signatures stay the same.
   Migration: build a key with `BLSPubkey.mk`, and read its bytes with `.bytes`.
+
+- In Lean, the kernel checks of the embedded trusted setup are gone, with `Proofs/Kzg/SetupTorsion/`, `Proofs/Kzg/SetupLagrange/`, `Proofs/Bls/G1TorsionCheck.lean`, `Proofs/Bls/G1NatCheck.lean` and the executable `gen-setup-tables`.
+  `TrustedSetup.ofHex_torsion`, `TrustedSetup.ofHex_lagrangeTorsion`, `TrustedSetup.ofHex_lagrangeOfMonomial`, `TrustedSetup.ofHex_wellFormed`, `computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` no longer exist.
+  A caller that needs them states the subgroup membership of the embedded setup, or `TrustedSetup.LagrangeOfMonomial` of it, as a hypothesis, as the theorems on any setup do.
+  `lake exe known-answers` checks both on compiled code, and CI runs it.
 
 ## 0.3.0
 

@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.SafeGcd
 public import EthLib.Cryptography.Word64.Four
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Base.ByteOrder
@@ -147,6 +148,16 @@ theorem Fr.subWords_eq (a b : Limbs.T 8) (ha : Limbs.val (n := 8) a < modulus)
 -- Proofs about `Fr` use the laws of the word arithmetic, never its unfolding on constants.
 attribute [irreducible] Fr.mulWords
 
+open Montgomery SafeGcd in
+/-- A candidate for the inverse mod `r` of the integer of the limbs, by the divsteps on words. -/
+def Fr.invCandidate (a : Limbs.T 8) : Option (Limbs.T 8) :=
+  -- Theorem 11.2 needs `floor((49 * 255 + 57) / 17) = 738` divsteps, for `r` below `2^255`.
+  --
+  -- So thirteen jumps, 780 divsteps, always suffice.
+  --
+  -- The result lies in `[0, r)`, so its four low words hold it.
+  Signed.inverse Word64.Raw.fromWords Fr.pLimbs.words Fr.pinvWord 13 a.words
+
 /-- The modulus `r` with the constants of its Montgomery arithmetic, on eight limbs. -/
 -- Inline, so that the compiler sees each field at each use, and the words of `r` from memory.
 --
@@ -157,18 +168,17 @@ attribute [irreducible] Fr.mulWords
   pinv := Fr.pinv
   r1 := ⟨0x00000001fffffffe, 0x5884b7fa00034802, 0x998c4fefecbc4ff5, 0x1824b159acc5056f⟩
   r2 := ⟨0xc999e990f3f29c6d, 0x2b6cedcb87925c23, 0x05d314967254398f, 0x0748d9d99f59ff11⟩
-  pm2 := ⟨0xfffffffeffffffff, 0x53bda402fffe5bfe, 0x3339d80809a1d805, 0x73eda753299d7d48⟩
   pLimbs_spec := Fr.val_pLimbs
   pinv_spec := by decide
   r1_spec := by decide +kernel
   r2_spec := by decide +kernel
-  pm2_spec := by decide
   mul := Fr.mulWords
   mul_spec a b ha := Fr.mulWords_eq a b ha
   add := Fr.addWords
   add_spec := Fr.addWords_eq
   sub := Fr.subWords
   sub_spec := Fr.subWords_eq
+  invCandidate := Fr.invCandidate
 
 /-- An element of the BLS12-381 scalar field. -/
 abbrev Fr := Montgomery Fr.params
@@ -192,7 +202,7 @@ Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -
 /-- Square-and-multiply modular exponentiation. -/
 @[inline] def powNat (base : Fr) (e : Nat) : Fr := Montgomery.pow base e
 
-/-- Multiplicative inverse, by Fermat's little theorem: `a ^ (r - 2)`.
+/-- Multiplicative inverse, by the divsteps of Bernstein and Yang, checked.
 
 The inverse of `0` is `0`, not an error.
 
