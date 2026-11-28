@@ -4,15 +4,15 @@ The consensus test release compresses every SSZ file as a Snappy block.
 The files here are 50 of them, copied byte for byte from `mainnet.tar.gz` under their path in the archive.
 
 - Repository: [`ethereum/consensus-specs`](https://github.com/ethereum/consensus-specs)
-- Release: `v1.7.0-beta.4`
-- Commit: `aa16bb4c156184e9548a997d53efaf2a228a6304`
+- Release: `v1.7.0-beta.5`
+- Commit: `36888ee87b0faa6ad7804b017a0184e8e6e6a1c6`
 - Archive: `mainnet.tar.gz`, whose digest `tests/consensus/README.md` records
 - Licence: CC0 1.0
 
-The archive holds 30,914 such files from Phase 0 to Fulu.
+The archive holds 31,214 such files from Phase 0 to Fulu.
 The 50 here are chosen by size, in the order of their size and then their path:
 
-- 48 of the 22,455 files below 100,000 bytes, at evenly spaced ranks;
+- 48 of the 22,743 files below 100,000 bytes, at evenly spaced ranks;
 - the smallest file of at least 100,000 bytes, a blob;
 - the largest file of at most 200,000 bytes, a beacon state of about 2.8 MB.
 

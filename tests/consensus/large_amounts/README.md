@@ -31,8 +31,8 @@ The test functions in `generator/large_amounts/` run on the executable specifica
 The specification writes each case in the format of its operations and epoch processing tests.
 
 - Repository: [`ethereum/consensus-specs`](https://github.com/ethereum/consensus-specs)
-- Release: `v1.7.0-beta.4`
-- Commit: `aa16bb4c156184e9548a997d53efaf2a228a6304`
+- Release: `v1.7.0-beta.5`
+- Commit: `36888ee87b0faa6ad7804b017a0184e8e6e6a1c6`
 
 In a checkout of that commit, link the generator in as a test package, build the specification and run the tests with reference output.
 Below, `$ETHLIB` is the root of an EthLib checkout and `$OUT` an empty directory.

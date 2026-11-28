@@ -164,13 +164,13 @@ theorem stepRules_noncesFit :
   trans hab hbc h := hbc (hab h)
   static h := NoncesFit.of_nonceLe
     (NonceLe.of_getAccountOptional fun address => (h.state address List.not_mem_nil).1.symm)
-  sstore _ _ _ _ _ h := NoncesFit.of_nonceLe
+  sstore _ _ _ _ h := NoncesFit.of_nonceLe
     (NonceLe.of_getAccountOptional fun _ => (TransactionState.getAccountOptional_setStorage h).symm)
   tstore _ _ _ _ := NoncesFit.of_nonceLe (NonceLe.of_getAccountOptional fun _ => rfl)
   log _ hs _ _ _ h := hs ▸ h
   selfdestruct _ _ h := NoncesFit.of_nonceLe (nonceLe_finishSelfdestruct_rev h)
   -- CREATE and CREATE2 raise the nonce of the creator only when it is below the bound.
-  incrementNonce _ _ _ hn h hfit := noncesFit_incrementNonce hfit hn h
+  incrementNonce _ _ hn h hfit := noncesFit_incrementNonce hfit hn h
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-- The address of a creation that a launch sends has nonce at most 1 in its caller. -/

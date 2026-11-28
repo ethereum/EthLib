@@ -51,6 +51,14 @@ def unsetNextPayloadAvailability (state : BeaconState preset fork) (gloas : .gla
   let bits ← writeCircular (state.executionPayloadAvailability gloas).bits next false
   return { state with executionPayloadAvailability := fun _ => ⟨bits⟩ }
 
+/-- From Gloas: the state with the payload of the next slot marked as not yet available.
+
+Before Gloas it is the state itself. -/
+def processNextPayloadAvailability (state : BeaconState preset fork) :
+    Except TransitionError (BeaconState preset fork) :=
+  if gloas : .glamsterdam ≤ fork then liftAccessor (unsetNextPayloadAvailability state gloas)
+  else pure state
+
 /-- The state after the caching of one slot, at the slot `s` of the state. -/
 def processSlot (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
@@ -71,8 +79,7 @@ def processSlot (state : BeaconState preset fork) :
   let blockRoots ← liftAccessor (writeCircularRooted state.blockRoots state.slot blockRoot)
   let state := { state with blockRoots }
   -- From Gloas the payload of slot `s + 1` is marked as not yet available.
-  if gloas : .glamsterdam ≤ fork then liftAccessor (unsetNextPayloadAvailability state gloas)
-  else return state
+  processNextPayloadAvailability state
 
 /-- From Electra: the state after the pending deposits, then the pending consolidations.
 

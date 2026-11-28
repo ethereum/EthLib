@@ -21,8 +21,8 @@ UPGRADES = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas
 
 # The release archives that hold the cases.
 ARCHIVES = {
-    "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
-    "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
+    "minimal": "consensus-specs/v1.7.0-beta.5/minimal",
+    "mainnet": "consensus-specs/v1.7.0-beta.5/mainnet",
 }
 
 

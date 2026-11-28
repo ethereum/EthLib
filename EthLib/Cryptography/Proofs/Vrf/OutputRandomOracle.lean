@@ -81,8 +81,17 @@ theorem prEvent_outputs_pair_of_fresh (secret : Digest) (i j : UInt32) (differen
       let right ← oracleHash (outputInput j secret)
       pure (left, right))).run' cache}[P z.1 ∧ Q z.2] =
       Pr{let y ← $ᵗ Digest}[P y] * Pr{let y ← $ᵗ Digest}[Q y] := by
-  -- Different indices give different output inputs.
-  exact prEvent_run'_query_pair_of_fresh _ _
-    (fun equal => different (outputInput_inj.mp equal).1) cache leftFresh rightFresh P Q
+  -- The pair is the list of the two indices, with both events as one event on its outputs.
+  have h := (run_outputs_evalDistEq secret [i, j] cache (by simpa using different)
+    (by simp [leftFresh, rightFresh])).prEvent_eq
+    (p := fun ys => P (ys.getD 0 default) ∧ Q (ys.getD 1 default))
+  -- Two independent uniform values give the product of the two chances.
+  simp only [List.mapM_cons, List.mapM_nil, List.getD_cons_zero, List.getD_cons_succ,
+    bind_pure_comp, map_bind, Functor.map_map, map_pure, prEvent_bind_bind_and] at h
+  -- The pair of the two outputs and the list of them carry the same two values.
+  rw [← h]
+  simp only [bind_pure_comp, simulateQ_bind, simulateQ_map, StateT.run'_eq, StateT.run_bind,
+    StateT.run_map, map_bind, Functor.map_map]
+  rfl
 
 end EthLib.Cryptography.Vrf

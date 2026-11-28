@@ -228,14 +228,16 @@ ENVELOPE_CASE = (
     GLOAS_CASES
     / "fork_choice/on_execution_payload_envelope/pyspec_tests/on_execution_payload_envelope_valid"
 )
-# The same block at slot 1, then two children of it: the head at slot 3, and a block at slot 2.
+# Another block at slot 1 on the same anchor, then two children of it.
+# They are the head at slot 3, and a block at slot 2.
 FORK_CASE = GLOAS_CASES / "fork_choice/ex_ante/pyspec_tests/ex_ante_vanilla"
-HEAD_ROOT = "0x551ef523e59e967a78834e3e80fd3b71008e42b57ba768cfdc2ba43cec47b28a"
-SIDE_ROOT = "0x9a319e277bcad69ccdc06f393d93d54407fd6f7a414c2f6ae73c4432d1ebfc21"
-ANCHOR_ROOT = "0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc"
-BLOCK_ROOT = "0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4"
+FORK_PARENT_ROOT = "0x4696daf03dcd505862cfe434a627d998aa01472b34b798ce76a8ea7dd981b13d"
+HEAD_ROOT = "0x464cf3ec8bb670c5ce6022ebf5256d18428a1e42d127ff24d4e2f9ac3f85d29f"
+SIDE_ROOT = "0x24c8aaab93ecd15c1ad26931f4cc3446c7539e95da79ce2cb276d566b1b7ae24"
+ANCHOR_ROOT = "0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28"
+BLOCK_ROOT = "0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3"
 ENVELOPE = (
-    "execution_payload_envelope_0x131ab93ae0a85b4dae8dd199874c24c136c7c8645f3a7b21bb0135cff179e47a"
+    "execution_payload_envelope_0xa317ae13e173dde4c61a04b8e74b95a3f897a3d7b581ddaf820a777d0f6cc05f"
 )
 GLOAS = FORKS["gloas"]
 
@@ -300,13 +302,15 @@ def test_headers_of_two_children() -> None:
     # Both children have the block at slot 1 as parent, and neither is at that slot.
     # The answer keeps the order of the input, and only the head is on the chain of the head.
     held = [head, side]
-    answer = consensus.api_headers(*_store_case(FORK_CASE), held, parent_root=_hex(BLOCK_ROOT))
+    answer = consensus.api_headers(
+        *_store_case(FORK_CASE), held, parent_root=_hex(FORK_PARENT_ROOT)
+    )
     assert answer["data"] == [
         {"root": HEAD_ROOT, "canonical": True, "header": head_json},
         {"root": SIDE_ROOT, "canonical": False, "header": side_json},
     ]
     reversed_answer = consensus.api_headers(
-        *_store_case(FORK_CASE), held[::-1], parent_root=_hex(BLOCK_ROOT)
+        *_store_case(FORK_CASE), held[::-1], parent_root=_hex(FORK_PARENT_ROOT)
     )
     assert reversed_answer["data"] == answer["data"][::-1]
 

@@ -24,6 +24,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 public import EthLib.Execution.Proofs.Evm.Instructions.TransientStorage
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.StorageStateGas
+public import EthLib.Execution.Proofs.Evm.Instructions.StorageStatus
 public import EthLib.Execution.Proofs.Evm.Machine.JumpDest
 public import EthLib.Execution.Proofs.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter

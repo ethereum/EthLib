@@ -267,11 +267,11 @@ theorem stepRules_keepsCodeOrigin :
     refine ⟨h.parent, fun _ hc => ?_, fun x => .inr (.inr (by rw [getAccount_of_staticStep h x]))⟩
     rw [hw]
     exact hc
-  sstore _ _ _ _ _ h := .setStorage h
+  sstore _ _ _ _ h := .setStorage h
   tstore _ _ _ _ := ⟨rfl, fun _ hx => hx, fun _ => .inr (.inr rfl)⟩
   log _ hs _ _ _ := by rw [hs]; exact .refl _
   selfdestruct _ _ h := keepsCodeOrigin_finishSelfdestruct h
-  incrementNonce _ _ _ _ h := .incrementNonce h
+  incrementNonce _ _ _ h := .incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-! ## Messages -/

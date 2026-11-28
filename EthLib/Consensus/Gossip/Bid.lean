@@ -48,7 +48,7 @@ An upper bound past the 64-bit range is an error. -/
 def isGasLimitTargetCompatible (parentGasLimit gasLimit targetGasLimit : UInt64) :
     Except ArithError Bool := do
   -- For the parent's limit `p`, let `d = max(floor(p / 1024) - 1, 0)`; then `p + d < 2^64`.
-  let _ ← addChecked parentGasLimit (saturatingSub (parentGasLimit / 1024) 1)
+  let _ ← maxGasLimitAfter parentGasLimit
   -- The gas limit is the target clamped to `[p - d, p + d]`.
   --
   -- The comparison runs on natural numbers, which give the 64-bit result once the bound holds.

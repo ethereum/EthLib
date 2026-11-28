@@ -1,9 +1,9 @@
 topic: payload_attestation_message
 blocks:
 - {block: 
-    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
 - {block: 
-    block_0x2bdd11129831a9f7045c6cba57db119b16c42192f8a0abd3f248bea2f21d15b2}
+    block_0xe6d21d299e0272c7bac63fdf5b950e1a3a7ee9e8cb752beb8dd226c23688a235}
 messages:
 - {current_time_ms: 6100, message: 
     payload_attestation_message_0x917664f1ecaff10641fac221f70e551dc1dd276f429d3484a968bfd824e03c7e,

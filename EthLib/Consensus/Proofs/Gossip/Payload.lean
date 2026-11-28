@@ -48,7 +48,7 @@ section Envelope
 
 variable {signed : SignedExecutionPayloadEnvelope preset fork} {block : BeaconBlock preset fork}
   {state : BeaconState preset fork} {finalizedSlot : Slot} {requestsRoot : Root} {time : UInt64}
-  {withdrawalsRoot expectedRoot : Root} {valid : Bool}
+  {withdrawalsRoot expectedRoot : Root} {maxGasLimit maxTransactions : UInt64} {valid : Bool}
 
 /-- An envelope whose block and builder have a valid envelope already is ignored. -/
 theorem validateExecutionPayloadEnvelope_of_seen
@@ -72,6 +72,8 @@ theorem validateExecutionPayloadEnvelope_recordExecutionPayloadEnvelope
 /-- The outcome of an envelope is its chain of checks, in order.
 
 It holds once its block, state, finalized slot, slot time, roots and signature are computed.
+
+It also needs the highest gas limit of the payload and the most transactions it allows.
 -/
 theorem validateExecutionPayloadEnvelope_eq
     (known : store.blocks[signed.message.beaconBlockRoot]? = some block)
@@ -81,6 +83,8 @@ theorem validateExecutionPayloadEnvelope_eq
     (timed : computeTimeAtSlot config state.genesisTime block.slot = .ok time)
     (withdrawn : SszType.hashTreeRoot
       (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok withdrawalsRoot)
+    (bounded : store.getMaxPayloadGasLimit gloas block = .ok maxGasLimit)
+    (counted : divChecked maxGasLimit config.MIN_TRANSACTION_GAS = .ok maxTransactions)
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
@@ -113,6 +117,8 @@ theorem validateExecutionPayloadEnvelope_eq
         (rejectUnless
             ((signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)).data.size ≤
               preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat) "too many withdrawals").andThen fun _ =>
+        (rejectUnless (signed.message.payload.transactions.data.size ≤ maxTransactions.toNat)
+          "too many transactions").andThen fun _ =>
         (rejectUnless (signed.message.payload.parentHash == state.latestBlockHash gloas)
           "payload's parent hash does not match the latest block hash").andThen fun _ =>
         (rejectUnless (signed.message.payload.timestamp == time)
@@ -123,9 +129,10 @@ theorem validateExecutionPayloadEnvelope_eq
           "payload's withdrawals do not match the expected withdrawals").andThen fun _ =>
         rejectUnless valid "invalid envelope signature") := by
   unfold validateExecutionPayloadEnvelope
-  simp only [known, held, finalized, rooted, timed, withdrawn, expected, signature, bind,
-    Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM, ignoreUnless_andThen,
-    rejectUnless_andThenM, rejectUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
+  simp only [known, held, finalized, rooted, timed, withdrawn, bounded, counted, expected,
+    signature, bind, Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM,
+    ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
+    apply_ite (Except.ok (ε := ForkChoiceError))]
   cases checkExecutionRequestsLimits gloas signed.message.executionRequests <;>
     simp [andThenM, andThen, pure, Except.pure, apply_ite (Except.ok (ε := ForkChoiceError))]
 
@@ -141,6 +148,8 @@ theorem validateExecutionPayloadEnvelope_ignored
     (timed : computeTimeAtSlot config state.genesisTime block.slot = .ok time)
     (withdrawn : SszType.hashTreeRoot
       (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok withdrawalsRoot)
+    (bounded : store.getMaxPayloadGasLimit gloas block = .ok maxGasLimit)
+    (counted : divChecked maxGasLimit config.MIN_TRANSACTION_GAS = .ok maxTransactions)
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
@@ -149,8 +158,8 @@ theorem validateExecutionPayloadEnvelope_ignored
       (signed.message.beaconBlockRoot, signed.message.builderIndex) ∈
           seen.executionPayloadEnvelopes ∨
         signed.message.payload.slotNumber gloas < finalizedSlot := by
-  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn expected
-    signature]
+  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn bounded
+    counted expected signature]
   simp only [Except.ok.injEq, andThen_eq_ignore, rejectUnless_ne_ignore,
     checkExecutionRequestsLimits_ne_ignore, ignoreUnless_eq_ignore, ignoreUnless_eq_accept,
     and_false, or_false, exists_or, exists_and_left, exists_eq', and_true, Bool.not_eq_eq_eq_not,
@@ -168,6 +177,8 @@ theorem validateExecutionPayloadEnvelope_eq_accept
     (timed : computeTimeAtSlot config state.genesisTime block.slot = .ok time)
     (withdrawn : SszType.hashTreeRoot
       (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok withdrawalsRoot)
+    (bounded : store.getMaxPayloadGasLimit gloas block = .ok maxGasLimit)
+    (counted : divChecked maxGasLimit config.MIN_TRANSACTION_GAS = .ok maxTransactions)
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
@@ -189,13 +200,14 @@ theorem validateExecutionPayloadEnvelope_eq_accept
         checkExecutionRequestsLimits gloas signed.message.executionRequests = .accept ∧
         (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)).data.size ≤
           preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat ∧
+        signed.message.payload.transactions.data.size ≤ maxTransactions.toNat ∧
         signed.message.payload.parentHash = state.latestBlockHash gloas ∧
         signed.message.payload.timestamp = time ∧
         signed.message.payload.hasEmptyTransaction = false ∧
         withdrawalsRoot = expectedRoot ∧
         valid = true := by
-  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn expected
-    signature]
+  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn bounded
+    counted expected signature]
   simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept,
     Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not, decide_eq_true_eq,
     List.elem_eq_mem, beq_iff_eq]

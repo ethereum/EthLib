@@ -1,0 +1,11 @@
+topic: execution_payload
+blocks:
+- {block: 
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
+- {block: 
+    block_0xcf36b97d1aa502cce7dbd1d8c68768592f63e5dffede3f1ede3bf54ff898b4e6}
+messages:
+- {message: 
+    execution_payload_envelope_0x848e77b39400960b1513ebb4a3446f9a763c1719cd73b127c342205a85bff66f,
+  expected: reject, reason: payload's withdrawals do not match the expected 
+    withdrawals}

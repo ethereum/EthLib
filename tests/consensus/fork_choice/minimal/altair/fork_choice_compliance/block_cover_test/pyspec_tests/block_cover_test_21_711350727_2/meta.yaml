@@ -1,0 +1,20 @@
+seed: 711350727
+model_params:
+  block_epochs: [2, 3, 3]
+  current_epoch: 5
+  current_justifications: [false, false, true]
+  parents: [0, 0, 0]
+  predicates: {block_is_leaf: true, block_vse_eq_store_je: false, 
+      block_vse_plus_two_ge_curr_e: false, store_je_eq_zero: false}
+  previous_justifications: [false, false, true]
+  store_justified_epoch: 3
+  target_block: 1
+bls_setting: 2
+mut_seed: 711350728
+mutations:
+- [shift, 21, -4]
+- [shift, 28, 1]
+- - multi_route
+  - 30
+  - [-10, 15]
+- [shift, 28, -5]

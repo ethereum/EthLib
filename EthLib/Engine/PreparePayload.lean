@@ -176,7 +176,7 @@ A block and its payload arrive apart, so the proposer chooses the full or the em
 
 The result is the state that the attributes read, the withdrawals and the head of the update.
 
-It fails when the current slot or the choice fails, or when the store holds no payload to build on.
+It fails when the choice fails, or when the store holds no payload to build on.
 
 It also fails when that payload or its withdrawals fail. -/
 def payloadParentGloas (config : Config) (checks : SignatureChecks) (store : Store preset fork)
@@ -184,9 +184,16 @@ def payloadParentGloas (config : Config) (checks : SignatureChecks) (store : Sto
     Except ProposerError (BeaconState preset fork × Array Consensus.Withdrawal × Hash32) := do
   -- The latest bid of the state, read before any payload applies.
   let parentBid := state.latestExecutionPayloadBid gloas
-  let slot ← (store.getCurrentSlot config).mapError .forkChoice
-  -- The fork choice says, at the current slot, whether to build on the full node of the head.
-  if ← (store.shouldBuildOnFull gloas head slot).mapError .forkChoice then
+  -- The fork choice says, at the slot of the proposal, whether to build on the full head.
+  --
+  -- The bid of the block is made at that slot.
+  --
+  -- So a payload prepared in the slot before agrees with the bid.
+  --
+  -- The view of the committee on the parent can change until that slot.
+  --
+  -- So the proposer should prepare again once the votes of the committee on the parent are in.
+  if ← (store.shouldBuildOnFull gloas head state.slot).mapError .forkChoice then
     -- The payload that the store holds for the block of the head; none is an error.
     let some envelope := (store.payloads gloas)[head.root]?
       | throw (.forkChoice (.payloadNotVerified head.root))

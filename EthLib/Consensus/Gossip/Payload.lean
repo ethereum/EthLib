@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.GasLimit
 public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Networking.Gossip.Validation
 
@@ -55,6 +56,29 @@ def checkExecutionRequestsLimits (gloas : .glamsterdam ≤ fork)
   rejectUnless ((requests.builderExits gloas).data.size ≤
     preset.MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD.toNat) "too many builder exit requests"
 
+/-- From Gloas: the highest gas limit that the payload of a block may have. -/
+def Store.getMaxPayloadGasLimit (store : Store preset fork) (gloas : .glamsterdam ≤ fork)
+    (block : BeaconBlock preset fork) : Except ForkChoiceError UInt64 :=
+  walk block
+where
+  /-- The walk from a block up to the closest ancestor that is full for its child. -/
+  walk (child : BeaconBlock preset fork) : Except ForkChoiceError UInt64 :=
+    match store.blocks[child.parentRoot]? with
+    -- The walk leaves the store, so the bid of the block bounds its payload.
+    | none => pure (block.body.signedExecutionPayloadBid gloas).message.gasLimit
+    | some parent =>
+      -- The child builds on the payload of its parent, so the store holds that payload.
+      if parentPayloadStatus child parent = .full then do
+        let some envelope := (store.payloads gloas)[child.parentRoot]?
+          | throw (.payloadNotVerified child.parentRoot)
+        -- EIP-1559 bounds the next gas limit by that of the parent payload.
+        (maxGasLimitAfter envelope.payload.gasLimit).mapError .arith
+      -- Else the walk goes to the parent, whose slot is lower.
+      else if _lower : parent.slot < child.slot then walk parent
+      else throw (.parentSlotNotLower child.parentRoot)
+  termination_by child.slot.toNat
+  decreasing_by exact UInt64.lt_iff_toNat_lt.mp _lower
+
 /-- From Gloas: the checks of a signed envelope on its topic. -/
 def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks) (seen : Seen)
     (store : Store preset fork) (gloas : .glamsterdam ≤ fork)
@@ -106,7 +130,16 @@ def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks
   -- REJECT unless the payload holds at most `MAX_WITHDRAWALS_PER_PAYLOAD` withdrawals.
   let withdrawals := payload.withdrawals (Nat.le_trans (by decide) gloas)
   (rejectUnless (withdrawals.data.size ≤ preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat)
-    "too many withdrawals").andThenM fun _ =>
+    "too many withdrawals").andThenM fun _ => do
+  -- REJECT unless the payload has at most as many transactions as its highest gas limit allows.
+  --
+  -- A transaction uses at least `MIN_TRANSACTION_GAS`.
+  --
+  -- The limit is the highest one after the parent payload, which can exceed the payload's own.
+  let maxGasLimit ← store.getMaxPayloadGasLimit gloas block
+  let maxTransactions ← (divChecked maxGasLimit config.MIN_TRANSACTION_GAS).mapError .arith
+  (rejectUnless (payload.transactions.data.size ≤ maxTransactions.toNat)
+    "too many transactions").andThenM fun _ =>
   -- REJECT unless the payload extends the latest block hash of the state after the block.
   (rejectUnless (payload.parentHash == state.latestBlockHash gloas)
     "payload's parent hash does not match the latest block hash").andThenM fun _ => do

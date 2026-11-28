@@ -181,16 +181,15 @@ private theorem Execution.target_eq_or_unseen_signer (slots : 0 < config.SLOT_DU
     (justifiedEpoch : ((e.world k).state w).justifiedCheckpoint.epoch = epoch) :
     (((e.world k).state w).justifiedCheckpoint = target ∨
       -- That voter is outside the committees seen so far, and it signed before the receiver's slot.
-      ∃ v ∈ voters, v ∉ participants ∧ ∃ i, (e.world i).time ≤ (e.world k).time ∧
-        ∃ m ∈ (e.world i).sent, ∃ data,
-          (v, data) ∈ statements config checks anchorState anchorBlock m ∧
-          data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot) ∨
+      ∃ v ∈ voters, v ∉ participants ∧ ∃ i, ∃ m ∈ (e.world i).sent, ∃ data,
+        (v, data) ∈ statements config checks anchorState anchorBlock m ∧
+        data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot) ∨
       HonestCollision (e := e) last := by
   -- The pin gives a voter that signed the justified checkpoint.
   rcases pins u caller n head state total epoch voters nBound headOk stateOk totalOk epochOk target
       anc fin targetOk ancOk finRead finAnchor (fun v hv => ⟨(members v hv).1, (members v hv).2.1⟩)
       quorum w receiver k slot kFirst kLast upToDate slotOk justifiedEpoch afterAnchor with
-    ⟨v, member, i, iLe, m, sent, data, signed, dataTarget, dataSlot⟩ | collision
+    ⟨v, member, i, -, m, sent, data, signed, dataTarget, dataSlot⟩ | collision
   swap
   · exact .inr collision
   refine .inl ?_
@@ -203,7 +202,7 @@ private theorem Execution.target_eq_or_unseen_signer (slots : 0 < config.SLOT_DU
       otherSigned (members v member).1
       (by rw [dataTarget, otherTarget, justifiedEpoch, targetEpoch])
     exact .inl (dataTarget.symm.trans ((congrArg AttestationData.target same).trans otherTarget))
-  · exact .inr ⟨v, member, unseen, i, iLe, m, sent, data, signed, dataTarget, dataSlot⟩
+  · exact .inr ⟨v, member, unseen, i, m, sent, data, signed, dataTarget, dataSlot⟩
 
 
 /-- Same-block agreement carries pending descent to a receiver that holds the descendant. -/
@@ -429,11 +428,75 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
   subst same
   exact ⟨boundary, boundaryOk, le⟩
 
-/-- The rule's test `total < 3 · support` and the reserved count give the pinned quorum. -/
-private theorem pin_quorum_of_count {support total stake margin pin : ℕ}
-    (check : total < 3 * support) (count : 3 * support + (margin + pin) ≤ 3 * stake) :
-    total + (margin + pin) < 3 * stake := by
-  omega
+/-- A pinned quorum at the call's count gives the call's target, or an honest duty from its slot.
+
+The pin hypothesis gives the target or an unseen signer at the caller's count `M`.
+
+The duty is for the store's justified checkpoint, and its slot is before `current`. -/
+private theorem eq_target_or_later_duty_of_pin
+    {n k time margin M : ℕ} {anchor : Store preset fork} {u w : ValidatorIndex}
+    {head : ForkChoiceNode} {slot first last current : Slot} {target : Checkpoint}
+    {participants : Std.TreeSet ValidatorIndex} {voters : Finset ValidatorIndex}
+    {state : BeaconState preset fork} {total : Gwei}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ a ∈ J, e.start a = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (sound : Invariant anchorState) (params : DirectSafety.Parameters preset)
+    (nonzero : HeldStateRootsNonzero ((e.world n).state u))
+    (windows : AssignmentWindowAgreement (e := e) time)
+    (caller : u ∈ J) (callBound : (e.world n).time ≤ time)
+    (headOk : ((e.world n).state u).getHead config = .ok head)
+    (callOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (firstOk : computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok first)
+    (lastOk : subChecked slot 1 = .ok last)
+    (participantsOk : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
+      .ok participants)
+    (epoch : ((e.world k).state w).justifiedCheckpoint.epoch = computeEpochAtSlot preset slot)
+    (targetOk : ((e.world n).state u).getCurrentTarget config head.root = .ok target)
+    (honest : ∀ v ∈ voters, v ∈ J)
+    (quorum : total.toNat + M < 3 * stake (fun v => balanceAt state v.toNat) voters)
+    (countMargin : ∀ anc fin : BeaconState preset fork,
+      ((e.world n).state u).blockStates[target.root]? = some anc →
+      (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+        ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin) →
+      (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) →
+      M = margin + pinReserve config state anc fin)
+    (pin : ∀ anc fin : BeaconState preset fork,
+      ((e.world n).state u).blockStates[target.root]? = some anc →
+      (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+        ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin) →
+      (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) →
+      total.toNat + (margin + pinReserve config state anc fin) <
+        3 * stake (fun v => balanceAt state v.toNat) voters →
+      ((e.world k).state w).justifiedCheckpoint = target ∨ ∃ v ∈ voters, v ∉ participants ∧
+        ∃ i, ∃ m ∈ (e.world i).sent, ∃ data,
+          (v, data) ∈ statements config checks anchorState anchorBlock m ∧
+          data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < current) :
+    ((e.world k).state w).justifiedCheckpoint = target ∨ ∃ v ∈ J, ∃ j data,
+      MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
+        (e.world j).time ((e.world j).view v) ((e.world j).state v) data ∧
+      data.target = ((e.world k).state w).justifiedCheckpoint ∧
+      slot ≤ data.slot ∧ data.slot < current := by
+  have reached := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) n u
+    caller
+  -- The count's reserve reads the target block's state and that state's finalized state.
+  obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget reached targetOk
+  obtain ⟨fin, finRead, finAnchor, -⟩ :=
+    Store.Reachable.finalizedState_of_blockState reached sound anchorSlot params nonzero ancOk
+  rw [countMargin anc fin ancOk finRead finAnchor] at quorum
+  rcases pin anc fin ancOk finRead finAnchor quorum with
+    eq | ⟨v, voter, unseen, i, m, sent, data, member, dataTarget, dataBefore⟩
+  · exact .inl eq
+  -- A voter outside the committees seen so far has its duty at or after the call's slot.
+  have honestV := honest v voter
+  obtain ⟨j, -, duty⟩ := e.exists_maySign_of_signed sent member honestV
+  have dutyCopy := duty
+  obtain ⟨index, assigned, -⟩ := dutyCopy
+  have epochSlot : data.target.epoch = computeEpochAtSlot preset slot := by
+    rw [dataTarget, epoch]
+  have low := boundary_le_of_duty duty (by rw [epochSlot]; exact firstOk)
+  have after := duty_after_call anchored start params.slots params.lookahead windows caller
+    callBound headOk callOk firstOk lastOk participantsOk honestV unseen low assigned
+  exact .inr ⟨v, honestV, j, data, duty, dataTarget, after, dataBefore⟩
 
 /-- The receiver's justified checkpoint is comparable with the root, given the pin at the count.
 
@@ -499,10 +562,9 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
       ((e.world k).state w).getCurrentSlot config = .ok slot →
       ((e.world k).state w).justifiedCheckpoint.epoch = callerEpoch →
       ((e.world k).state w).justifiedCheckpoint = target ∨
-        ∃ v ∈ voters, v ∉ participants ∧ ∃ i, (e.world i).time ≤ (e.world k).time ∧
-          ∃ m ∈ (e.world i).sent, ∃ data,
-            (v, data) ∈ statements config checks anchorState anchorBlock m ∧
-            data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot) :
+        ∃ v ∈ voters, v ∉ participants ∧ ∃ i, ∃ m ∈ (e.world i).sent, ∃ data,
+          (v, data) ∈ statements config checks anchorState anchorBlock m ∧
+          data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot) :
     ((e.world k).state w).isAncestor
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       ((e.world k).state w).isAncestor ⟨root, .pending⟩
@@ -682,27 +744,16 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
         ((e.world k).state w).isAncestor ⟨root, .pending⟩
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true := by
     have targetEpoch : target'.epoch = epoch := Except.ok.inj (targetEpochOk.symm.trans epochOk)
-    obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget sr targetOk
-    obtain ⟨fin, finRead, finAnchor, -⟩ :=
-      Store.Reachable.finalizedState_of_blockState sr sound anchorSlot params nonzero ancOk
-    rw [countMargin stateOk targetOk ancOk finRead finAnchor] at bound
-    have quorum := pin_quorum_of_count check bound
-    rcases pin stateOk totalOk targetOk ancOk finRead finAnchor (cpEpoch ▸ afterAnchor)
-        targetEpoch members quorum currentOk cpEpoch with
-      eq | ⟨v, voter, unseen, i, -, m, sent, data, member, dataTarget, dataBefore⟩
+    rcases eq_target_or_later_duty_of_pin anchored start anchorSlot sound params nonzero windows
+        caller nBound headOk slotOk firstOk lastOk participantsOk (cpEpoch.trans slotEpoch.symm)
+        targetOk (fun v hv => (members v hv).1) (by omega)
+        (fun _ _ ancOk finRead finAnchor => countMargin stateOk targetOk ancOk finRead finAnchor)
+        (fun _ _ ancOk finRead finAnchor quorum => pin stateOk totalOk targetOk ancOk finRead
+          finAnchor (cpEpoch ▸ afterAnchor) targetEpoch members quorum currentOk cpEpoch) with
+      eq | ⟨v, honest, k', data, duty, dataTarget, after, dataBefore⟩
     · rw [← eq] at read
       exact comparable_of_target_read anchorSlot sr rr common known jk onChain read
-    · obtain ⟨honest, -, -⟩ := members v voter
-      obtain ⟨k', -, duty⟩ := e.exists_maySign_of_signed sent member honest
-      have dutyCopy := duty
-      obtain ⟨index, assigned, -⟩ := dutyCopy
-      have epochSlot : data.target.epoch = computeEpochAtSlot preset slot := by
-        rw [dataTarget, cpEpoch, slotEpoch]
-      have low := boundary_le_of_duty duty (by rw [epochSlot]; exact firstOk)
-      have after := duty_after_call anchored start positive params.lookahead windows caller nBound
-        headOk
-        slotOk firstOk lastOk participantsOk honest unseen low assigned
-      exact viaDuty honest duty dataTarget after dataBefore
+    · exact viaDuty honest duty dataTarget after dataBefore
   have baseNe : baseEpoch ≠ epoch := by
     rw [← epochEq]
     exact UInt64.ne_of_lt epochStrict
@@ -818,5 +869,186 @@ theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {
         ⟨head, headOk, rfl⟩ stateOk totalOk callerEpochOk targetOk ancOk finRead finAnchor after
         targetEpoch members quorum receiver (Nat.zero_le _) (atTime ▸ high) ready currentOk
         cpEpoch).resolve_right (e.not_honestCollision_of_agree agree)))
+
+section
+
+variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin : ℕ}
+  {g : ForkedBeaconState preset}
+  -- The anchor and its store: every honest store starts there, at an epoch boundary.
+  (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+  (start : ∀ a ∈ J, e.start a = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+  (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+  -- The slot duration is positive, the delay fits a slot, and honest stores agree on duty windows.
+  (slots : 0 < config.SLOT_DURATION_MS) (fits : DelayFits fork config genesisTimeMs Δ)
+  (windows : AssignmentWindowAgreement (e := e) time) (params : DirectSafety.Parameters preset)
+  -- Through the limit, honest stores hold only blocks with nonzero state roots.
+  (roots : HeldBlockStateRootsNonzero (e := e) time)
+  -- Through the limit, no honest store holds the anchor's parent.
+  (absent : AnchorParentAbsent (e := e) time)
+  -- The anchor state comes from genesis by a run.
+  (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+  -- Honest store epochs are within the horizon, with the run and terminal stake floors.
+  (storeBound : HonestStoreEpochsBounded (e := e) horizon time)
+  (enough : HeldRunStakeFloor (e := e) pre horizon time)
+  (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+  {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : ℕ}
+  {head : ForkChoiceNode} {origin : Root} {target : Checkpoint}
+  -- The caller's head passes the no-conflict test for its current target.
+  (headOk : ((e.world n).state u).getHead config = .ok head)
+  (check : ((e.world n).state u).willNoConflictingCheckpointBeJustified config head.root =
+    .ok true)
+  (targetOk : ((e.world n).state u).getCurrentTarget config head.root = .ok target)
+  -- The call's count is reserved, and the target is after the anchor's justified epoch.
+  (reserved : ReservedTargetVotes (e := e) margin u n head.root)
+  (afterAnchor : anchor.justifiedCheckpoint.epoch < target.epoch)
+  -- The call is at the start of its slot.
+  {callSlot : Slot} {callBegin : UInt64}
+  (callOk : ((e.world n).state u).getCurrentSlot config = .ok callSlot)
+  (callBeginOk : computeTimeAtSlotMs config genesisTimeMs callSlot = .ok callBegin)
+  (atCall : (e.world n).time = callBegin.toNat)
+  -- The origin is a block of the target epoch on the caller's head chain.
+  (originEpochOk : ((e.world n).state u).getBlockEpoch origin = .ok target.epoch)
+  (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩ ⟨origin, .pending⟩ =
+    .ok true)
+  -- Up-to-date honest heads descend from the origin from the call through the next epoch's start.
+  {nextEpoch : Epoch} {first : Slot} {begin : UInt64}
+  (nextOk : addChecked target.epoch 1 = .ok nextEpoch)
+  (firstOk : computeStartSlotAtEpoch preset nextEpoch = .ok first)
+  (beginOk : computeTimeAtSlotMs config genesisTimeMs first = .ok begin)
+  (covers : HonestHeadsCover (e := e) origin (e.world n).time (begin.toNat + 1))
+  -- The caller and receiver events are both by the limit, in either order.
+  (callBound : (e.world n).time ≤ time) (byTime : (e.world k).time ≤ time)
+  -- The receiver is up to date, and its justified checkpoint is of the target epoch.
+  (ready : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+    ((e.world k).state w))
+  (sameEpoch : ((e.world k).state w).justifiedCheckpoint.epoch = target.epoch)
+include anchored start anchorSlot anchorBoundary slots fits windows params roots absent genesis pre
+  storeBound enough terminal caller receiver headOk check targetOk reserved afterAnchor callOk
+  callBeginOk atCall originEpochOk descends nextOk firstOk beginOk covers callBound byTime
+  ready sameEpoch
+
+/-- By `time`, an up-to-date honest receiver justified at the target epoch has the call's target.
+
+Otherwise two honest stores collide on a block, or give cross-store justified evidence.
+
+The honest call is at a slot start and passes the no-conflict test.
+
+Its target's epoch is after the anchor's justified epoch.
+
+It assumes origin coverage, the reserved count, the pin and held states before the next fork. -/
+theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint
+    (early : HeldStatesBeforeUpgrade (e := e) time)
+    (pins : JustifiedPinned (e := e) anchor.justifiedCheckpoint.epoch margin 0 time) :
+    ((e.world k).state w).justifiedCheckpoint = target ∨ HonestCollision (e := e) time ∨
+      CrossStoreJustifiedEvidence (e := e) pre time := by
+  rcases e.blocksAgree_or_collision time with agree | collision
+  swap
+  · exact .inr (.inl collision)
+  rcases e.selectedCheckpointsAgree_or_evidence anchored start anchorSlot roots absent params
+      genesis pre early enough terminal with selected | evidence
+  swap
+  · exact .inr (.inr evidence)
+  left
+  obtain ⟨sound, -, -⟩ := DirectSafety.run_justified_separated pre genesis
+  have forward := e.forwardReachable
+    (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored)
+  have sr := (forward n u caller).reachable
+  have rr := (forward k w receiver).reachable
+  have nonzero := roots u caller n callBound
+  -- The target carries the caller's store epoch, which is within the horizon.
+  have epochOk : ((e.world n).state u).getCurrentStoreEpoch config = .ok target.epoch := by
+    obtain ⟨epoch, root, epochOk, -, eq⟩ := Store.getCurrentTarget_eq_ok_iff.mp targetOk
+    rw [eq]
+    exact epochOk
+  have inHorizon := storeBound u caller n target.epoch callBound epochOk
+  obtain ⟨M, count, countMargin⟩ := pinned_count sr sound anchorSlot params nonzero reserved
+  rcases quorum_of_no_conflicting_checkpoint count check with unrealized |
+    ⟨state, total, target', slot, epochStart, last, participants, voters, stateOk, totalOk,
+      targetOk', slotOk, -, epochStartOk, lastOk, participantsOk, read, members, quorum⟩
+  -- The target is the caller's unrealized justified checkpoint, of the receiver's epoch.
+  · have same := Except.ok.inj (targetOk.symm.trans unrealized)
+    have agreed := selected w receiver u caller k n byTime callBound _ _ (.inl rfl) (.inr rfl)
+      (by rw [← same, sameEpoch]) (sameEpoch ▸ inHorizon)
+    exact agreed.trans same.symm
+  have targetEq := Except.ok.inj (targetOk'.symm.trans targetOk)
+  subst target'
+  have slotEq := Except.ok.inj (slotOk.symm.trans callOk)
+  subst slot
+  have slotEpoch : target.epoch = computeEpochAtSlot preset callSlot := by
+    have callEpochOk : ((e.world n).state u).getCurrentStoreEpoch config =
+        .ok (computeEpochAtSlot preset callSlot) := by
+      simp [Store.getCurrentStoreEpoch, callOk, bind, Except.bind, pure, Except.pure]
+    exact Except.ok.inj (epochOk.symm.trans callEpochOk)
+  obtain ⟨current, currentOk, -, -⟩ :=
+    (forward k w receiver).slots_le_current slots (UInt64.le_of_eq anchorSlot)
+  -- The pin at the caller's count gives the target, or an honest duty after the call.
+  rcases eq_target_or_later_duty_of_pin anchored start anchorSlot sound params nonzero windows
+      caller callBound headOk callOk epochStartOk lastOk participantsOk (sameEpoch.trans slotEpoch)
+      targetOk (fun v hv => (members v hv).1) quorum
+      (fun _ _ ancOk finRead finAnchor => countMargin stateOk targetOk ancOk finRead finAnchor)
+      (fun _ _ ancOk finRead finAnchor quorum =>
+        (Execution.target_eq_or_unseen_signer slots pins caller callBound ⟨head, headOk, rfl⟩
+          stateOk totalOk epochOk targetOk ancOk finRead finAnchor afterAnchor rfl members quorum
+          receiver (Nat.zero_le _) byTime ready currentOk sameEpoch).resolve_right
+          (e.not_honestCollision_of_agree agree)) with
+    eq | ⟨v, honest, j, data, duty, dataTarget, after, before⟩
+  · exact eq
+  -- The duty falls between the call and the receiver's event, so by the limit.
+  obtain ⟨low, high⟩ := duty_window_of_slot_le start fits callBeginOk receiver ready currentOk
+    honest duty after before
+  have jBound : (e.world j).time ≤ time := by omega
+  have dataEpoch : data.target.epoch = target.epoch := by rw [dataTarget, sameEpoch]
+  -- The duty's slot is of the target epoch, so before the next epoch's first slot.
+  have dutyCopy := duty
+  obtain ⟨_, -, deadline, -, -, made, -⟩ := dutyCopy
+  obtain ⟨_, _, _, _, _, _, _, _, dataOk⟩ := made
+  have slotOfEpoch := target_epoch_eq_of_getAttestationData dataOk
+  have slotLt : data.slot < first := by
+    have nextNat := (addChecked_ok_iff.mp nextOk).2
+    have firstNat := (computeStartSlotAtEpoch_ok_iff.mp firstOk).2
+    have epochNat := congrArg UInt64.toNat (dataEpoch.symm.trans slotOfEpoch)
+    simp only [computeEpochAtSlot, UInt64.toNat_div] at epochNat
+    simp only [UInt64.toNat_one] at nextNat
+    rw [UInt64.lt_iff_toNat_lt, firstNat, nextNat, epochNat]
+    exact Nat.lt_mul_of_div_lt (Nat.lt_succ_self _) params.slots
+  -- The duty's deadline plus the delay is by the start of that slot, so the duty is covered.
+  have covered : (e.world j).time + Δ ≤ begin.toNat :=
+    fits.deadline_add_le deadline (computeSlotAtTimeMs_computeTimeAtSlotMs slots beginOk) slotLt
+  -- The receiver holds its justified block: the anchor's zero state root is excluded.
+  obtain ⟨justifiedBlock, justifiedKnown⟩ :
+      ∃ b, ((e.world k).state w).blocks[((e.world k).state w).justifiedCheckpoint.root]? =
+        some b := by
+    rcases rr.checkpoints_known sound (UInt64.le_of_eq anchorSlot) params.slots
+        (by have := params.roots; omega) (checkpoint := ((e.world k).state w).justifiedCheckpoint)
+        (by simp) with ⟨-, -, known⟩ | ⟨-, known⟩ | zero
+    · rw [Std.TreeMap.contains_eq_isSome_getElem?] at known
+      exact Option.isSome_iff_exists.mp known
+    · rw [Std.TreeMap.contains_eq_isSome_getElem?] at known
+      exact Option.isSome_iff_exists.mp known
+    · rw [rr.anchorState_root, Except.ok.injEq] at zero
+      exact absurd zero (Execution.anchor_stateRoot_nonzero anchored start roots receiver byTime)
+  have checkpointKnown : ((e.world k).state w).blocks[data.target.root]? = some justifiedBlock := by
+    rw [dataTarget]
+    exact justifiedKnown
+  -- The signer reads the duty's target on a head above the origin.
+  obtain ⟨signerHead, supports, signerRead⟩ := signerHead_of_duty anchored start anchorSlot
+    anchorBoundary roots covers honest receiver duty (by omega) (by omega) jBound checkpointKnown
+  -- The caller's target read carries to that head at the target epoch.
+  have sv := (forward j v honest).reachable
+  obtain ⟨originBlock, originHeld⟩ := Store.held_of_isAncestor descends
+  have originEpoch : computeEpochAtSlot preset originBlock.slot = target.epoch := by
+    simpa [Store.getBlockEpoch, Store.block_ok_iff.mpr originHeld, bind, Except.bind, pure,
+      Except.pure] using originEpochOk
+  have carried := Store.getCheckpointBlock_of_shared_origin sr sv anchorSlot
+    (agree u caller v honest n j callBound jBound) read originHeld descends originEpoch supports
+  rw [dataEpoch] at signerRead
+  have rootEq := Except.ok.inj (signerRead.symm.trans carried)
+  rw [← dataTarget]
+  cases data_target : data.target
+  cases target
+  simp only [data_target] at dataEpoch rootEq
+  simp only [dataEpoch, rootEq]
+
+end
 
 end EthLib.Consensus.Models.Network
