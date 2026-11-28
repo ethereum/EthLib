@@ -31,9 +31,7 @@ open EthLib.Serialization.Rlp
 instance : LawfulCodec StorageChange where
   ofItem_toItem c := by
     show StorageChange.ofItem (StorageChange.toItem c) = _
-    simp only [StorageChange.ofItem, StorageChange.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind,
-      pure, Except.pure]
+    simp_record_roundtrip StorageChange.ofItem StorageChange.toItem
   toItem_of_ofItem {item c} hDecode := by
     change StorageChange.ofItem item = .ok c at hDecode
     unfold StorageChange.ofItem at hDecode
@@ -42,9 +40,7 @@ instance : LawfulCodec StorageChange where
 instance : LawfulCodec BalanceChange where
   ofItem_toItem c := by
     show BalanceChange.ofItem (BalanceChange.toItem c) = _
-    simp only [BalanceChange.ofItem, BalanceChange.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind,
-      pure, Except.pure]
+    simp_record_roundtrip BalanceChange.ofItem BalanceChange.toItem
   toItem_of_ofItem {item c} hDecode := by
     change BalanceChange.ofItem item = .ok c at hDecode
     unfold BalanceChange.ofItem at hDecode
@@ -53,9 +49,7 @@ instance : LawfulCodec BalanceChange where
 instance : LawfulCodec NonceChange where
   ofItem_toItem c := by
     show NonceChange.ofItem (NonceChange.toItem c) = _
-    simp only [NonceChange.ofItem, NonceChange.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind,
-      pure, Except.pure]
+    simp_record_roundtrip NonceChange.ofItem NonceChange.toItem
   toItem_of_ofItem {item c} hDecode := by
     change NonceChange.ofItem item = .ok c at hDecode
     unfold NonceChange.ofItem at hDecode
@@ -64,9 +58,7 @@ instance : LawfulCodec NonceChange where
 instance : LawfulCodec CodeChange where
   ofItem_toItem c := by
     show CodeChange.ofItem (CodeChange.toItem c) = _
-    simp only [CodeChange.ofItem, CodeChange.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind,
-      pure, Except.pure]
+    simp_record_roundtrip CodeChange.ofItem CodeChange.toItem
   toItem_of_ofItem {item c} hDecode := by
     change CodeChange.ofItem item = .ok c at hDecode
     unfold CodeChange.ofItem at hDecode
@@ -75,9 +67,7 @@ instance : LawfulCodec CodeChange where
 instance : LawfulCodec SlotChanges where
   ofItem_toItem c := by
     show SlotChanges.ofItem (SlotChanges.toItem c) = _
-    simp only [SlotChanges.ofItem, SlotChanges.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind,
-      pure, Except.pure]
+    simp_record_roundtrip SlotChanges.ofItem SlotChanges.toItem
   toItem_of_ofItem {item c} hDecode := by
     change SlotChanges.ofItem item = .ok c at hDecode
     unfold SlotChanges.ofItem at hDecode
@@ -86,9 +76,7 @@ instance : LawfulCodec SlotChanges where
 instance : LawfulCodec AccountChanges where
   ofItem_toItem c := by
     show AccountChanges.ofItem (AccountChanges.toItem c) = _
-    simp only [AccountChanges.ofItem, AccountChanges.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.readField_cons, bind, Except.bind,
-      pure, Except.pure]
+    simp_record_roundtrip AccountChanges.ofItem AccountChanges.toItem
   toItem_of_ofItem {item c} hDecode := by
     change AccountChanges.ofItem item = .ok c at hDecode
     unfold AccountChanges.ofItem at hDecode
