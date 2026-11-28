@@ -28,7 +28,7 @@ open Polynomial
 
 /-- The scalar identity of the opening check. -/
 private theorem opening_iff (c y w t z : Fr) :
-    (c + -y) * -1 + w * (t + -z) = 0 ↔ c - y = w * (t - z) := by
+    (c + -y + z * w) * -1 + w * t = 0 ↔ c - y = w * (t - z) := by
   constructor <;> intro h <;> linear_combination -h
 
 /-- The check with `[τ]_2` accepts exactly when `c - y = w (τ - z)`.
@@ -38,9 +38,8 @@ theorem verifyKzgProofWith_iff {s2 : G2} {τ : Fr}
     (hs2 : G2.Represents s2 τ) {C P : G1} {c w : Fr}
     (hC : G1.Represents C c) (hP : G1.Represents P w) (z y : Fr) :
     verifyKzgProofWith s2 C z y P = true ↔ c - y = w * (τ - z) := by
-  have hCy := hC.add (G1.represents_mul_generator (-y))
-  have hX := hs2.add (G2.represents_mul_generator (-z))
-  have h := Bls.pairingLaws.two_pairs hCy G2.represents_generator.neg hP hX
+  have hL := (hC.add (G1.represents_mul_generator (-y))).add (hP.mul z)
+  have h := Bls.pairingLaws.two_pairs hL G2.represents_generator.neg hP hs2
   exact h.trans (opening_iff c y w τ z)
 
 /-- For a well-formed setup, the check accepts iff `c - y = w (τ - z)`. -/
