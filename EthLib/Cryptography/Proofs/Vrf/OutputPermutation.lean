@@ -27,11 +27,13 @@ open EthLib.Cryptography.Hash.Keccak (State RATE_256 blockCount keccak256With ke
 
 /-- **The outputs of one secret at distinct indices, over a uniform permutation.**
 
+The indices are distinct, and `n` is their number.
+
 An event on the `n` outputs holds with its chance for independent uniform values, up to `ε`.
 
 Here `ε = n (n - 1) / 2^1601 + (n^2 + n) / 2^512`, the bound for a cost of one block per index.
 
-With at most `2^32` distinct indices, `ε` is below `2^-447`. -/
+There are at most `2^32` distinct indices, so `ε` is below `2^-447`. -/
 theorem prEvent_outputs_keccak256With_le_add (secret : Digest) (indices : List UInt32)
     (distinct : indices.Nodup) (P : List Digest → Prop) :
     Pr{let π ← $ᵗ (Equiv.Perm State)}[P (indices.map fun i =>

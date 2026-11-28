@@ -746,6 +746,7 @@ In the random oracle model, `run_outputs_evalDistEq` (`Proofs/Vrf/OutputRandomOr
 It fixes the secret and the indices, and assumes that the initial cache holds no answer for any of their output inputs.
 `prEvent_outputs_pair_of_fresh` states the case of two different indices.
 Two events, one on each output, both hold with the product of their probabilities for two uniform values.
+Its proof applies `run_outputs_evalDistEq` at the two indices.
 `evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
 `prEvent_outputs_pair_keccak256With_le_add` (`Proofs/Vrf/OutputPermutation.lean`) states the case of two different indices with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
 The permutation is drawn after the secret, the indices and the events are fixed.
@@ -758,7 +759,8 @@ An output input has 49 bytes (`size_outputInput`, `Proofs/Vrf/Hash.lean`), below
 With `n` indices, the chance of the event over the permutation is within `spongeIndiffBound (2 ^ 1600) (2 ^ 512) n` of its probability for `n` independent uniform values.
 That bound is `n (n - 1) / 2^1601 + (n^2 + n) / 2^512`, the bound of `keccak256_indifferentiable` at a cost of `n`.
 A list of distinct indices has at most `2^32` entries, since there are `2^32` indices.
-At `n = 2^32`, the bound is about `2^-448`, so it is below `2^-447` for every list.
+The bound grows with `n`, and at `n = 2^32` it is about `2^-448`, so it is below `2^-447` for every list.
+That figure is computed from the bound, and no theorem states it.
 The proof of `prEvent_outputs_keccak256With_le_add` applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the hash calls of the outputs, then `run_outputs_evalDistEq` with the empty cache.
 `isQueryBound_mapM_oracleHash` (`Proofs/Vrf/Oracle.lean`) bounds the cost of hash calls on a list of inputs by the sum of their costs, here `n` blocks.
 `prEvent_outputs_pair_keccak256With_le_add` follows from `prEvent_outputs_keccak256With_le_add` at the two indices, where two independent uniform values give the product of the two probabilities.
