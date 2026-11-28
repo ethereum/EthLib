@@ -210,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     p_stage.add_argument("--build-dir", type=Path, default=ROOT / ".lake" / "build")
     p_stage.add_argument("--out-dir", type=Path, required=True)
 
-    p_check = sub.add_parser("check", help="verify disjointness and full coverage of the shards")
+    p_check = sub.add_parser("check", help="verify that shards are disjoint and cover all proofs")
     p_check.add_argument("--root", type=Path, default=ROOT)
 
     args = parser.parse_args(argv)

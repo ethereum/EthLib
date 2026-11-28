@@ -452,7 +452,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           uv run --no-project --python 3.12 python scripts/proof_shards.py check
-          uv run --no-project --python 3.12 python -m unittest scripts/test_proof_shards.py
+          uv run --no-project --python 3.12 python -m unittest discover -s scripts -p 'test_proof_shards.py'
 
       # A failed run still publishes its logs and the status of each measured command.
       - name: build timing report
@@ -817,7 +817,7 @@ jobs:
       - name: proof shards, unit tests
         run: |
           uv run --no-sync python scripts/proof_shards.py check
-          uv run --no-sync python -m unittest scripts/test_proof_shards.py
+          uv run --no-sync python -m unittest discover -s scripts -p 'test_proof_shards.py'
 
   soundness:
     runs-on: ubuntu-latest
